@@ -1,6 +1,8 @@
 local/*
 .vscode/*
 
+contracts/*/build/*
+
 .DS_Store
 target
 **/*.rs.bk

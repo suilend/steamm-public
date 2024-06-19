@@ -47,27 +47,16 @@ module slamm::pool {
         max_quote: u64,
         ctx:  &mut TxContext,
     ): Coin<LP> {
-        // 1. Calculate the prices of all tokens by choosing the cheapest token to be the quote for all prices. The cheapest token is simply $min(\vec x)$. We then compute the vector of parity prices:
-        let parity_amt = math64::min(max_base, max_quote);
+        // 1. Compute token deposits and delta lp tokens
+        let (base_deposit, quote_deposit, new_lp_tokens) = deposit_liquidity_inner(
+            self.base_balance.value(),
+            self.quote_balance.value(),
+            self.lp_supply.supply_value(),
+            max_base,
+            max_quote,
+        );
 
-        // 2. Denominate all tokens in parity price
-        let parity_base = max_base / parity_amt;
-        let parity_quote = max_quote / parity_amt;
-
-        // 3. pick the lowest amount, that represents the maximum
-        // amount of tokens in price parity that the user can deposit
-        // for all tokens
-        let min_parity = math64::min(parity_base, parity_quote);
-
-        // 4. Compute actual amount of tokens to deposit
-        let base_deposit = max_base * min_parity / parity_base;
-        let quote_deposit = max_quote * min_parity / parity_quote;
-
-        // 5. Assert slippage
-        assert!(base_deposit <= max_base, 0);
-        assert!(quote_deposit <= max_quote, 0);
-
-        // 6. Add liquidity to pool
+        // 2. Add liquidity to pool
         self.base_balance.join(
             base_liquidity.balance_mut().split(base_deposit)
         );
@@ -76,19 +65,47 @@ module slamm::pool {
             quote_liquidity.balance_mut().split(quote_deposit)
         );
 
-        // 7. Recompute invariant
+        // 3. Recompute invariant
         self.update_invariant();
 
-        // 8. Mint LP Tokens
-        let lp_supply = self.lp_supply.supply_value();
-        let base_balance = self.base_balance.value();
-
-        let new_lp_tokens = base_deposit * lp_supply / base_balance;
-
+        // 4. Mint LP Tokens
         coin::from_balance(
             self.lp_supply.increase_supply(new_lp_tokens),
             ctx
         )
+    }
+    
+    fun deposit_liquidity_inner(
+        base_balance: u64,
+        quote_balance: u64,
+        lp_supply: u64,
+        max_base: u64,
+        max_quote: u64,
+    ): (u64, u64, u64) {
+        // 1. Calculate the prices of all tokens by choosing the cheapest token to be the quote for all prices. The cheapest token is simply $min(\vec x)$. We then compute the vector of parity prices:
+        let parity_amt = math64::min(max_base, max_quote);
+
+        // 2. Denominate all tokens in parity price
+        let parity_base = math256::mul_div_down(max_base as u256, base_balance as u256, parity_amt as u256) as u64;
+        let parity_quote = math256::mul_div_down(max_quote as u256, quote_balance as u256, parity_amt as u256) as u64;
+
+        // 3. pick the lowest amount, that represents the maximum
+        // amount of tokens in price parity that the user can deposit
+        // for all tokens
+        let min_parity = math64::min(parity_base, parity_quote);
+
+        // 4. Compute actual amount of tokens to deposit
+        let base_deposit = math256::mul_div_down(max_base as u256, min_parity as u256, parity_base as u256) as u64;
+        let quote_deposit = math256::mul_div_down(max_quote as u256, min_parity as u256, parity_quote as u256) as u64;
+
+        // 5. Assert slippage
+        assert!(base_deposit <= max_base, 0);
+        assert!(quote_deposit <= max_quote, 0);
+
+        // 8. Compute new LP Tokens
+        let new_lp_tokens = math256::mul_div_down(base_deposit as u256, lp_supply as u256, base_balance as u256) as u64;
+
+        (base_deposit, quote_deposit, new_lp_tokens)
     }
 
     public fun redeem_liquidity<Base, Quote, LP>(
@@ -261,5 +278,103 @@ module slamm::pool {
             num - other < precision
         }
 
+    }
+
+    use std::debug::print;
+    use sui::test_utils::assert_eq;
+
+    #[test]
+    fun test_deposit_liquidity_inner() {
+        let (base_deposit, quote_deposit, lp_tokens) = deposit_liquidity_inner(
+            50_000_000, // base_balance
+            50_000_000, // quote_balance
+            1_000_000_000, // lp_supply
+            50_000_000, // max_base
+            250_000_000, // max_quote,
+        );
+
+        assert_eq(base_deposit, 50_000_000);
+        assert_eq(quote_deposit, 50_000_000);
+        assert_eq(lp_tokens, 1_000_000_000);
+        
+        let (base_deposit, quote_deposit, lp_tokens) = deposit_liquidity_inner(
+            995904078539, // base_balance
+            433683167230, // quote_balance
+            1_000_000_000, // lp_supply
+            993561515, // max_base
+            4685420547, // max_quote,
+        );
+
+        assert_eq(base_deposit, 993561515);
+        assert_eq(quote_deposit, 2281601039);
+        assert_eq(lp_tokens, 997647);
+        
+        
+        let (base_deposit, quote_deposit, lp_tokens) = deposit_liquidity_inner(
+            431624541156, // base_balance
+            136587560238, // quote_balance
+            1_000_000_000, // lp_supply
+            167814009, // max_base
+            5776084236, // max_quote,
+        );
+
+        assert_eq(base_deposit, 167814009);
+        assert_eq(quote_deposit, 530301914);
+        assert_eq(lp_tokens, 388796);
+	
+        
+        let (base_deposit, quote_deposit, lp_tokens) = deposit_liquidity_inner(
+            814595492359, // base_balance
+            444814121159, // quote_balance
+            1_000_000_000, // lp_supply
+            5792262291, // max_base
+            6821001626, // max_quote,
+        );
+
+        assert_eq(base_deposit, 3724643546);
+        assert_eq(quote_deposit, 6821001626);
+        assert_eq(lp_tokens, 4572384);
+        
+        let (base_deposit, quote_deposit, lp_tokens) = deposit_liquidity_inner(
+            6330406121, // base_balance
+            45207102784, // quote_balance
+            1_000_000_000, // lp_supply
+            1432889520, // max_base
+            1335572325, // max_quote,
+        );
+
+        assert_eq(base_deposit, 1432889520);
+        assert_eq(quote_deposit, 200649279);
+        assert_eq(lp_tokens, 226350330);
+
+        let (base_deposit, quote_deposit, lp_tokens) = deposit_liquidity_inner(420297244854, 316982205287, 6_606_760_618_411_090, 4995214965, 3570130297);
+
+        assert_eq(base_deposit, 2692541501);
+        assert_eq(quote_deposit, 3570130297);
+        assert_eq(lp_tokens, 42324753183722);
+
+        let (base_deposit, quote_deposit, lp_tokens) = deposit_liquidity_inner(413062764570, 603795453491, 1_121_070_850_572_460, 1537859755, 8438693476);
+
+        assert_eq(base_deposit, 1537859755);
+        assert_eq(quote_deposit, 1052065891);
+        assert_eq(lp_tokens, 4173820279815);
+
+        let (base_deposit, quote_deposit, lp_tokens) = deposit_liquidity_inner(307217683947, 761385620952, 4_042_886_943_071_790, 3998100768, 108790920);
+
+        assert_eq(base_deposit, 269619382);
+        assert_eq(quote_deposit, 108790920);
+        assert_eq(lp_tokens, 3548105255799);
+
+        let (base_deposit, quote_deposit, lp_tokens) = deposit_liquidity_inner(42698336282, 948435467841, 2_431_942_296_016_960, 6236994835, 8837546234);
+
+        assert_eq(base_deposit, 6236994835);
+        assert_eq(quote_deposit, 280788004);
+        assert_eq(lp_tokens, 355236593742180);
+
+        let (base_deposit, quote_deposit, lp_tokens) = deposit_liquidity_inner(861866936755, 638476503150, 244_488_474_179_102, 886029611, 7520096624);
+
+        assert_eq(base_deposit, 886029611);
+        assert_eq(quote_deposit, 1196034032);
+        assert_eq(lp_tokens, 251342775123);
     }
 }
