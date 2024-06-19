@@ -23,12 +23,12 @@ module slamm::pool {
         base_liquidity: Coin<Base>,
         quote_liquidity: Coin<Quote>,
         ctx: &mut TxContext,
-    ): Pool<Base, Quote, LP> {
+    ): (Pool<Base, Quote, LP>, Coin<LP>) {
         assert!(lp_treasury_cap.supply_immut().supply_value() == 0, 0);
 
         let k = (base_liquidity.value() as u256) * (quote_liquidity.value() as u256);
 
-        let pool = Pool {
+        let mut pool = Pool {
             id: object::new(ctx),
             base_balance: base_liquidity.into_balance(),
             quote_balance: quote_liquidity.into_balance(),
@@ -36,7 +36,14 @@ module slamm::pool {
             k,
         };
 
-        pool
+        let lp_token_delta = math256::sqrt_down(k);
+
+        let lp_tokens = coin::from_balance(
+            pool.lp_supply.increase_supply(lp_token_delta as u64),
+            ctx
+        );
+
+        (pool, lp_tokens)
     }
 
     public fun deposit_liquidity<Base, Quote, LP>(
