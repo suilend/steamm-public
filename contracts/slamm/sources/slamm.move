@@ -170,10 +170,15 @@ module slamm::pool {
         self: &mut Pool<Base, Quote, LP>,
         base_tokens: Coin<Base>,
         min_quote: u64,
-        ctx:  &mut TxContext,
+        ctx: &mut TxContext,
     ): Coin<Quote> {
 
-        let quote_tokens = self.quote_swap_base_for_quote(&base_tokens);
+        let quote_tokens = quote_swap_base_for_quote(
+            self.quote_balance.value() as u256,
+            self.base_balance.value() as u256,
+            base_tokens.value() as u256,
+            self.k
+        );
 
         assert!(quote_tokens >= min_quote, 0);
 
@@ -187,18 +192,13 @@ module slamm::pool {
         )
     }
     
-    public fun quote_swap_base_for_quote<Base, Quote, LP>(
-        self: &mut Pool<Base, Quote, LP>,
-        base_tokens: &Coin<Base>,
+    public fun quote_swap_base_for_quote(
+        quote_balance: u256,
+        base_balance: u256,
+        base_tokens: u256,
+        k: u256,
     ): u64 {
-
-        let x = self.quote_balance.value() as u256;
-        let y = self.base_balance.value() as u256;
-        let delta_y = base_tokens.value() as u256;
-
-        let delta_x = x - (self.k / (y + delta_y));
-
-        delta_x as u64
+        (quote_balance - math256::div_up(k, base_balance + base_tokens)) as u64
     }
     
     public fun swap_quote_for_base<Base, Quote, LP>(
@@ -208,7 +208,12 @@ module slamm::pool {
         ctx:  &mut TxContext,
     ): Coin<Base> {
 
-        let base_tokens = self.quote_swap_quote_for_base(&quote_tokens);
+        let base_tokens = quote_swap_quote_for_base(
+            self.base_balance.value() as u256,
+            self.quote_balance.value() as u256,
+            quote_tokens.value() as u256,
+            self.k,
+        );
 
         assert!(base_tokens >= min_base, 0);
 
@@ -222,18 +227,13 @@ module slamm::pool {
         )
     }
     
-    public fun quote_swap_quote_for_base<Base, Quote, LP>(
-        self: &mut Pool<Base, Quote, LP>,
-        quote_tokens: &Coin<Quote>,
+    public fun quote_swap_quote_for_base(
+        base_balance: u256,
+        quote_balance: u256,
+        quote_tokens: u256,
+        k: u256,
     ): u64 {
-
-        let x = self.base_balance.value() as u256;
-        let y = self.quote_balance.value() as u256;
-        let delta_y = quote_tokens.value() as u256;
-
-        let delta_x = x - (self.k / (y + delta_y));
-
-        delta_x as u64
+        (base_balance - (k / (quote_balance + quote_tokens))) as u64
     }
 
     public fun newtonian_root_approximation(
@@ -298,6 +298,36 @@ module slamm::pool {
     use std::debug::print;
     #[test_only]
     use sui::test_utils::assert_eq;
+
+    #[test]
+    fun test_swap_base_for_quote() {
+        let delta_quote = quote_swap_base_for_quote(50000000000, 50000000000, 1000000000, (50000000000 as u256) * (50000000000 as u256));
+        assert_eq(delta_quote, 980392156);
+
+        let delta_quote = quote_swap_base_for_quote(9999005960552740, 1095387779115020, 1000000000, ((9999005960552740 as u256) * (1095387779115020 as u256)));
+        assert_eq(delta_quote, 9128271305);
+
+        let delta_quote = quote_swap_base_for_quote(1029168250865450, 7612534772798660, 1000000000, ((1029168250865450 as u256) * (7612534772798660 as u256)));
+        assert_eq(delta_quote, 135193880);
+        	
+        let delta_quote = quote_swap_base_for_quote(2768608899383570, 5686051292328860, 1000000000, ((2768608899383570 as u256) * (5686051292328860 as u256)));
+        assert_eq(delta_quote, 486912317);
+
+        let delta_quote = quote_swap_base_for_quote(440197283258732, 9283788821706570, 1000000000, ((440197283258732 as u256) * (9283788821706570 as u256)));
+        assert_eq(delta_quote, 47415688);
+
+        let delta_quote = quote_swap_base_for_quote(7199199355268960, 9313530357314980, 1000000000, ((7199199355268960 as u256) * (9313530357314980 as u256)));
+        assert_eq(delta_quote, 772982779);
+
+        let delta_quote = quote_swap_base_for_quote(6273576615700410, 1630712284783210, 1000000000, ((6273576615700410 as u256) * (1630712284783210 as u256)));
+        assert_eq(delta_quote, 3847136510);
+
+        let delta_quote = quote_swap_base_for_quote(5196638254543900, 9284728716079420, 1000000000, ((5196638254543900 as u256) * (9284728716079420 as u256)));
+        assert_eq(delta_quote, 559697310);
+
+        let delta_quote = quote_swap_base_for_quote(1128134431179110, 4632243184772740, 1000000000, ((1128134431179110 as u256) * (4632243184772740 as u256)));
+        assert_eq(delta_quote, 243539499);
+    }
 
     #[test]
     fun test_deposit_liquidity_inner() {
