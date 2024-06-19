@@ -115,20 +115,14 @@ module slamm::pool {
         min_quote: u64,
         ctx:  &mut TxContext,
     ): (Coin<Base>, Coin<Quote>) {
-        // 1. Compute LP tokens ratio
-        let lp_amt = lp_tokens.value();
-        let lp_supply = self.lp_supply.supply_value();
-
-        let lp_ratio = lp_amt / lp_supply;
-
-        // 2. Compute the amount of tokens the user is allowed to
-        // receive for each reserve
-        let base_withdraw = self.base_balance.value() * lp_ratio;
-        let quote_withdraw = self.quote_balance.value() * lp_ratio;
-
-        // 3. Assert slippage
-        assert!(base_withdraw >= min_base, 0);
-        assert!(quote_withdraw >= min_quote, 0);
+        let (base_withdraw, quote_withdraw) = redeem_liquidity_inner(
+            self.base_balance.value(),
+            self.quote_balance.value(),
+            self.lp_supply.supply_value(),
+            lp_tokens.value(),
+            min_base,
+            min_quote,
+        );
 
         // 4. Burn LP Tokens
         self.lp_supply.decrease_supply(
@@ -149,6 +143,27 @@ module slamm::pool {
         );
 
         (base_tokens, quote_tokens)
+    }
+
+    fun redeem_liquidity_inner(
+        base_balance: u64,
+        quote_balance: u64,
+        lp_supply: u64,
+        lp_tokens: u64,
+        min_base: u64,
+        min_quote: u64,
+    ): (u64, u64) {
+        // 1. Compute the amount of tokens the user is allowed to
+        // receive for each reserve, via the lp ratio
+
+        let base_withdraw = math256::mul_div_down(base_balance as u256, lp_tokens as u256, lp_supply as u256) as u64;
+        let quote_withdraw = math256::mul_div_down(quote_balance as u256, lp_tokens as u256, lp_supply as u256) as u64;
+
+        // 2. Assert slippage
+        assert!(base_withdraw >= min_base, 0);
+        assert!(quote_withdraw >= min_quote, 0);
+
+        (base_withdraw, quote_withdraw)
     }
 
     public fun swap_base_for_quote<Base, Quote, LP>(
@@ -281,6 +296,7 @@ module slamm::pool {
     }
 
     use std::debug::print;
+    #[test_only]
     use sui::test_utils::assert_eq;
 
     #[test]
@@ -376,5 +392,56 @@ module slamm::pool {
         assert_eq(base_deposit, 886029611);
         assert_eq(quote_deposit, 1196034032);
         assert_eq(lp_tokens, 251342775123);
+    }
+    
+    #[test]
+    fun test_redeem_liquidity_inner() {
+        let (base_withdraw, quote_withdraw) = redeem_liquidity_inner(
+            50_000_000, // base_balance
+            50_000_000, // quote_balance
+            1_000_000_000, // lp_supply
+            542816471, // lp_tokens
+            0, // min_base
+            0, // min_quote
+        );
+
+        assert_eq(base_withdraw, 27140823);
+        assert_eq(quote_withdraw, 27140823);
+
+        let (base_withdraw, quote_withdraw) = redeem_liquidity_inner(995904078539, 433683167230, 1000000000, 389391649, 0, 0);
+        assert_eq(quote_withdraw, 168872603631);
+        assert_eq(base_withdraw, 387796731388);
+
+        let (base_withdraw, quote_withdraw) = redeem_liquidity_inner(431624541156, 136587560238, 1000000000, 440552590, 0, 0);
+        assert_eq(base_withdraw, 190153309513);
+        assert_eq(quote_withdraw, 60174003424);
+
+        let (base_withdraw, quote_withdraw) = redeem_liquidity_inner(814595492359, 444814121159, 1000000000, 996613035, 0, 0);
+        assert_eq(base_withdraw, 811836485937);
+        assert_eq(quote_withdraw, 443307551299);
+
+        let (base_withdraw, quote_withdraw) = redeem_liquidity_inner(6330406121, 45207102784, 1000000000, 12810274, 0, 0);
+        assert_eq(base_withdraw, 81094236);
+        assert_eq(quote_withdraw, 579115373);
+
+        let (base_withdraw, quote_withdraw) = redeem_liquidity_inner(420297244854, 316982205287, 6606760618411090, 2045717643009200, 0, 0);
+        assert_eq(base_withdraw, 130140857035);
+        assert_eq(quote_withdraw, 98150383724);
+
+        let (base_withdraw, quote_withdraw) = redeem_liquidity_inner(413062764570, 603795453491, 1121070850572460, 551538827364816, 0, 0);
+        assert_eq(base_withdraw, 203216551998);
+        assert_eq(quote_withdraw, 297052265890);
+
+        let (base_withdraw, quote_withdraw) = redeem_liquidity_inner(307217683947, 761385620952, 4042886943071790, 2217957798004580, 0, 0);
+        assert_eq(base_withdraw, 168541902702);
+        assert_eq(quote_withdraw, 417701805432);
+
+        let (base_withdraw, quote_withdraw) = redeem_liquidity_inner(42698336282, 948435467841, 2431942296016960, 59368562297754, 0, 0);
+        assert_eq(base_withdraw, 1042351556);
+        assert_eq(quote_withdraw, 23153201558);
+
+        let (base_withdraw, quote_withdraw) = redeem_liquidity_inner(861866936755, 638476503150, 244488474179102, 129992518389093, 0, 0);
+        assert_eq(base_withdraw, 458247588158);
+        assert_eq(quote_withdraw, 339472725065);
     }
 }
