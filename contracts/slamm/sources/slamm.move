@@ -2,7 +2,7 @@ module slamm::pool {
     // use std::debug::print;
 
     use sui::balance::{Self, Balance, Supply};
-    use sui::coin::{Self, Coin, TreasuryCap};
+    use sui::coin::{Self, Coin};
     use sui::transfer::public_transfer;
     use slamm::events::emit_event;
     use slamm::global_config::{GlobalConfig, get_fees};
@@ -10,30 +10,33 @@ module slamm::pool {
     use slamm::math::{safe_mul_div_u64};
     use sui::tx_context::sender;
 
+    public struct LP<phantom A, phantom B, phantom W: drop> has copy, drop {}
+
     const MINIMUM_LIQUIDITY: u64 = 10;
 
-    public struct Pool<phantom A, phantom B, phantom LP> has key, store {
+    public struct Pool<phantom A, phantom B, phantom W: drop> has key, store {
         id: UID,
         reserve_a: Balance<A>,
         reserve_b: Balance<B>,
         a_fees: Balance<A>,
         b_fees: Balance<B>,
-        lp_supply: Supply<LP>,
+        lp_supply: Supply<LP<A, B, W>>,
         k: u128,
     }
 
     // ===== Public Methods =====
 
-    public fun init_pool<A, B, LP>(
-        lp_treasury_cap: TreasuryCap<LP>,
+    public fun init_pool<A, B, W: drop>(
+        _witness: W,
+        // lp_treasury_cap: TreasuryCap<LP>,
         global_config: &GlobalConfig,
         coin_a: Coin<A>,
         coin_b: Coin<B>,
         ctx: &mut TxContext,
-    ): (Pool<A, B, LP>, Coin<LP>) {
+    ): (Pool<A, B, W>, Coin<LP<A, B, W>>) {
         global_config.assert_not_paused();
-        
-        assert!(lp_treasury_cap.supply_immut().supply_value() == 0, 0);
+
+        let lp_supply = balance::create_supply(LP<A, B, W>{});
 
         let liquidity_a = coin_a.value();
         let liquidity_b = coin_b.value();
@@ -48,7 +51,7 @@ module slamm::pool {
             reserve_b: coin_b.into_balance(),
             a_fees: balance::zero(),
             b_fees: balance::zero(),
-            lp_supply: lp_treasury_cap.treasury_into_supply(),
+            lp_supply,
             k,
         };
 
@@ -85,8 +88,8 @@ module slamm::pool {
         (pool, lp_tokens)
     }
 
-    public fun deposit_liquidity<A, B, LP>(
-        self: &mut Pool<A, B, LP>,
+    public fun deposit_liquidity<A, B, W: drop>(
+        self: &mut Pool<A, B, W>,
         global_config: &GlobalConfig,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
@@ -95,7 +98,7 @@ module slamm::pool {
         min_a: u64,
         min_b: u64,
         ctx:  &mut TxContext,
-    ): Coin<LP> {
+    ): Coin<LP<A, B, W>> {
         global_config.assert_not_paused();
 
         // 1. Compute token deposits and delta lp tokens
@@ -139,10 +142,10 @@ module slamm::pool {
         )
     }
 
-    public fun redeem_liquidity<A, B, LP>(
-        self: &mut Pool<A, B, LP>,
+    public fun redeem_liquidity<A, B, W: drop>(
+        self: &mut Pool<A, B, W>,
         global_config: &GlobalConfig,
-        lp_tokens: Coin<LP>,
+        lp_tokens: Coin<LP<A, B, W>>,
         min_base: u64,
         min_quote: u64,
         ctx:  &mut TxContext,
@@ -193,8 +196,8 @@ module slamm::pool {
         (base_tokens, quote_tokens)
     }
 
-    public fun swap<A, B, LP>(
-        self: &mut Pool<A, B, LP>,
+    public fun swap<A, B, W: drop>(
+        self: &mut Pool<A, B, W>,
         global_config: &GlobalConfig,
         token_a: &mut Coin<A>,
         token_b: &mut Coin<B>,
@@ -252,24 +255,24 @@ module slamm::pool {
 
     // ===== View & Getters =====
 
-    public fun reserves<A, B, LP>(self: &mut Pool<A, B, LP>,): (u64, u64) {
+    public fun reserves<A, B, W: drop>(self: &mut Pool<A, B, W>,): (u64, u64) {
         (self.reserve_a.value(), self.reserve_b.value())
     }
     
-    public fun fees<A, B, LP>(self: &mut Pool<A, B, LP>,): (u64, u64) {
+    public fun fees<A, B, W: drop>(self: &mut Pool<A, B, W>,): (u64, u64) {
         (self.a_fees.value(), self.b_fees.value())
     }
     
-    public fun lp_supply<A, B, LP>(self: &mut Pool<A, B, LP>,): u64 {
+    public fun lp_supply<A, B, W: drop>(self: &mut Pool<A, B, W>,): u64 {
         self.lp_supply.supply_value()
     }
     
-    public fun k<A, B, LP>(self: &mut Pool<A, B, LP>,): u128 {
+    public fun k<A, B, W: drop>(self: &mut Pool<A, B, W>,): u128 {
         self.k
     }
 
-    public fun quote<A, B, LP>(
-        self: &mut Pool<A, B, LP>,
+    public fun quote<A, B, W: drop>(
+        self: &mut Pool<A, B, W>,
         global_config: &GlobalConfig,
         amount_in: u64,
         a2b: bool,
@@ -341,6 +344,7 @@ module slamm::pool {
         } else {
             let b_star = safe_mul_div_u64(ideal_a, reserve_b, reserve_a);
             if (b_star <= ideal_b) {
+
                 assert!(b_star >= min_b, 0);
                 (ideal_a, b_star)
             } else {
@@ -398,17 +402,17 @@ module slamm::pool {
         safe_mul_div_u64(reserve_out, amount_in, reserve_in + amount_in) // amount_out
     }
 
-    fun update_invariant<A, B, LP>(self: &mut Pool<A, B, LP>) {
+    fun update_invariant<A, B, W: drop>(self: &mut Pool<A, B, W>) {
         self.k = (self.reserve_a.value() as u128) * (self.reserve_b.value() as u128);
     }
     
-    fun update_invariant_assert_increase<A, B, LP>(self: &mut Pool<A, B, LP>) {
+    fun update_invariant_assert_increase<A, B, W: drop>(self: &mut Pool<A, B, W>) {
         let k0 = self.k;
         self.update_invariant();
         assert!(self.k > k0, 0);
     }
     
-    fun update_invariant_assert_decrease<A, B, LP>(self: &mut Pool<A, B, LP>) {
+    fun update_invariant_assert_decrease<A, B, W: drop>(self: &mut Pool<A, B, W>) {
         let k0 = self.k;
         self.update_invariant();
         assert!(self.k < k0, 0);
@@ -477,100 +481,110 @@ module slamm::pool {
     }
 
     // TODO: add back
-    // #[test]
-    // fun test_deposit_liquidity_inner() {
-    //     let (base_deposit, quote_deposit, lp_tokens) = deposit_liquidity_inner(
-    //         50_000_000, // reserve_a
-    //         50_000_000, // reserve_b
-    //         1_000_000_000, // lp_supply
-    //         50_000_000, // max_base
-    //         250_000_000, // max_quote,
-    //     );
+    #[test]
+    fun test_deposit_liquidity_inner() {
+        // let (delta_a, delta_b, lp_tokens) = deposit_liquidity_inner(
+        //     50_000_000, // reserve_a
+        //     50_000_000, // reserve_b
+        //     1_000_000_000, // lp_supply
+        //     50_000_000, // max_base
+        //     250_000_000, // max_quote,
+        //     0, // min_a
+        //     0, // min_b
+        // );
 
-    //     assert_eq(base_deposit, 50_000_000);
-    //     assert_eq(quote_deposit, 50_000_000);
-    //     assert_eq(lp_tokens, 1_000_000_000);
+        // assert_eq(delta_a, 50_000_000);
+        // assert_eq(delta_b, 50_000_000);
+        // assert_eq(lp_tokens, 1_000_000_000);
         
-    //     let (base_deposit, quote_deposit, lp_tokens) = deposit_liquidity_inner(
-    //         995904078539, // reserve_a
-    //         433683167230, // reserve_b
-    //         1_000_000_000, // lp_supply
-    //         993561515, // max_base
-    //         4685420547, // max_quote,
-    //     );
+        let (delta_, delta_b, lp_tokens) = deposit_liquidity_inner(
+            995904078539, // reserve_a
+            433683167230, // reserve_b
+            1_000_000_000, // lp_supply
+            993561515, // max_base
+            4685420547, // max_quote,
+            0, // min_a
+            0, // min_b
+        );
 
-    //     assert_eq(base_deposit, 993561515);
-    //     assert_eq(quote_deposit, 2281601039);
-    //     assert_eq(lp_tokens, 997647);
+        assert_eq(delta_, 993561515);
+        assert_eq(delta_b, 432663058);
+        assert_eq(lp_tokens, 997647);
         
         
-    //     let (base_deposit, quote_deposit, lp_tokens) = deposit_liquidity_inner(
-    //         431624541156, // reserve_a
-    //         136587560238, // reserve_b
-    //         1_000_000_000, // lp_supply
-    //         167814009, // max_base
-    //         5776084236, // max_quote,
-    //     );
+        let (delta_, delta_b, lp_tokens) = deposit_liquidity_inner(
+            431624541156, // reserve_a
+            136587560238, // reserve_b
+            1_000_000_000, // lp_supply
+            167814009, // max_base
+            5776084236, // max_quote,
+            0, // min_a
+            0, // min_b
+        );
 
-    //     assert_eq(base_deposit, 167814009);
-    //     assert_eq(quote_deposit, 530301914);
-    //     assert_eq(lp_tokens, 388796);
+        assert_eq(delta_, 167814009);
+        assert_eq(delta_b, 53104733);
+        assert_eq(lp_tokens, 388796);
 	
         
-    //     let (base_deposit, quote_deposit, lp_tokens) = deposit_liquidity_inner(
-    //         814595492359, // reserve_a
-    //         444814121159, // reserve_b
-    //         1_000_000_000, // lp_supply
-    //         5792262291, // max_base
-    //         6821001626, // max_quote,
-    //     );
+        let (delta_, delta_b, lp_tokens) = deposit_liquidity_inner(
+            814595492359, // reserve_a
+            444814121159, // reserve_b
+            1_000_000_000, // lp_supply
+            5792262291, // max_base
+            6821001626, // max_quote,
+            0, // min_a
+            0, // min_b
+        );
 
-    //     assert_eq(base_deposit, 3724643546);
-    //     assert_eq(quote_deposit, 6821001626);
-    //     assert_eq(lp_tokens, 4572384);
+        assert_eq(delta_, 5792262291);
+        assert_eq(delta_b, 3162895062);
+        assert_eq(lp_tokens, 7110599);
         
-    //     let (base_deposit, quote_deposit, lp_tokens) = deposit_liquidity_inner(
-    //         6330406121, // reserve_a
-    //         45207102784, // reserve_b
-    //         1_000_000_000, // lp_supply
-    //         1432889520, // max_base
-    //         1335572325, // max_quote,
-    //     );
+        let (delta_, delta_b, lp_tokens) = deposit_liquidity_inner(
+            6330406121, // reserve_a
+            45207102784, // reserve_b
+            1_000_000_000, // lp_supply
+            1432889520, // max_base
+            1335572325, // max_quote,
+            0, // min_a
+            0, // min_b
+        );
 
-    //     assert_eq(base_deposit, 1432889520);
-    //     assert_eq(quote_deposit, 200649279);
-    //     assert_eq(lp_tokens, 226350330);
+        assert_eq(delta_, 187021832);
+        assert_eq(delta_b, 1335572325);
+        assert_eq(lp_tokens, 29543417);
 
-    //     let (base_deposit, quote_deposit, lp_tokens) = deposit_liquidity_inner(420297244854, 316982205287, 6_606_760_618_411_090, 4995214965, 3570130297);
+        let (delta_, delta_b, lp_tokens) = deposit_liquidity_inner(420297244854, 316982205287, 6_606_760_618_411_090, 4995214965, 3570130297, 0, 0);
 
-    //     assert_eq(base_deposit, 2692541501);
-    //     assert_eq(quote_deposit, 3570130297);
-    //     assert_eq(lp_tokens, 42324753183722);
+        assert_eq(delta_, 4733754458);
+        assert_eq(delta_b, 3570130297);
+        assert_eq(lp_tokens, 74411105267193);
 
-    //     let (base_deposit, quote_deposit, lp_tokens) = deposit_liquidity_inner(413062764570, 603795453491, 1_121_070_850_572_460, 1537859755, 8438693476);
+        let (delta_, delta_b, lp_tokens) = deposit_liquidity_inner(413062764570, 603795453491, 1_121_070_850_572_460, 1537859755, 8438693476, 0, 0);
 
-    //     assert_eq(base_deposit, 1537859755);
-    //     assert_eq(quote_deposit, 1052065891);
-    //     assert_eq(lp_tokens, 4173820279815);
+        assert_eq(delta_, 1537859755);
+        assert_eq(delta_b, 2247970061);
+        assert_eq(lp_tokens, 4173820279327);
 
-    //     let (base_deposit, quote_deposit, lp_tokens) = deposit_liquidity_inner(307217683947, 761385620952, 4_042_886_943_071_790, 3998100768, 108790920);
+        let (delta_, delta_b, lp_tokens) = deposit_liquidity_inner(307217683947, 761385620952, 4_042_886_943_071_790, 3998100768, 108790920, 0, 0);
 
-    //     assert_eq(base_deposit, 269619382);
-    //     assert_eq(quote_deposit, 108790920);
-    //     assert_eq(lp_tokens, 3548105255799);
+        assert_eq(delta_, 43896934);
+        assert_eq(delta_b, 108790920);
+        assert_eq(lp_tokens, 577669680434);
 
-    //     let (base_deposit, quote_deposit, lp_tokens) = deposit_liquidity_inner(42698336282, 948435467841, 2_431_942_296_016_960, 6236994835, 8837546234);
+        let (delta_, delta_b, lp_tokens) = deposit_liquidity_inner(42698336282, 948435467841, 2_431_942_296_016_960, 6236994835, 8837546234, 0, 0);
 
-    //     assert_eq(base_deposit, 6236994835);
-    //     assert_eq(quote_deposit, 280788004);
-    //     assert_eq(lp_tokens, 355236593742180);
+        assert_eq(delta_, 397864202);
+        assert_eq(delta_b, 8837546234);
+        assert_eq(lp_tokens, 22660901223983);
 
-    //     let (base_deposit, quote_deposit, lp_tokens) = deposit_liquidity_inner(861866936755, 638476503150, 244_488_474_179_102, 886029611, 7520096624);
+        let (delta_, delta_b, lp_tokens) = deposit_liquidity_inner(861866936755, 638476503150, 244_488_474_179_102, 886029611, 7520096624, 0, 0);
 
-    //     assert_eq(base_deposit, 886029611);
-    //     assert_eq(quote_deposit, 1196034032);
-    //     assert_eq(lp_tokens, 251342775123);
-    // }
+        assert_eq(delta_, 886029611);
+        assert_eq(delta_b, 656376365);
+        assert_eq(lp_tokens, 251342774830);
+    }
     
     #[test]
     fun test_redeem_liquidity_inner() {
