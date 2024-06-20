@@ -28,7 +28,6 @@ module slamm::pool {
 
     public fun init_pool<A, B, W: drop>(
         _witness: W,
-        // lp_treasury_cap: TreasuryCap<LP>,
         global_config: &GlobalConfig,
         coin_a: Coin<A>,
         coin_b: Coin<B>,
@@ -98,11 +97,11 @@ module slamm::pool {
         min_a: u64,
         min_b: u64,
         ctx:  &mut TxContext,
-    ): Coin<LP<A, B, W>> {
+    ): (Coin<LP<A, B, W>>, DepositResult) {
         global_config.assert_not_paused();
 
         // 1. Compute token deposits and delta lp tokens
-        let (delta_a, delta_b, delta_lp) = deposit_liquidity_inner(
+        let (deposit_a, deposit_b, lp_tokens) = quote_deposit_(
             self.reserve_a.value(),
             self.reserve_b.value(),
             self.lp_supply.supply_value(),
@@ -114,11 +113,11 @@ module slamm::pool {
 
         // 2. Add liquidity to pool
         self.reserve_a.join(
-            coin_a.balance_mut().split(delta_a)
+            coin_a.balance_mut().split(deposit_a)
         );
         
         self.reserve_b.join(
-            coin_b.balance_mut().split(delta_b)
+            coin_b.balance_mut().split(deposit_b)
         );
 
         // 3. Recompute invariant
@@ -129,25 +128,31 @@ module slamm::pool {
             DepositLiquidityEvent {
                 user: sender(ctx),
                 pool_id: object::id(self),
-                lp_minted: delta_lp,
-                a_deposited: delta_a,
-                b_deposited: delta_b,
+                lp_minted: lp_tokens,
+                a_deposited: deposit_a,
+                b_deposited: deposit_b,
             }
         );
 
         // 4. Mint LP Tokens
-        coin::from_balance(
-            self.lp_supply.increase_supply(delta_lp),
+        let lp_coins = coin::from_balance(
+            self.lp_supply.increase_supply(lp_tokens),
             ctx
-        )
+        );
+
+        (lp_coins, DepositResult {
+            deposit_a,
+            deposit_b,
+            mint_lp: lp_tokens,
+        })
     }
 
     public fun redeem_liquidity<A, B, W: drop>(
         self: &mut Pool<A, B, W>,
         global_config: &GlobalConfig,
         lp_tokens: Coin<LP<A, B, W>>,
-        min_base: u64,
-        min_quote: u64,
+        min_a: u64,
+        min_b: u64,
         ctx:  &mut TxContext,
     ): (Coin<A>, Coin<B>) {
         global_config.assert_not_paused();
@@ -155,13 +160,13 @@ module slamm::pool {
         let lp_burn = lp_tokens.value();
 
         // 1. Compute amounts to withdraw
-        let (withdraw_a, withdraw_b) = redeem_liquidity_inner(
+        let (withdraw_a, withdraw_b) = quote_redeem_(
             self.reserve_a.value(),
             self.reserve_b.value(),
             self.lp_supply.supply_value(),
             lp_burn,
-            min_base,
-            min_quote,
+            min_a,
+            min_b,
         );
 
         // 2. Burn LP Tokens
@@ -169,10 +174,7 @@ module slamm::pool {
             lp_tokens.into_balance()
         );
 
-        // 3. Recompute invariant
-        self.update_invariant_assert_decrease();
-
-        // 4. Prepare tokens to send
+        // 3. Prepare tokens to send
         let base_tokens = coin::from_balance(
             self.reserve_a.split(withdraw_a),
             ctx,
@@ -181,6 +183,9 @@ module slamm::pool {
             self.reserve_b.split(withdraw_b),
             ctx,
         );
+
+        // 4. Recompute invariant
+        self.update_invariant_assert_decrease();
 
         // 5. Emit event
         emit_event(
@@ -204,23 +209,26 @@ module slamm::pool {
         amount_in: u64,
         min_amount_out: u64,
         a2b: bool,
-    ) {
+        ctx: &mut TxContext,
+    ): SwapResult {
         global_config.assert_not_paused();
 
-        let (net_amount_in, amount_out) = quote(
+        let swap = quote_swap(
             self,
             global_config,
             amount_in,
             a2b,
         );
 
+        let net_amount_in = swap.amount_in - swap.fees;
+
         if (a2b) {
             // IN: A && OUT: B
-            assert!(amount_out >= min_amount_out, 0);
+            assert!(swap.amount_out >= min_amount_out, 0);
 
             // Transfers fees in
             self.a_fees.join(
-                token_a.balance_mut().split(amount_in - net_amount_in)
+                token_a.balance_mut().split(swap.fees)
             );
             
             // Transfers amount in
@@ -230,15 +238,15 @@ module slamm::pool {
 
             // Transfers amount out
             token_b.balance_mut().join(
-                self.reserve_b.split(amount_out)
+                self.reserve_b.split(swap.amount_out)
             );
         } else {
             // IN: B && OUT: A
-            assert!(amount_out >= min_amount_out, 0);
+            assert!(swap.amount_out >= min_amount_out, 0);
 
             // Transfers fees in
             self.b_fees.join(
-                token_b.balance_mut().split(amount_in - net_amount_in)
+                token_b.balance_mut().split(swap.fees)
             );
             
             // Transfers amount in
@@ -248,60 +256,130 @@ module slamm::pool {
 
             // Transfers amount out
             token_a.balance_mut().join(
-                self.reserve_a.split(amount_out)
+                self.reserve_a.split(swap.amount_out)
             );
+        };
+        
+
+        // 5. Emit event
+        emit_event(
+            SwapEvent {
+                user: sender(ctx),
+                pool_id: object::id(self),
+                amount_in: amount_in,
+                amount_out: swap.amount_out,
+                fees: swap.fees,
+                a2b,
+            }
+        );
+
+        swap
+    }
+
+    public fun quote_redeem<A, B, W: drop>(
+        self: &mut Pool<A, B, W>,
+        lp_tokens: u64,
+        min_a: u64,
+        min_b: u64,
+    ): RedeemResult {
+        // 1. Compute amounts to withdraw
+        let (withdraw_a, withdraw_b) = quote_redeem_(
+            self.reserve_a.value(),
+            self.reserve_b.value(),
+            self.lp_supply.supply_value(),
+            lp_tokens,
+            min_a,
+            min_b,
+        );
+
+        RedeemResult {
+            withdraw_a,
+            withdraw_b,
+            burn_lp: lp_tokens,
         }
     }
 
     // ===== View & Getters =====
 
-    public fun reserves<A, B, W: drop>(self: &mut Pool<A, B, W>,): (u64, u64) {
+    public fun reserves<A, B, W: drop>(self: &Pool<A, B, W>): (u64, u64) {
         (self.reserve_a.value(), self.reserve_b.value())
     }
     
-    public fun fees<A, B, W: drop>(self: &mut Pool<A, B, W>,): (u64, u64) {
+    public fun fees<A, B, W: drop>(self: &Pool<A, B, W>,): (u64, u64) {
         (self.a_fees.value(), self.b_fees.value())
     }
     
-    public fun lp_supply<A, B, W: drop>(self: &mut Pool<A, B, W>,): u64 {
+    public fun lp_supply<A, B, W: drop>(self: &Pool<A, B, W>,): u64 {
         self.lp_supply.supply_value()
     }
     
-    public fun k<A, B, W: drop>(self: &mut Pool<A, B, W>,): u128 {
+    public fun k<A, B, W: drop>(self: &Pool<A, B, W>,): u128 {
         self.k
     }
 
-    public fun quote<A, B, W: drop>(
-        self: &mut Pool<A, B, W>,
+    public fun quote_swap<A, B, W: drop>(
+        self: &Pool<A, B, W>,
         global_config: &GlobalConfig,
         amount_in: u64,
         a2b: bool,
-    ): (u64, u64) {
+    ): SwapResult {
         let (swap_fee_numerator, swap_fee_denominator) = get_fees(global_config);
-        let net_amount_in = safe_mul_div_u64(amount_in, swap_fee_numerator, swap_fee_denominator);
+        let fees = safe_mul_div_u64(amount_in, swap_fee_numerator, swap_fee_denominator);
+        let net_amount_in = amount_in - fees;
 
         let amount_out = if (a2b) {
             // IN: A && OUT: B
-            quote_(
+            quote_swap_(
                 self.reserve_b.value(), // reserve_out
                 self.reserve_a.value(), // reserve_in
                 net_amount_in, // amount_in
             )
         } else {
             // IN: B && OUT: A
-            quote_(
+            quote_swap_(
                 self.reserve_a.value(), // reserve_out
                 self.reserve_b.value(), // reserve_in
                 net_amount_in, // amount_in
             )
         };
 
-        (net_amount_in, amount_out)
+        SwapResult {
+            amount_in,
+            amount_out,
+            fees,
+            a2b,
+        }
     }
+
+    public fun quote_deposit<A, B, W: drop>(
+        self: &mut Pool<A, B, W>,
+        ideal_a: u64,
+        ideal_b: u64,
+        min_a: u64,
+        min_b: u64,
+    ): DepositResult {
+        let (deposit_a, deposit_b, lp_tokens) = quote_deposit_(
+            self.reserve_a.value(),
+            self.reserve_b.value(),
+            self.lp_supply.supply_value(),
+            ideal_a,
+            ideal_b,
+            min_a,
+            min_b,
+        );
+
+        DepositResult {
+            deposit_a,
+            deposit_b,
+            mint_lp: lp_tokens,
+        }
+    }
+
+    public fun minimum_liquidity(): u64 { MINIMUM_LIQUIDITY }
 
     // ===== Private Functions =====
 
-    fun deposit_liquidity_inner(
+    fun quote_deposit_(
         reserve_a: u64,
         reserve_b: u64,
         lp_supply: u64,
@@ -373,7 +451,7 @@ module slamm::pool {
         }
     }
 
-    fun redeem_liquidity_inner(
+    fun quote_redeem_(
         reserve_a: u64,
         reserve_b: u64,
         lp_supply: u64,
@@ -394,7 +472,7 @@ module slamm::pool {
         (withdraw_a, withdraw_b)
     }
 
-    fun quote_(
+    fun quote_swap_(
         reserve_out: u64,
         reserve_in: u64,
         amount_in: u64
@@ -443,7 +521,48 @@ module slamm::pool {
         a_withdrawn: u64,
         b_withdrwan: u64,
     }
+    
+    public struct SwapEvent has copy, drop {
+        user: address,
+        pool_id: ID,
+        amount_in: u64,
+        amount_out: u64,
+        fees: u64,
+        a2b: bool,
+    }
 
+    // ===== Results =====
+
+    public struct SwapResult has drop {
+        amount_in: u64,
+        amount_out: u64,
+        fees: u64,
+        a2b: bool,
+    }
+
+    public struct DepositResult has drop {
+        deposit_a: u64,
+        deposit_b: u64,
+        mint_lp: u64,
+    }
+    
+    public struct RedeemResult has drop {
+        withdraw_a: u64,
+        withdraw_b: u64,
+        burn_lp: u64
+    }
+
+    public fun amount_in(self: &SwapResult): u64 { self.amount_in }
+    public fun amount_out(self: &SwapResult): u64 { self.amount_out }
+    public fun swap_fees(self: &SwapResult): u64 { self.fees }
+    public fun a2b(self: &SwapResult): bool { self.a2b }
+    public fun deposit_a(self: &DepositResult): u64 { self.deposit_a }
+    public fun deposit_b(self: &DepositResult): u64 { self.deposit_b }
+    public fun mint_lp(self: &DepositResult): u64 { self.mint_lp }
+    public fun withdraw_a(self: &RedeemResult): u64 { self.withdraw_a }
+    public fun withdraw_b(self: &RedeemResult): u64 { self.withdraw_a }
+    public fun burn_lp(self: &RedeemResult): u64 { self.burn_lp }
+    
     // ===== Tests =====
 
 
@@ -452,52 +571,52 @@ module slamm::pool {
 
     #[test]
     fun test_swap_base_for_quote() {
-        let delta_quote = quote_(50000000000, 50000000000, 1000000000);
+        let delta_quote = quote_swap_(50000000000, 50000000000, 1000000000);
         assert_eq(delta_quote, 980392156);
 
-        let delta_quote = quote_(9999005960552740, 1095387779115020, 1000000000);
+        let delta_quote = quote_swap_(9999005960552740, 1095387779115020, 1000000000);
         assert_eq(delta_quote, 9128271305);
 
-        let delta_quote = quote_(1029168250865450, 7612534772798660, 1000000000);
+        let delta_quote = quote_swap_(1029168250865450, 7612534772798660, 1000000000);
         assert_eq(delta_quote, 135193880);
         	
-        let delta_quote = quote_(2768608899383570, 5686051292328860, 1000000000);
+        let delta_quote = quote_swap_(2768608899383570, 5686051292328860, 1000000000);
         assert_eq(delta_quote, 486912317);
 
-        let delta_quote = quote_(440197283258732, 9283788821706570, 1000000000);
+        let delta_quote = quote_swap_(440197283258732, 9283788821706570, 1000000000);
         assert_eq(delta_quote, 47415688);
 
-        let delta_quote = quote_(7199199355268960, 9313530357314980, 1000000000);
+        let delta_quote = quote_swap_(7199199355268960, 9313530357314980, 1000000000);
         assert_eq(delta_quote, 772982779);
 
-        let delta_quote = quote_(6273576615700410, 1630712284783210, 1000000000);
+        let delta_quote = quote_swap_(6273576615700410, 1630712284783210, 1000000000);
         assert_eq(delta_quote, 3847136510);
 
-        let delta_quote = quote_(5196638254543900, 9284728716079420, 1000000000);
+        let delta_quote = quote_swap_(5196638254543900, 9284728716079420, 1000000000);
         assert_eq(delta_quote, 559697310);
 
-        let delta_quote = quote_(1128134431179110, 4632243184772740, 1000000000);
+        let delta_quote = quote_swap_(1128134431179110, 4632243184772740, 1000000000);
         assert_eq(delta_quote, 243539499);
     }
 
     // TODO: add back
     #[test]
     fun test_deposit_liquidity_inner() {
-        // let (delta_a, delta_b, lp_tokens) = deposit_liquidity_inner(
-        //     50_000_000, // reserve_a
-        //     50_000_000, // reserve_b
-        //     1_000_000_000, // lp_supply
-        //     50_000_000, // max_base
-        //     250_000_000, // max_quote,
-        //     0, // min_a
-        //     0, // min_b
-        // );
+        let (delta_a, delta_b, lp_tokens) = quote_deposit_(
+            50_000_000, // reserve_a
+            50_000_000, // reserve_b
+            1_000_000_000, // lp_supply
+            50_000_000, // max_base
+            250_000_000, // max_quote,
+            0, // min_a
+            0, // min_b
+        );
 
-        // assert_eq(delta_a, 50_000_000);
-        // assert_eq(delta_b, 50_000_000);
-        // assert_eq(lp_tokens, 1_000_000_000);
+        assert_eq(delta_a, 50_000_000);
+        assert_eq(delta_b, 50_000_000);
+        assert_eq(lp_tokens, 1_000_000_000);
         
-        let (delta_, delta_b, lp_tokens) = deposit_liquidity_inner(
+        let (delta_, delta_b, lp_tokens) = quote_deposit_(
             995904078539, // reserve_a
             433683167230, // reserve_b
             1_000_000_000, // lp_supply
@@ -512,7 +631,7 @@ module slamm::pool {
         assert_eq(lp_tokens, 997647);
         
         
-        let (delta_, delta_b, lp_tokens) = deposit_liquidity_inner(
+        let (delta_, delta_b, lp_tokens) = quote_deposit_(
             431624541156, // reserve_a
             136587560238, // reserve_b
             1_000_000_000, // lp_supply
@@ -527,7 +646,7 @@ module slamm::pool {
         assert_eq(lp_tokens, 388796);
 	
         
-        let (delta_, delta_b, lp_tokens) = deposit_liquidity_inner(
+        let (delta_, delta_b, lp_tokens) = quote_deposit_(
             814595492359, // reserve_a
             444814121159, // reserve_b
             1_000_000_000, // lp_supply
@@ -541,7 +660,7 @@ module slamm::pool {
         assert_eq(delta_b, 3162895062);
         assert_eq(lp_tokens, 7110599);
         
-        let (delta_, delta_b, lp_tokens) = deposit_liquidity_inner(
+        let (delta_, delta_b, lp_tokens) = quote_deposit_(
             6330406121, // reserve_a
             45207102784, // reserve_b
             1_000_000_000, // lp_supply
@@ -555,31 +674,31 @@ module slamm::pool {
         assert_eq(delta_b, 1335572325);
         assert_eq(lp_tokens, 29543417);
 
-        let (delta_, delta_b, lp_tokens) = deposit_liquidity_inner(420297244854, 316982205287, 6_606_760_618_411_090, 4995214965, 3570130297, 0, 0);
+        let (delta_, delta_b, lp_tokens) = quote_deposit_(420297244854, 316982205287, 6_606_760_618_411_090, 4995214965, 3570130297, 0, 0);
 
         assert_eq(delta_, 4733754458);
         assert_eq(delta_b, 3570130297);
         assert_eq(lp_tokens, 74411105267193);
 
-        let (delta_, delta_b, lp_tokens) = deposit_liquidity_inner(413062764570, 603795453491, 1_121_070_850_572_460, 1537859755, 8438693476, 0, 0);
+        let (delta_, delta_b, lp_tokens) = quote_deposit_(413062764570, 603795453491, 1_121_070_850_572_460, 1537859755, 8438693476, 0, 0);
 
         assert_eq(delta_, 1537859755);
         assert_eq(delta_b, 2247970061);
         assert_eq(lp_tokens, 4173820279327);
 
-        let (delta_, delta_b, lp_tokens) = deposit_liquidity_inner(307217683947, 761385620952, 4_042_886_943_071_790, 3998100768, 108790920, 0, 0);
+        let (delta_, delta_b, lp_tokens) = quote_deposit_(307217683947, 761385620952, 4_042_886_943_071_790, 3998100768, 108790920, 0, 0);
 
         assert_eq(delta_, 43896934);
         assert_eq(delta_b, 108790920);
         assert_eq(lp_tokens, 577669680434);
 
-        let (delta_, delta_b, lp_tokens) = deposit_liquidity_inner(42698336282, 948435467841, 2_431_942_296_016_960, 6236994835, 8837546234, 0, 0);
+        let (delta_, delta_b, lp_tokens) = quote_deposit_(42698336282, 948435467841, 2_431_942_296_016_960, 6236994835, 8837546234, 0, 0);
 
         assert_eq(delta_, 397864202);
         assert_eq(delta_b, 8837546234);
         assert_eq(lp_tokens, 22660901223983);
 
-        let (delta_, delta_b, lp_tokens) = deposit_liquidity_inner(861866936755, 638476503150, 244_488_474_179_102, 886029611, 7520096624, 0, 0);
+        let (delta_, delta_b, lp_tokens) = quote_deposit_(861866936755, 638476503150, 244_488_474_179_102, 886029611, 7520096624, 0, 0);
 
         assert_eq(delta_, 886029611);
         assert_eq(delta_b, 656376365);
@@ -588,7 +707,7 @@ module slamm::pool {
     
     #[test]
     fun test_redeem_liquidity_inner() {
-        let (base_withdraw, quote_withdraw) = redeem_liquidity_inner(
+        let (base_withdraw, quote_withdraw) = quote_redeem_(
             50_000_000, // reserve_a
             50_000_000, // reserve_b
             1_000_000_000, // lp_supply
@@ -600,39 +719,39 @@ module slamm::pool {
         assert_eq(base_withdraw, 27140823);
         assert_eq(quote_withdraw, 27140823);
 
-        let (base_withdraw, quote_withdraw) = redeem_liquidity_inner(995904078539, 433683167230, 1000000000, 389391649, 0, 0);
+        let (base_withdraw, quote_withdraw) = quote_redeem_(995904078539, 433683167230, 1000000000, 389391649, 0, 0);
         assert_eq(quote_withdraw, 168872603631);
         assert_eq(base_withdraw, 387796731388);
 
-        let (base_withdraw, quote_withdraw) = redeem_liquidity_inner(431624541156, 136587560238, 1000000000, 440552590, 0, 0);
+        let (base_withdraw, quote_withdraw) = quote_redeem_(431624541156, 136587560238, 1000000000, 440552590, 0, 0);
         assert_eq(base_withdraw, 190153309513);
         assert_eq(quote_withdraw, 60174003424);
 
-        let (base_withdraw, quote_withdraw) = redeem_liquidity_inner(814595492359, 444814121159, 1000000000, 996613035, 0, 0);
+        let (base_withdraw, quote_withdraw) = quote_redeem_(814595492359, 444814121159, 1000000000, 996613035, 0, 0);
         assert_eq(base_withdraw, 811836485937);
         assert_eq(quote_withdraw, 443307551299);
 
-        let (base_withdraw, quote_withdraw) = redeem_liquidity_inner(6330406121, 45207102784, 1000000000, 12810274, 0, 0);
+        let (base_withdraw, quote_withdraw) = quote_redeem_(6330406121, 45207102784, 1000000000, 12810274, 0, 0);
         assert_eq(base_withdraw, 81094236);
         assert_eq(quote_withdraw, 579115373);
 
-        let (base_withdraw, quote_withdraw) = redeem_liquidity_inner(420297244854, 316982205287, 6606760618411090, 2045717643009200, 0, 0);
+        let (base_withdraw, quote_withdraw) = quote_redeem_(420297244854, 316982205287, 6606760618411090, 2045717643009200, 0, 0);
         assert_eq(base_withdraw, 130140857035);
         assert_eq(quote_withdraw, 98150383724);
 
-        let (base_withdraw, quote_withdraw) = redeem_liquidity_inner(413062764570, 603795453491, 1121070850572460, 551538827364816, 0, 0);
+        let (base_withdraw, quote_withdraw) = quote_redeem_(413062764570, 603795453491, 1121070850572460, 551538827364816, 0, 0);
         assert_eq(base_withdraw, 203216551998);
         assert_eq(quote_withdraw, 297052265890);
 
-        let (base_withdraw, quote_withdraw) = redeem_liquidity_inner(307217683947, 761385620952, 4042886943071790, 2217957798004580, 0, 0);
+        let (base_withdraw, quote_withdraw) = quote_redeem_(307217683947, 761385620952, 4042886943071790, 2217957798004580, 0, 0);
         assert_eq(base_withdraw, 168541902702);
         assert_eq(quote_withdraw, 417701805432);
 
-        let (base_withdraw, quote_withdraw) = redeem_liquidity_inner(42698336282, 948435467841, 2431942296016960, 59368562297754, 0, 0);
+        let (base_withdraw, quote_withdraw) = quote_redeem_(42698336282, 948435467841, 2431942296016960, 59368562297754, 0, 0);
         assert_eq(base_withdraw, 1042351556);
         assert_eq(quote_withdraw, 23153201558);
 
-        let (base_withdraw, quote_withdraw) = redeem_liquidity_inner(861866936755, 638476503150, 244488474179102, 129992518389093, 0, 0);
+        let (base_withdraw, quote_withdraw) = quote_redeem_(861866936755, 638476503150, 244488474179102, 129992518389093, 0, 0);
         assert_eq(base_withdraw, 458247588158);
         assert_eq(quote_withdraw, 339472725065);
     }

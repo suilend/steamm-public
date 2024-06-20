@@ -42,11 +42,12 @@ module slamm::global_config {
         swap_fee_numerator: u64,
         swap_fee_denominator: u64,
     ) {
+        assert!(swap_fee_numerator < swap_fee_denominator, 0);
         config.swap_fee_numerator = swap_fee_numerator;
         config.swap_fee_denominator = swap_fee_denominator;
     }
     
-    public fun turn_pause(
+    public fun emergency_pause(
         _: &GlobalAdmin,
         config: &mut GlobalConfig,
         pause: bool,
@@ -56,5 +57,25 @@ module slamm::global_config {
 
     public fun assert_not_paused(config: &GlobalConfig) {
         assert!(config.pause == false, EAmmIsGloballyPaused);
+    }
+    
+    #[test_only]
+    public fun init_for_testing(
+        swap_fee_numerator: u64,
+        swap_fee_denominator: u64,
+        ctx: &mut TxContext,
+    ): (GlobalConfig, GlobalAdmin) {
+        let config = GlobalConfig {
+            id: object::new(ctx),
+            swap_fee_numerator,
+            swap_fee_denominator,
+            pause: false,
+        };
+
+        let admin = GlobalAdmin{
+            id: object::new(ctx)
+        };
+
+        (config, admin)
     }
 }
