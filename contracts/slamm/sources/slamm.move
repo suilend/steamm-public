@@ -1,4 +1,6 @@
 module slamm::pool {
+    // use std::debug::print;
+
     use sui::balance::{Self, Balance, Supply};
     use sui::coin::{Self, Coin, TreasuryCap};
     use sui::transfer::public_transfer;
@@ -367,7 +369,6 @@ module slamm::pool {
         }
     }
 
-
     fun redeem_liquidity_inner(
         reserve_a: u64,
         reserve_b: u64,
@@ -439,13 +440,9 @@ module slamm::pool {
         b_withdrwan: u64,
     }
 
-    
-    
-    
+    // ===== Tests =====
 
-    
 
-    use std::debug::print;
     #[test_only]
     use sui::test_utils::assert_eq;
 
