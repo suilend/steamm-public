@@ -259,8 +259,10 @@ module slamm::pool {
                 self.reserve_a.split(swap.amount_out)
             );
         };
-        
 
+        // Recompute invariant
+        self.update_invariant_assert_increase();
+        
         // 5. Emit event
         emit_event(
             SwapEvent {

@@ -6,6 +6,7 @@ module slamm::slamm_tests {
     use sui::sui::SUI;
     use sui::coin::{Self};
     use sui::test_utils::{destroy, assert_eq};
+    use std::debug::print;
 
     const ADMIN: address = @0x10;
     const POOL_CREATOR: address = @0x11;
@@ -31,7 +32,6 @@ module slamm::slamm_tests {
         );
 
         // Init Pool
-
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
@@ -44,6 +44,8 @@ module slamm::slamm_tests {
         );
 
         let (reserve_a, reserve_b) = pool.reserves();
+        let reserve_ratio_0 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
+
         let (fees_a, fees_b) = pool.fees();
 
         assert_eq(pool.k(), 500000000000000000000000000);
@@ -76,6 +78,10 @@ module slamm::slamm_tests {
         assert_eq(coin_b.value(), 0);
         assert_eq(lp_coins_2.value(), 447213595);
 
+        let (reserve_a, reserve_b) = pool.reserves();
+        let reserve_ratio_1 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
+        assert_eq(reserve_ratio_0, reserve_ratio_1);
+
         destroy(coin_a);
         destroy(coin_b);
 
@@ -94,6 +100,10 @@ module slamm::slamm_tests {
         // Guarantees that roundings are in favour of the pool
         assert_eq(coin_a.value(), 20_000_000 - 1); // -1 for the rounddown
         assert_eq(coin_b.value(), e9(10) - 12); // double rounddown: inital lp tokens minted + redeed
+
+        let (reserve_a, reserve_b) = pool.reserves();
+        let reserve_ratio_2 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
+        assert_eq(reserve_ratio_0, reserve_ratio_2);
 
         destroy(coin_a);
         destroy(coin_b);
