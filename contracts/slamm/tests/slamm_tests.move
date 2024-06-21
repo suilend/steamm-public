@@ -1,12 +1,11 @@
 #[test_only]
 module slamm::slamm_tests {
+    // use std::debug::print;
     use slamm::pool::{Self, minimum_liquidity};
-    use slamm::global_config::{Self};
     use sui::test_scenario::{Self, ctx};
     use sui::sui::SUI;
     use sui::coin::{Self};
     use sui::test_utils::{destroy, assert_eq};
-    use std::debug::print;
 
     const ADMIN: address = @0x10;
     const POOL_CREATOR: address = @0x11;
@@ -23,21 +22,14 @@ module slamm::slamm_tests {
     #[test]
     fun test_slamm() {
         let mut scenario = test_scenario::begin(ADMIN);
-        let ctx = ctx(&mut scenario);
-
-        let (config, admin_cap) = global_config::init_for_testing(
-            200,
-            10_000,
-            ctx,
-        );
 
         // Init Pool
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, lp_coins) = pool::init_pool<SUI, COIN, Wit>(
+        let (mut pool, lp_coins, pool_cap) = pool::init_pool<SUI, COIN, Wit>(
             Wit {},
-            &config,
+            100, // admin fees BPS
             coin::mint_for_testing<SUI>(e9(1_000), ctx),
             coin::mint_for_testing<COIN>(e9(500_000), ctx),
             ctx,
@@ -46,15 +38,15 @@ module slamm::slamm_tests {
         let (reserve_a, reserve_b) = pool.reserves();
         let reserve_ratio_0 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
 
-        let (fees_a, fees_b) = pool.fees();
+        let (fees_a, fees_b) = pool.admin_fees().balances();
 
         assert_eq(pool.k(), 500000000000000000000000000);
         assert_eq(pool.lp_supply(), 22360679774997);
         assert_eq(reserve_a, e9(1_000));
         assert_eq(reserve_b, e9(500_000));
         assert_eq(lp_coins.value(), 22360679774997 - minimum_liquidity());
-        assert_eq(fees_a, 0);
-        assert_eq(fees_b, 0);
+        assert_eq(fees_a.value(), 0);
+        assert_eq(fees_b.value(), 0);
 
         // Deposit liquidity
         test_scenario::next_tx(&mut scenario, LP_PROVIDER);
@@ -64,7 +56,6 @@ module slamm::slamm_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(e9(10), ctx);
 
         let (lp_coins_2, _) = pool.deposit_liquidity(
-            &config,
             &mut coin_a,
             &mut coin_b,
             e9(10), // ideal_a
@@ -90,7 +81,6 @@ module slamm::slamm_tests {
         let ctx = ctx(&mut scenario);
 
         let (coin_a, coin_b) = pool.redeem_liquidity(
-            &config,
             lp_coins_2,
             0,
             0,
@@ -116,7 +106,6 @@ module slamm::slamm_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
         let swap_result = pool.swap(
-            &config,
             &mut coin_a,
             &mut coin_b,
             e9(200),
@@ -126,15 +115,15 @@ module slamm::slamm_tests {
         );
 
         assert_eq(swap_result.a2b(), true);
-        assert_eq(swap_result.swap_fees(), 4000000000);
-        assert_eq(swap_result.amount_out(), 81939799331037);
+        assert_eq(swap_result.swap_protocol_fees(), 4000000000);
+        assert_eq(swap_result.swap_admin_fees(), 2000000000);
+        assert_eq(swap_result.amount_out(), 81239530988208);
 
         destroy(coin_a);
         destroy(coin_b);
         destroy(pool);
         destroy(lp_coins);
-        destroy(config);
-        destroy(admin_cap);
+        destroy(pool_cap);
         test_scenario::end(scenario);
     }
 }

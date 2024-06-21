@@ -5,36 +5,52 @@ module slamm::pool {
     use sui::coin::{Self, Coin};
     use sui::transfer::public_transfer;
     use slamm::events::emit_event;
-    use slamm::global_config::{GlobalConfig, get_fees};
     use sui::math;
     use slamm::math::{safe_mul_div_u64};
+    use slamm::fees::{Self, Fees};
     use sui::tx_context::sender;
+
+    // Consts
+    const SWAP_FEE_NUMERATOR: u64 = 200;
+    const SWAP_FEE_DENOMINATOR: u64 = 10_000;
+    const MINIMUM_LIQUIDITY: u64 = 10;
+    
+    // Error codes
+    const EFeeAbove100Percent: u64 = 0;
+    const ESwapExceedsSlippage: u64 = 1;
+    const EInsufficientDeposit: u64 = 2;
+    const EInsufficientDepositA: u64 = 3;
+    const EInsufficientDepositB: u64 = 4;
+    const ERedeemSlippageAExceeded: u64 = 5;
+    const ERedeemSlippageBExceeded: u64 = 5;
+    const EInvariantViolation: u64 = 6;
 
     public struct LP<phantom A, phantom B, phantom W: drop> has copy, drop {}
 
-    const MINIMUM_LIQUIDITY: u64 = 10;
+    public struct PoolCap<phantom A, phantom B, phantom W: drop> {
+        id: UID,
+        pool_id: ID,
+    }
 
     public struct Pool<phantom A, phantom B, phantom W: drop> has key, store {
         id: UID,
         reserve_a: Balance<A>,
         reserve_b: Balance<B>,
-        a_fees: Balance<A>,
-        b_fees: Balance<B>,
+        protocol_fees: Fees<A, B>,
+        admin_fees: Fees<A, B>,
         lp_supply: Supply<LP<A, B, W>>,
         k: u128,
     }
-
+    
     // ===== Public Methods =====
 
     public fun init_pool<A, B, W: drop>(
         _witness: W,
-        global_config: &GlobalConfig,
+        swap_fee_bps: u64,
         coin_a: Coin<A>,
         coin_b: Coin<B>,
         ctx: &mut TxContext,
-    ): (Pool<A, B, W>, Coin<LP<A, B, W>>) {
-        global_config.assert_not_paused();
-
+    ): (Pool<A, B, W>, Coin<LP<A, B, W>>, PoolCap<A, B, W>) {
         let lp_supply = balance::create_supply(LP<A, B, W>{});
 
         let liquidity_a = coin_a.value();
@@ -42,14 +58,15 @@ module slamm::pool {
 
         // 1. Compute k
         let k = (liquidity_a as u128) * (liquidity_b as u128);
+        assert!(swap_fee_bps < SWAP_FEE_DENOMINATOR, EFeeAbove100Percent);
 
         // 2. Init pool
         let mut pool = Pool {
             id: object::new(ctx),
             reserve_a: coin_a.into_balance(),
             reserve_b: coin_b.into_balance(),
-            a_fees: balance::zero(),
-            b_fees: balance::zero(),
+            protocol_fees: fees::new(SWAP_FEE_NUMERATOR, SWAP_FEE_DENOMINATOR),
+            admin_fees: fees::new(swap_fee_bps, SWAP_FEE_DENOMINATOR),
             lp_supply,
             k,
         };
@@ -73,6 +90,12 @@ module slamm::pool {
             ctx
         );
 
+        // 6. Create pool cap
+        let pool_cap = PoolCap {
+            id: object::new(ctx),
+            pool_id: pool.id.uid_to_inner(),
+        };
+
         // 6. Emit event
         emit_event(
             InitPoolEvent {
@@ -84,12 +107,11 @@ module slamm::pool {
             }
         );
 
-        (pool, lp_tokens)
+        (pool, lp_tokens, pool_cap)
     }
 
     public fun deposit_liquidity<A, B, W: drop>(
         self: &mut Pool<A, B, W>,
-        global_config: &GlobalConfig,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
         ideal_a: u64,
@@ -98,8 +120,6 @@ module slamm::pool {
         min_b: u64,
         ctx:  &mut TxContext,
     ): (Coin<LP<A, B, W>>, DepositResult) {
-        global_config.assert_not_paused();
-
         // 1. Compute token deposits and delta lp tokens
         let (deposit_a, deposit_b, lp_tokens) = quote_deposit_(
             self.reserve_a.value(),
@@ -149,14 +169,11 @@ module slamm::pool {
 
     public fun redeem_liquidity<A, B, W: drop>(
         self: &mut Pool<A, B, W>,
-        global_config: &GlobalConfig,
         lp_tokens: Coin<LP<A, B, W>>,
         min_a: u64,
         min_b: u64,
         ctx:  &mut TxContext,
     ): (Coin<A>, Coin<B>) {
-        global_config.assert_not_paused();
-
         let lp_burn = lp_tokens.value();
 
         // 1. Compute amounts to withdraw
@@ -203,7 +220,6 @@ module slamm::pool {
 
     public fun swap<A, B, W: drop>(
         self: &mut Pool<A, B, W>,
-        global_config: &GlobalConfig,
         token_a: &mut Coin<A>,
         token_b: &mut Coin<B>,
         amount_in: u64,
@@ -211,25 +227,23 @@ module slamm::pool {
         a2b: bool,
         ctx: &mut TxContext,
     ): SwapResult {
-        global_config.assert_not_paused();
-
         let swap = quote_swap(
             self,
-            global_config,
             amount_in,
             a2b,
         );
 
-        let net_amount_in = swap.amount_in - swap.fees;
+        let net_amount_in = swap.amount_in - swap.protocol_fees - swap.admin_fees;
 
         if (a2b) {
             // IN: A && OUT: B
-            assert!(swap.amount_out >= min_amount_out, 0);
+            assert!(swap.amount_out >= min_amount_out, ESwapExceedsSlippage);
 
-            // Transfers fees in
-            self.a_fees.join(
-                token_a.balance_mut().split(swap.fees)
-            );
+            // Transfers protocol fees in
+            self.protocol_fees.deposit_a(token_a.balance_mut().split(swap.protocol_fees));
+            
+            // Transfers protocol fees in
+            self.admin_fees.deposit_a(token_a.balance_mut().split(swap.admin_fees));
             
             // Transfers amount in
             self.reserve_a.join(
@@ -242,12 +256,13 @@ module slamm::pool {
             );
         } else {
             // IN: B && OUT: A
-            assert!(swap.amount_out >= min_amount_out, 0);
+            assert!(swap.amount_out >= min_amount_out, ESwapExceedsSlippage);
 
-            // Transfers fees in
-            self.b_fees.join(
-                token_b.balance_mut().split(swap.fees)
-            );
+            // Transfers protocol fees in
+            self.protocol_fees.deposit_b(token_b.balance_mut().split(swap.protocol_fees));
+            
+            // Transfers protocol fees in
+            self.admin_fees.deposit_b(token_b.balance_mut().split(swap.admin_fees));
             
             // Transfers amount in
             self.reserve_b.join(
@@ -270,7 +285,8 @@ module slamm::pool {
                 pool_id: object::id(self),
                 amount_in: amount_in,
                 amount_out: swap.amount_out,
-                fees: swap.fees,
+                protocol_fees: swap.protocol_fees,
+                admin_fees: swap.admin_fees,
                 a2b,
             }
         );
@@ -307,8 +323,12 @@ module slamm::pool {
         (self.reserve_a.value(), self.reserve_b.value())
     }
     
-    public fun fees<A, B, W: drop>(self: &Pool<A, B, W>,): (u64, u64) {
-        (self.a_fees.value(), self.b_fees.value())
+    public fun protocol_fees<A, B, W: drop>(self: &Pool<A, B, W>): &Fees<A, B> {
+        &self.protocol_fees
+    }
+    
+    public fun admin_fees<A, B, W: drop>(self: &Pool<A, B, W>): &Fees<A, B> {
+        &self.admin_fees
     }
     
     public fun lp_supply<A, B, W: drop>(self: &Pool<A, B, W>,): u64 {
@@ -321,13 +341,17 @@ module slamm::pool {
 
     public fun quote_swap<A, B, W: drop>(
         self: &Pool<A, B, W>,
-        global_config: &GlobalConfig,
         amount_in: u64,
         a2b: bool,
     ): SwapResult {
-        let (swap_fee_numerator, swap_fee_denominator) = get_fees(global_config);
-        let fees = safe_mul_div_u64(amount_in, swap_fee_numerator, swap_fee_denominator);
-        let net_amount_in = amount_in - fees;
+        let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees.fee_ratio();
+        let (admin_fee_num, admin_fee_denom) = self.admin_fees.fee_ratio();
+        
+        let protocol_fees = safe_mul_div_u64(amount_in, protocol_fee_num, protocol_fee_denom);
+        let amount_in_net_of_protocol_fees = amount_in - protocol_fees;
+
+        let admin_fees = safe_mul_div_u64(amount_in, admin_fee_num, admin_fee_denom);
+        let net_amount_in = amount_in_net_of_protocol_fees - admin_fees;
 
         let amount_out = if (a2b) {
             // IN: A && OUT: B
@@ -348,7 +372,8 @@ module slamm::pool {
         SwapResult {
             amount_in,
             amount_out,
-            fees,
+            protocol_fees,
+            admin_fees,
             a2b,
         }
     }
@@ -425,12 +450,12 @@ module slamm::pool {
             let b_star = safe_mul_div_u64(ideal_a, reserve_b, reserve_a);
             if (b_star <= ideal_b) {
 
-                assert!(b_star >= min_b, 0);
+                assert!(b_star >= min_b, EInsufficientDepositB);
                 (ideal_a, b_star)
             } else {
                 let a_star = safe_mul_div_u64(ideal_b, reserve_a, reserve_b);
-                assert!(a_star <= ideal_a, 0);
-                assert!(a_star >= min_a, 0);
+                assert!(a_star <= ideal_a, EInsufficientDeposit);
+                assert!(a_star >= min_a, EInsufficientDepositA);
                 (a_star, ideal_b)
             } 
         }
@@ -468,8 +493,8 @@ module slamm::pool {
         let withdraw_b = safe_mul_div_u64(reserve_b, lp_tokens, lp_supply);
 
         // 2. Assert slippage
-        assert!(withdraw_a >= min_a, 0);
-        assert!(withdraw_b >= min_b, 0);
+        assert!(withdraw_a >= min_a, ERedeemSlippageAExceeded);
+        assert!(withdraw_b >= min_b, ERedeemSlippageBExceeded);
 
         (withdraw_a, withdraw_b)
     }
@@ -489,13 +514,13 @@ module slamm::pool {
     fun update_invariant_assert_increase<A, B, W: drop>(self: &mut Pool<A, B, W>) {
         let k0 = self.k;
         self.update_invariant();
-        assert!(self.k > k0, 0);
+        assert!(self.k > k0, EInvariantViolation);
     }
     
     fun update_invariant_assert_decrease<A, B, W: drop>(self: &mut Pool<A, B, W>) {
         let k0 = self.k;
         self.update_invariant();
-        assert!(self.k < k0, 0);
+        assert!(self.k < k0, EInvariantViolation);
     }
 
     // ===== Events =====
@@ -529,7 +554,8 @@ module slamm::pool {
         pool_id: ID,
         amount_in: u64,
         amount_out: u64,
-        fees: u64,
+        protocol_fees: u64,
+        admin_fees: u64,
         a2b: bool,
     }
 
@@ -538,7 +564,8 @@ module slamm::pool {
     public struct SwapResult has drop {
         amount_in: u64,
         amount_out: u64,
-        fees: u64,
+        protocol_fees: u64,
+        admin_fees: u64,
         a2b: bool,
     }
 
@@ -556,7 +583,8 @@ module slamm::pool {
 
     public fun amount_in(self: &SwapResult): u64 { self.amount_in }
     public fun amount_out(self: &SwapResult): u64 { self.amount_out }
-    public fun swap_fees(self: &SwapResult): u64 { self.fees }
+    public fun swap_protocol_fees(self: &SwapResult): u64 { self.protocol_fees }
+    public fun swap_admin_fees(self: &SwapResult): u64 { self.admin_fees }
     public fun a2b(self: &SwapResult): bool { self.a2b }
     public fun deposit_a(self: &DepositResult): u64 { self.deposit_a }
     public fun deposit_b(self: &DepositResult): u64 { self.deposit_b }
@@ -566,7 +594,6 @@ module slamm::pool {
     public fun burn_lp(self: &RedeemResult): u64 { self.burn_lp }
     
     // ===== Tests =====
-
 
     #[test_only]
     use sui::test_utils::assert_eq;
