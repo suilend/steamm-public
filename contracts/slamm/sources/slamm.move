@@ -1,29 +1,25 @@
 module slamm::pool {
-    // use std::debug::print;
-
     use sui::balance::{Self, Balance, Supply};
     use sui::coin::{Self, Coin};
-    use sui::transfer::public_transfer;
     use slamm::events::emit_event;
-    use sui::math;
     use slamm::math::{safe_mul_div_u64};
     use slamm::fees::{Self, Fees};
     use sui::tx_context::sender;
+    use std::type_name::{Self, TypeName};
+    use sui::object_bag::{Self as ob, ObjectBag};
+
+    // Allows calling `.split_vec(amounts, ctx)` on `coin`
+    public use fun slamm::cpmm::deposit_liquidity as Pool.cpmm_deposit;
+    public use fun slamm::cpmm::redeem_liquidity as Pool.cpmm_redeem;
+    public use fun slamm::cpmm::swap as Pool.cpmm_swap;
+    public use fun slamm::cpmm::state as Pool.cpmm;
 
     // Consts
     const SWAP_FEE_NUMERATOR: u64 = 200;
     const SWAP_FEE_DENOMINATOR: u64 = 10_000;
-    const MINIMUM_LIQUIDITY: u64 = 10;
-    
+
     // Error codes
     const EFeeAbove100Percent: u64 = 0;
-    const ESwapExceedsSlippage: u64 = 1;
-    const EInsufficientDeposit: u64 = 2;
-    const EInsufficientDepositA: u64 = 3;
-    const EInsufficientDepositB: u64 = 4;
-    const ERedeemSlippageAExceeded: u64 = 5;
-    const ERedeemSlippageBExceeded: u64 = 5;
-    const EInvariantViolation: u64 = 6;
 
     public struct LP<phantom A, phantom B, phantom W: drop> has copy, drop {}
 
@@ -36,162 +32,180 @@ module slamm::pool {
         id: UID,
         reserve_a: Balance<A>,
         reserve_b: Balance<B>,
+        lp_supply: Supply<LP<A, B, W>>,
         protocol_fees: Fees<A, B>,
         admin_fees: Fees<A, B>,
-        lp_supply: Supply<LP<A, B, W>>,
-        k: u128,
+        hooks: Hooks,
+        fields: ObjectBag,
+    }
+
+    public struct Hooks has store {
+        swap: vector<TypeName>,
+        deposit: vector<TypeName>,
+        redeem: vector<TypeName>,
+    }
+
+    public struct Request<phantom T> {
+        pool: ID,
+        receipts: vector<TypeName>
+    }
+
+    // Type Markers
+    public struct Swap {}
+    public struct Deposit {}
+    public struct Redeem {}
+
+    fun confirm_swap<A, B, W: drop>(self: &Pool<A, B, W>, request: Request<Swap>) {
+        assert!(object::id(self) == request.pool, 0);
+        confirm(&self.hooks.swap, request);
+    }
+    
+    fun confirm_deposit<A, B, W: drop>(self: &Pool<A, B, W>, request: Request<Deposit>) {
+        assert!(object::id(self) == request.pool, 0);
+        confirm(&self.hooks.deposit, request);
+    }
+    
+    fun confirm_redeem<A, B, W: drop>(self: &Pool<A, B, W>, request: Request<Redeem>) {
+        assert!(object::id(self) == request.pool, 0);
+        confirm(&self.hooks.redeem, request);
+    }
+    
+    fun confirm<T>(
+        hooks: &vector<TypeName>,
+        request: Request<T>
+    ) {
+        let Request { pool: _, receipts } = request;
+        assert!(hooks == &receipts, 0);
     }
     
     // ===== Public Methods =====
 
-    public fun init_pool<A, B, W: drop>(
+    public fun new<A, B, W: drop>(
         _witness: W,
         swap_fee_bps: u64,
-        coin_a: Coin<A>,
-        coin_b: Coin<B>,
+        swap_hooks: vector<TypeName>,
+        deposit_hooks: vector<TypeName>,
+        redeem_hooks: vector<TypeName>,
         ctx: &mut TxContext,
-    ): (Pool<A, B, W>, Coin<LP<A, B, W>>, PoolCap<A, B, W>) {
-        let lp_supply = balance::create_supply(LP<A, B, W>{});
-
-        let liquidity_a = coin_a.value();
-        let liquidity_b = coin_b.value();
-
-        // 1. Compute k
-        let k = (liquidity_a as u128) * (liquidity_b as u128);
+    ): (Pool<A, B, W>, PoolCap<A, B, W>) {
         assert!(swap_fee_bps < SWAP_FEE_DENOMINATOR, EFeeAbove100Percent);
 
-        // 2. Init pool
-        let mut pool = Pool {
+        let lp_supply = balance::create_supply(LP<A, B, W>{});
+
+        let pool = Pool {
             id: object::new(ctx),
-            reserve_a: coin_a.into_balance(),
-            reserve_b: coin_b.into_balance(),
+            reserve_a: balance::zero(),
+            reserve_b: balance::zero(),
             protocol_fees: fees::new(SWAP_FEE_NUMERATOR, SWAP_FEE_DENOMINATOR),
             admin_fees: fees::new(swap_fee_bps, SWAP_FEE_DENOMINATOR),
             lp_supply,
-            k,
+            hooks: Hooks {
+                swap: swap_hooks,
+                deposit: deposit_hooks,
+                redeem: redeem_hooks,
+            },
+            fields: ob::new(ctx),
         };
 
-        // 3. Compute LP tokens
-        let delta_lp = lp_tokens_to_mint(
-            0,
-            0,
-            pool.lp_supply.supply_value(),
-            pool.reserve_a.value(),
-            pool.reserve_b.value(),
-        );
-
-        // 4. Lock minimum liquidity - prevents inflation attack
-        let balance_lp_locked = balance::increase_supply(&mut pool.lp_supply, MINIMUM_LIQUIDITY);
-        public_transfer(coin::from_balance(balance_lp_locked, ctx), @0x0);
-
-        // 5. Mint net LP tokens
-        let lp_tokens = coin::from_balance(
-            pool.lp_supply.increase_supply(delta_lp - MINIMUM_LIQUIDITY),
-            ctx
-        );
-
-        // 6. Create pool cap
+        // Create pool cap
         let pool_cap = PoolCap {
             id: object::new(ctx),
             pool_id: pool.id.uid_to_inner(),
         };
 
-        // 6. Emit event
+
+        // Emit event
         emit_event(
             InitPoolEvent {
                 creator: sender(ctx),
                 pool_id: object::id(&pool),
-                lp_minted: delta_lp,
-                a_deposited: liquidity_a,
-                b_deposited: liquidity_b,
             }
         );
 
-        (pool, lp_tokens, pool_cap)
+        (pool, pool_cap)
     }
+
+    public fun get_field<A, B, W: drop, K: copy + store + drop, V: key + store>(
+        self: &Pool<A, B, W>,
+        key: K,
+    ): &V {
+        self.fields.borrow(key)
+    }
+    
+    public fun add_field<A, B, W: drop, K: copy + store + drop, V: key + store>(
+        self: &mut Pool<A, B, W>,
+        key: K,
+        value: V,
+    ) {
+        self.fields.add(key, value)
+    }
+    
+    public fun get_field_mut<A, B, W: drop, K: copy + store + drop, V: key + store>(
+        self: &mut Pool<A, B, W>,
+        key: K,
+    ): &mut V {
+        self.fields.borrow_mut(key)
+    }
+
 
     public fun deposit_liquidity<A, B, W: drop>(
         self: &mut Pool<A, B, W>,
-        coin_a: &mut Coin<A>,
-        coin_b: &mut Coin<B>,
-        ideal_a: u64,
-        ideal_b: u64,
-        min_a: u64,
-        min_b: u64,
+        balance_a: Balance<A>,
+        balance_b: Balance<B>,
+        lp_to_mint: u64,
+        request: Request<Deposit>,
         ctx:  &mut TxContext,
     ): (Coin<LP<A, B, W>>, DepositResult) {
-        // 1. Compute token deposits and delta lp tokens
-        let (deposit_a, deposit_b, lp_tokens) = quote_deposit_(
-            self.reserve_a.value(),
-            self.reserve_b.value(),
-            self.lp_supply.supply_value(),
-            ideal_a,
-            ideal_b,
-            min_a,
-            min_b,
-        );
-
-        // 2. Add liquidity to pool
-        self.reserve_a.join(
-            coin_a.balance_mut().split(deposit_a)
-        );
+        let deposit_a = balance_a.value();
+        let deposit_b = balance_b.value();
         
-        self.reserve_b.join(
-            coin_b.balance_mut().split(deposit_b)
+        // 1. Add liquidity to pool
+        self.reserve_a.join(balance_a);
+        self.reserve_b.join(balance_b);
+
+        // 2. Mint LP Tokens
+        let lp_coins = coin::from_balance(
+            self.lp_supply.increase_supply(lp_to_mint),
+            ctx
         );
 
-        // 3. Recompute invariant
-        self.update_invariant_assert_increase();
+        // 3. Confirm deposit
+        self.confirm_deposit(request);
 
         // 4. Emit event
         emit_event(
             DepositLiquidityEvent {
                 user: sender(ctx),
                 pool_id: object::id(self),
-                lp_minted: lp_tokens,
+                lp_minted: lp_to_mint,
                 a_deposited: deposit_a,
                 b_deposited: deposit_b,
             }
         );
 
-        // 4. Mint LP Tokens
-        let lp_coins = coin::from_balance(
-            self.lp_supply.increase_supply(lp_tokens),
-            ctx
-        );
-
         (lp_coins, DepositResult {
             deposit_a,
             deposit_b,
-            mint_lp: lp_tokens,
+            mint_lp: lp_to_mint,
         })
     }
-
+    
     public fun redeem_liquidity<A, B, W: drop>(
         self: &mut Pool<A, B, W>,
+        withdraw_a: u64,
+        withdraw_b: u64,
         lp_tokens: Coin<LP<A, B, W>>,
-        min_a: u64,
-        min_b: u64,
+        request: Request<Redeem>,
         ctx:  &mut TxContext,
-    ): (Coin<A>, Coin<B>) {
+    ): (Coin<A>, Coin<B>, RedeemResult) {
         let lp_burn = lp_tokens.value();
 
-        // 1. Compute amounts to withdraw
-        let (withdraw_a, withdraw_b) = quote_redeem_(
-            self.reserve_a.value(),
-            self.reserve_b.value(),
-            self.lp_supply.supply_value(),
-            lp_burn,
-            min_a,
-            min_b,
-        );
-
-        // 2. Burn LP Tokens
+        // 1. Burn LP Tokens
         self.lp_supply.decrease_supply(
             lp_tokens.into_balance()
         );
 
-        // 3. Prepare tokens to send
+        // 2. Prepare tokens to send
         let base_tokens = coin::from_balance(
             self.reserve_a.split(withdraw_a),
             ctx,
@@ -201,10 +215,10 @@ module slamm::pool {
             ctx,
         );
 
-        // 4. Recompute invariant
-        self.update_invariant_assert_decrease();
+        // 3. Confirm redemption
+        self.confirm_redeem(request);
 
-        // 5. Emit event
+        // 4. Emit events
         emit_event(
             RedeemLiquidityEvent {
                 user: sender(ctx),
@@ -215,68 +229,39 @@ module slamm::pool {
             }
         );
 
-        (base_tokens, quote_tokens)
+        (base_tokens, quote_tokens, RedeemResult {
+            withdraw_a,
+            withdraw_b,
+            burn_lp: lp_burn,
+        })
     }
 
-    public fun swap<A, B, W: drop>(
+    public fun swap_a2b<A, B, W: drop>(
         self: &mut Pool<A, B, W>,
-        token_a: &mut Coin<A>,
-        token_b: &mut Coin<B>,
-        amount_in: u64,
-        min_amount_out: u64,
-        a2b: bool,
+        mut balance_in: Balance<A>,
+        amount_out: u64,
+        request: Request<Swap>,
         ctx: &mut TxContext,
-    ): SwapResult {
-        let swap = quote_swap(
-            self,
-            amount_in,
-            a2b,
-        );
+    ): (Balance<B>, SwapResult) {
+        assert!(self.lp_supply_val() > 0, 0);
 
-        let net_amount_in = swap.amount_in - swap.protocol_fees - swap.admin_fees;
+        let amount_in = balance_in.value();
+        let (_, protocol_fees, admin_fees) = self.net_amount_in(amount_in);
 
-        if (a2b) {
-            // IN: A && OUT: B
-            assert!(swap.amount_out >= min_amount_out, ESwapExceedsSlippage);
-
-            // Transfers protocol fees in
-            self.protocol_fees.deposit_a(token_a.balance_mut().split(swap.protocol_fees));
+        // Transfers protocol fees in
+        self.protocol_fees.deposit_a(balance_in.split(protocol_fees));
             
-            // Transfers protocol fees in
-            self.admin_fees.deposit_a(token_a.balance_mut().split(swap.admin_fees));
+        // Transfers protocol fees in
+        self.admin_fees.deposit_a(balance_in.split(admin_fees));
             
-            // Transfers amount in
-            self.reserve_a.join(
-                token_a.balance_mut().split(net_amount_in)
-            );
+        // Transfers amount in
+        self.reserve_a.join(balance_in);
 
-            // Transfers amount out
-            token_b.balance_mut().join(
-                self.reserve_b.split(swap.amount_out)
-            );
-        } else {
-            // IN: B && OUT: A
-            assert!(swap.amount_out >= min_amount_out, ESwapExceedsSlippage);
+        // Transfers amount out
+        let output = self.reserve_b.split(amount_out);
 
-            // Transfers protocol fees in
-            self.protocol_fees.deposit_b(token_b.balance_mut().split(swap.protocol_fees));
-            
-            // Transfers protocol fees in
-            self.admin_fees.deposit_b(token_b.balance_mut().split(swap.admin_fees));
-            
-            // Transfers amount in
-            self.reserve_b.join(
-                token_b.balance_mut().split(net_amount_in)
-            );
-
-            // Transfers amount out
-            token_a.balance_mut().join(
-                self.reserve_a.split(swap.amount_out)
-            );
-        };
-
-        // Recompute invariant
-        self.update_invariant_assert_increase();
+        // 4. Confirm swap
+        self.confirm_swap(request);
         
         // 5. Emit event
         emit_event(
@@ -284,37 +269,107 @@ module slamm::pool {
                 user: sender(ctx),
                 pool_id: object::id(self),
                 amount_in: amount_in,
-                amount_out: swap.amount_out,
-                protocol_fees: swap.protocol_fees,
-                admin_fees: swap.admin_fees,
-                a2b,
+                amount_out: amount_out,
+                protocol_fees: protocol_fees,
+                admin_fees: admin_fees,
+                a2b: true,
             }
         );
 
-        swap
+        (output, SwapResult {
+            amount_in,
+            amount_out,
+            protocol_fees,
+            admin_fees,
+            a2b: true,
+        })
     }
-
-    public fun quote_redeem<A, B, W: drop>(
+    
+    public fun swap_b2a<A, B, W: drop>(
         self: &mut Pool<A, B, W>,
-        lp_tokens: u64,
-        min_a: u64,
-        min_b: u64,
-    ): RedeemResult {
-        // 1. Compute amounts to withdraw
-        let (withdraw_a, withdraw_b) = quote_redeem_(
-            self.reserve_a.value(),
-            self.reserve_b.value(),
-            self.lp_supply.supply_value(),
-            lp_tokens,
-            min_a,
-            min_b,
+        mut balance_in: Balance<B>,
+        amount_out: u64,
+        request: Request<Swap>,
+        ctx: &mut TxContext,
+    ): (Balance<A>, SwapResult) {
+        assert!(self.lp_supply_val() > 0, 0);
+
+        let amount_in = balance_in.value();
+        let (_, protocol_fees, admin_fees) = self.net_amount_in(amount_in);
+
+        // Transfers protocol fees in
+        self.protocol_fees.deposit_b(balance_in.split(protocol_fees));
+            
+        // Transfers protocol fees in
+        self.admin_fees.deposit_b(balance_in.split(admin_fees));
+            
+        // Transfers amount in
+        self.reserve_b.join(balance_in);
+
+        // Transfers amount out
+        let output = self.reserve_a.split(amount_out);
+
+        // 4. Confirm swap
+        self.confirm_swap(request);
+        
+        // 5. Emit event
+        emit_event(
+            SwapEvent {
+                user: sender(ctx),
+                pool_id: object::id(self),
+                amount_in: amount_in,
+                amount_out: amount_out,
+                protocol_fees: protocol_fees,
+                admin_fees: admin_fees,
+                a2b: false,
+            }
         );
 
-        RedeemResult {
-            withdraw_a,
-            withdraw_b,
-            burn_lp: lp_tokens,
+        (output, SwapResult {
+            amount_in,
+            amount_out,
+            protocol_fees,
+            admin_fees,
+            a2b: false,
+        })
+    }
+
+    public fun net_amount_in<A, B, W: drop>(self: &Pool<A, B, W>, amount_in: u64): (u64, u64, u64) {
+        let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees.fee_ratio();
+        let (admin_fee_num, admin_fee_denom) = self.admin_fees.fee_ratio();
+        
+        let protocol_fees = safe_mul_div_u64(amount_in, protocol_fee_num, protocol_fee_denom);
+        let admin_fees = safe_mul_div_u64(amount_in, admin_fee_num, admin_fee_denom);
+        let net_amount_in = amount_in - protocol_fees - admin_fees;
+
+        (net_amount_in, protocol_fees, admin_fees)
+    }
+
+    // ===== Public Request Functions =====
+
+    public fun swap_request<A, B, W: drop>(self: &Pool<A, B, W>): Request<Swap> {
+        Request {
+            pool: object::id(self),
+            receipts: vector[],
         }
+    }
+
+    public fun deposit_request<A, B, W: drop>(self: &Pool<A, B, W>): Request<Deposit> {
+        Request {
+            pool: object::id(self),
+            receipts: vector[],
+        }
+    }
+    public fun redeem_request<A, B, W: drop>(self: &Pool<A, B, W>): Request<Redeem> {
+        Request {
+            pool: object::id(self),
+            receipts: vector[],
+        }
+    }
+
+    public fun push_receipt<T, W: drop>(self: &mut Request<T>, _witness: W) {
+        let receipt = type_name::get<W>();
+        self.receipts.push_back(receipt);
     }
 
     // ===== View & Getters =====
@@ -331,196 +386,8 @@ module slamm::pool {
         &self.admin_fees
     }
     
-    public fun lp_supply<A, B, W: drop>(self: &Pool<A, B, W>,): u64 {
+    public fun lp_supply_val<A, B, W: drop>(self: &Pool<A, B, W>,): u64 {
         self.lp_supply.supply_value()
-    }
-    
-    public fun k<A, B, W: drop>(self: &Pool<A, B, W>,): u128 {
-        self.k
-    }
-
-    public fun quote_swap<A, B, W: drop>(
-        self: &Pool<A, B, W>,
-        amount_in: u64,
-        a2b: bool,
-    ): SwapResult {
-        let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees.fee_ratio();
-        let (admin_fee_num, admin_fee_denom) = self.admin_fees.fee_ratio();
-        
-        let protocol_fees = safe_mul_div_u64(amount_in, protocol_fee_num, protocol_fee_denom);
-        let amount_in_net_of_protocol_fees = amount_in - protocol_fees;
-
-        let admin_fees = safe_mul_div_u64(amount_in, admin_fee_num, admin_fee_denom);
-        let net_amount_in = amount_in_net_of_protocol_fees - admin_fees;
-
-        let amount_out = if (a2b) {
-            // IN: A && OUT: B
-            quote_swap_(
-                self.reserve_b.value(), // reserve_out
-                self.reserve_a.value(), // reserve_in
-                net_amount_in, // amount_in
-            )
-        } else {
-            // IN: B && OUT: A
-            quote_swap_(
-                self.reserve_a.value(), // reserve_out
-                self.reserve_b.value(), // reserve_in
-                net_amount_in, // amount_in
-            )
-        };
-
-        SwapResult {
-            amount_in,
-            amount_out,
-            protocol_fees,
-            admin_fees,
-            a2b,
-        }
-    }
-
-    public fun quote_deposit<A, B, W: drop>(
-        self: &mut Pool<A, B, W>,
-        ideal_a: u64,
-        ideal_b: u64,
-        min_a: u64,
-        min_b: u64,
-    ): DepositResult {
-        let (deposit_a, deposit_b, lp_tokens) = quote_deposit_(
-            self.reserve_a.value(),
-            self.reserve_b.value(),
-            self.lp_supply.supply_value(),
-            ideal_a,
-            ideal_b,
-            min_a,
-            min_b,
-        );
-
-        DepositResult {
-            deposit_a,
-            deposit_b,
-            mint_lp: lp_tokens,
-        }
-    }
-
-    public fun minimum_liquidity(): u64 { MINIMUM_LIQUIDITY }
-
-    // ===== Private Functions =====
-
-    fun quote_deposit_(
-        reserve_a: u64,
-        reserve_b: u64,
-        lp_supply: u64,
-        ideal_a: u64,
-        ideal_b: u64,
-        min_a: u64,
-        min_b: u64
-    ): (u64, u64, u64) {
-        let (delta_a, delta_b) = tokens_to_deposit(
-            reserve_a,
-            reserve_b,
-            ideal_a,
-            ideal_b,
-            min_a,
-            min_b,
-        );
-
-        // 8. Compute new LP Tokens
-        let delta_lp = lp_tokens_to_mint(
-            reserve_a,
-            reserve_b,
-            lp_supply,
-            delta_a,
-            delta_b,
-        );
-
-        (delta_a, delta_b, delta_lp)
-    }
-
-    fun tokens_to_deposit(
-        reserve_a: u64,
-        reserve_b: u64,
-        ideal_a: u64,
-        ideal_b: u64,
-        min_a: u64,
-        min_b: u64
-    ): (u64, u64) {
-        if(reserve_a == 0 && reserve_b == 0) {
-            (ideal_a, ideal_b)
-        } else {
-            let b_star = safe_mul_div_u64(ideal_a, reserve_b, reserve_a);
-            if (b_star <= ideal_b) {
-
-                assert!(b_star >= min_b, EInsufficientDepositB);
-                (ideal_a, b_star)
-            } else {
-                let a_star = safe_mul_div_u64(ideal_b, reserve_a, reserve_b);
-                assert!(a_star <= ideal_a, EInsufficientDeposit);
-                assert!(a_star >= min_a, EInsufficientDepositA);
-                (a_star, ideal_b)
-            } 
-        }
-    }
-
-    fun lp_tokens_to_mint(
-        reserve_a: u64,
-        reserve_b: u64,
-        lp_supply: u64,
-        amount_a: u64,
-        amount_b: u64
-    ): u64 {
-        if (lp_supply == 0) {
-            (math::sqrt_u128((amount_a as u128) * (amount_b as u128)) as u64)
-        } else {
-            math::min(
-                safe_mul_div_u64(amount_a, lp_supply, reserve_a),
-                safe_mul_div_u64(amount_b, lp_supply, reserve_b)
-            )
-        }
-    }
-
-    fun quote_redeem_(
-        reserve_a: u64,
-        reserve_b: u64,
-        lp_supply: u64,
-        lp_tokens: u64,
-        min_a: u64,
-        min_b: u64,
-    ): (u64, u64) {
-        // 1. Compute the amount of tokens the user is allowed to
-        // receive for each reserve, via the lp ratio
-
-        let withdraw_a = safe_mul_div_u64(reserve_a, lp_tokens, lp_supply);
-        let withdraw_b = safe_mul_div_u64(reserve_b, lp_tokens, lp_supply);
-
-        // 2. Assert slippage
-        assert!(withdraw_a >= min_a, ERedeemSlippageAExceeded);
-        assert!(withdraw_b >= min_b, ERedeemSlippageBExceeded);
-
-        (withdraw_a, withdraw_b)
-    }
-
-    fun quote_swap_(
-        reserve_out: u64,
-        reserve_in: u64,
-        amount_in: u64
-    ): u64 {
-        safe_mul_div_u64(reserve_out, amount_in, reserve_in + amount_in) // amount_out
-    }
-
-    fun update_invariant<A, B, W: drop>(self: &mut Pool<A, B, W>) {
-        self.k = (self.reserve_a.value() as u128) * (self.reserve_b.value() as u128);
-    }
-    
-    fun update_invariant_assert_increase<A, B, W: drop>(self: &mut Pool<A, B, W>) {
-        let k0 = self.k;
-        self.update_invariant();
-        assert!(self.k > k0, EInvariantViolation);
-    }
-    
-    fun update_invariant_assert_decrease<A, B, W: drop>(self: &mut Pool<A, B, W>) {
-        let k0 = self.k;
-        self.update_invariant();
-        assert!(self.k < k0, EInvariantViolation);
     }
 
     // ===== Events =====
@@ -528,9 +395,6 @@ module slamm::pool {
     public struct InitPoolEvent has copy, drop {
         creator: address,
         pool_id: ID,
-        lp_minted: u64,
-        a_deposited: u64,
-        b_deposited: u64,
     }
     
     public struct DepositLiquidityEvent has copy, drop {
@@ -592,196 +456,4 @@ module slamm::pool {
     public fun withdraw_a(self: &RedeemResult): u64 { self.withdraw_a }
     public fun withdraw_b(self: &RedeemResult): u64 { self.withdraw_a }
     public fun burn_lp(self: &RedeemResult): u64 { self.burn_lp }
-    
-    // ===== Tests =====
-
-    #[test_only]
-    use sui::test_utils::assert_eq;
-
-    #[test]
-    fun test_swap_base_for_quote() {
-        let delta_quote = quote_swap_(50000000000, 50000000000, 1000000000);
-        assert_eq(delta_quote, 980392156);
-
-        let delta_quote = quote_swap_(9999005960552740, 1095387779115020, 1000000000);
-        assert_eq(delta_quote, 9128271305);
-
-        let delta_quote = quote_swap_(1029168250865450, 7612534772798660, 1000000000);
-        assert_eq(delta_quote, 135193880);
-        	
-        let delta_quote = quote_swap_(2768608899383570, 5686051292328860, 1000000000);
-        assert_eq(delta_quote, 486912317);
-
-        let delta_quote = quote_swap_(440197283258732, 9283788821706570, 1000000000);
-        assert_eq(delta_quote, 47415688);
-
-        let delta_quote = quote_swap_(7199199355268960, 9313530357314980, 1000000000);
-        assert_eq(delta_quote, 772982779);
-
-        let delta_quote = quote_swap_(6273576615700410, 1630712284783210, 1000000000);
-        assert_eq(delta_quote, 3847136510);
-
-        let delta_quote = quote_swap_(5196638254543900, 9284728716079420, 1000000000);
-        assert_eq(delta_quote, 559697310);
-
-        let delta_quote = quote_swap_(1128134431179110, 4632243184772740, 1000000000);
-        assert_eq(delta_quote, 243539499);
-    }
-
-    // TODO: add back
-    #[test]
-    fun test_deposit_liquidity_inner() {
-        let (delta_a, delta_b, lp_tokens) = quote_deposit_(
-            50_000_000, // reserve_a
-            50_000_000, // reserve_b
-            1_000_000_000, // lp_supply
-            50_000_000, // max_base
-            250_000_000, // max_quote,
-            0, // min_a
-            0, // min_b
-        );
-
-        assert_eq(delta_a, 50_000_000);
-        assert_eq(delta_b, 50_000_000);
-        assert_eq(lp_tokens, 1_000_000_000);
-        
-        let (delta_, delta_b, lp_tokens) = quote_deposit_(
-            995904078539, // reserve_a
-            433683167230, // reserve_b
-            1_000_000_000, // lp_supply
-            993561515, // max_base
-            4685420547, // max_quote,
-            0, // min_a
-            0, // min_b
-        );
-
-        assert_eq(delta_, 993561515);
-        assert_eq(delta_b, 432663058);
-        assert_eq(lp_tokens, 997647);
-        
-        
-        let (delta_, delta_b, lp_tokens) = quote_deposit_(
-            431624541156, // reserve_a
-            136587560238, // reserve_b
-            1_000_000_000, // lp_supply
-            167814009, // max_base
-            5776084236, // max_quote,
-            0, // min_a
-            0, // min_b
-        );
-
-        assert_eq(delta_, 167814009);
-        assert_eq(delta_b, 53104733);
-        assert_eq(lp_tokens, 388796);
-	
-        
-        let (delta_, delta_b, lp_tokens) = quote_deposit_(
-            814595492359, // reserve_a
-            444814121159, // reserve_b
-            1_000_000_000, // lp_supply
-            5792262291, // max_base
-            6821001626, // max_quote,
-            0, // min_a
-            0, // min_b
-        );
-
-        assert_eq(delta_, 5792262291);
-        assert_eq(delta_b, 3162895062);
-        assert_eq(lp_tokens, 7110599);
-        
-        let (delta_, delta_b, lp_tokens) = quote_deposit_(
-            6330406121, // reserve_a
-            45207102784, // reserve_b
-            1_000_000_000, // lp_supply
-            1432889520, // max_base
-            1335572325, // max_quote,
-            0, // min_a
-            0, // min_b
-        );
-
-        assert_eq(delta_, 187021832);
-        assert_eq(delta_b, 1335572325);
-        assert_eq(lp_tokens, 29543417);
-
-        let (delta_, delta_b, lp_tokens) = quote_deposit_(420297244854, 316982205287, 6_606_760_618_411_090, 4995214965, 3570130297, 0, 0);
-
-        assert_eq(delta_, 4733754458);
-        assert_eq(delta_b, 3570130297);
-        assert_eq(lp_tokens, 74411105267193);
-
-        let (delta_, delta_b, lp_tokens) = quote_deposit_(413062764570, 603795453491, 1_121_070_850_572_460, 1537859755, 8438693476, 0, 0);
-
-        assert_eq(delta_, 1537859755);
-        assert_eq(delta_b, 2247970061);
-        assert_eq(lp_tokens, 4173820279327);
-
-        let (delta_, delta_b, lp_tokens) = quote_deposit_(307217683947, 761385620952, 4_042_886_943_071_790, 3998100768, 108790920, 0, 0);
-
-        assert_eq(delta_, 43896934);
-        assert_eq(delta_b, 108790920);
-        assert_eq(lp_tokens, 577669680434);
-
-        let (delta_, delta_b, lp_tokens) = quote_deposit_(42698336282, 948435467841, 2_431_942_296_016_960, 6236994835, 8837546234, 0, 0);
-
-        assert_eq(delta_, 397864202);
-        assert_eq(delta_b, 8837546234);
-        assert_eq(lp_tokens, 22660901223983);
-
-        let (delta_, delta_b, lp_tokens) = quote_deposit_(861866936755, 638476503150, 244_488_474_179_102, 886029611, 7520096624, 0, 0);
-
-        assert_eq(delta_, 886029611);
-        assert_eq(delta_b, 656376365);
-        assert_eq(lp_tokens, 251342774830);
-    }
-    
-    #[test]
-    fun test_redeem_liquidity_inner() {
-        let (base_withdraw, quote_withdraw) = quote_redeem_(
-            50_000_000, // reserve_a
-            50_000_000, // reserve_b
-            1_000_000_000, // lp_supply
-            542816471, // lp_tokens
-            0, // min_base
-            0, // min_quote
-        );
-
-        assert_eq(base_withdraw, 27140823);
-        assert_eq(quote_withdraw, 27140823);
-
-        let (base_withdraw, quote_withdraw) = quote_redeem_(995904078539, 433683167230, 1000000000, 389391649, 0, 0);
-        assert_eq(quote_withdraw, 168872603631);
-        assert_eq(base_withdraw, 387796731388);
-
-        let (base_withdraw, quote_withdraw) = quote_redeem_(431624541156, 136587560238, 1000000000, 440552590, 0, 0);
-        assert_eq(base_withdraw, 190153309513);
-        assert_eq(quote_withdraw, 60174003424);
-
-        let (base_withdraw, quote_withdraw) = quote_redeem_(814595492359, 444814121159, 1000000000, 996613035, 0, 0);
-        assert_eq(base_withdraw, 811836485937);
-        assert_eq(quote_withdraw, 443307551299);
-
-        let (base_withdraw, quote_withdraw) = quote_redeem_(6330406121, 45207102784, 1000000000, 12810274, 0, 0);
-        assert_eq(base_withdraw, 81094236);
-        assert_eq(quote_withdraw, 579115373);
-
-        let (base_withdraw, quote_withdraw) = quote_redeem_(420297244854, 316982205287, 6606760618411090, 2045717643009200, 0, 0);
-        assert_eq(base_withdraw, 130140857035);
-        assert_eq(quote_withdraw, 98150383724);
-
-        let (base_withdraw, quote_withdraw) = quote_redeem_(413062764570, 603795453491, 1121070850572460, 551538827364816, 0, 0);
-        assert_eq(base_withdraw, 203216551998);
-        assert_eq(quote_withdraw, 297052265890);
-
-        let (base_withdraw, quote_withdraw) = quote_redeem_(307217683947, 761385620952, 4042886943071790, 2217957798004580, 0, 0);
-        assert_eq(base_withdraw, 168541902702);
-        assert_eq(quote_withdraw, 417701805432);
-
-        let (base_withdraw, quote_withdraw) = quote_redeem_(42698336282, 948435467841, 2431942296016960, 59368562297754, 0, 0);
-        assert_eq(base_withdraw, 1042351556);
-        assert_eq(quote_withdraw, 23153201558);
-
-        let (base_withdraw, quote_withdraw) = quote_redeem_(861866936755, 638476503150, 244488474179102, 129992518389093, 0, 0);
-        assert_eq(base_withdraw, 458247588158);
-        assert_eq(quote_withdraw, 339472725065);
-    }
 }
