@@ -4,7 +4,7 @@ module slamm::cpmm {
     use std::type_name::{Self};
     use sui::coin::Coin;
     use sui::transfer::public_transfer;
-    use slamm::pool::{Self, Pool, PoolCap, LP, DepositResult, SwapResult};
+    use slamm::pool::{Self, Pool, PoolCap, LP, DepositResponse, SwapResponse, SwapRequest};
     use sui::math;
     use slamm::math::{safe_mul_div_u64};
 
@@ -20,14 +20,15 @@ module slamm::cpmm {
     const ERedeemSlippageBExceeded: u64 = 5;
     const EInvariantViolation: u64 = 6;
 
+    public struct CPWit<phantom W> has drop {}
+
     public struct StateKey has copy, store, drop {}
 
     public struct SwapHook has drop {}
     public struct DepositHook has drop {}
     public struct RedeemHook has drop {}
 
-    public struct State<phantom A, phantom B, phantom W: drop> has key, store {
-        id: UID,
+    public struct CPMM has store {
         k: u128,
     }
 
@@ -57,31 +58,25 @@ module slamm::cpmm {
         witness: W,
         swap_fee_bps: u64,
         ctx: &mut TxContext,
-    ): (Pool<A, B, W>, PoolCap<A, B, W>) {
-        
+    ): (Pool<A, B, W, CPMM>, PoolCap<A, B, W>) {
 
-        // 2. Init pool
-        let (mut pool, pool_cap) = pool::new<A, B, W>(
-            witness,
-            swap_fee_bps,
-            vector[type_name::get<SwapHook>()],
-            vector[type_name::get<DepositHook>()],
-            vector[type_name::get<RedeemHook>()],
-            ctx,
-        );
-
-        let state = State<A, B, W> {
-            id: object::new(ctx),
+        let inner = CPMM {
             k: 0, // K is zero only for unseeded pool
         };
 
-        pool.add_field(StateKey {}, state);
+        // 2. Init pool
+        let (mut pool, pool_cap) = pool::new<A, B, W, CPMM>(
+            witness,
+            swap_fee_bps,
+            inner,
+            ctx,
+        );
 
         (pool, pool_cap)
     }
 
     public fun deposit_liquidity<A, B, W: drop>(
-        self: &mut Pool<A, B, W>,
+        self: &mut Pool<A, B, CPWit<W>, CPMM>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
         ideal_a: u64,
@@ -89,11 +84,8 @@ module slamm::cpmm {
         min_a: u64,
         min_b: u64,
         ctx:  &mut TxContext,
-    ): (Coin<LP<A, B, W>>, DepositResult) {
+    ): (Coin<LP<A, B, CPWit<W>>>, DepositResponse) {
         let is_initial_deposit = self.lp_supply_val() == 0;
-
-        let mut request = self.deposit_request();
-        request.push_receipt(DepositHook {});
 
         let (reserve_a, reserve_b) = self.reserves();
 
@@ -124,10 +116,10 @@ module slamm::cpmm {
 
         // 2. Add liquidity to pool and mint lp tokens
         let (mut lp_coins, res) = self.deposit_liquidity(
+            CPWit<W> {},
             coin_a.balance_mut().split(deposit_a),
             coin_b.balance_mut().split(deposit_b),
             lp_tokens,
-            request,
             ctx,
         );
 
@@ -144,15 +136,12 @@ module slamm::cpmm {
     }
 
     public fun redeem_liquidity<A, B, W: drop>(
-        self: &mut Pool<A, B, W>,
-        lp_tokens: Coin<LP<A, B, W>>,
+        self: &mut Pool<A, B, CPWit<W>, CPMM>,
+        lp_tokens: Coin<LP<A, B, CPWit<W>>>,
         min_a: u64,
         min_b: u64,
         ctx:  &mut TxContext,
     ): (Coin<A>, Coin<B>) {
-        let mut request = self.redeem_request();
-        request.push_receipt(RedeemHook {});
-
         let lp_burn = lp_tokens.value();
         let (reserve_a, reserve_b) = self.reserves();
 
@@ -167,10 +156,10 @@ module slamm::cpmm {
         );
 
         let (coin_a, coin_b, _) = self.redeem_liquidity(
+            CPWit<W> {},
             withdraw_a,
             withdraw_b,
             lp_tokens,
-            request,
             ctx,
         );
 
@@ -181,65 +170,39 @@ module slamm::cpmm {
     }
 
     public fun swap<A, B, W: drop>(
-        self: &mut Pool<A, B, W>,
+        self: &mut Pool<A, B, CPWit<W>, CPMM>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
-        amount_in: u64,
-        min_amount_out: u64,
-        a2b: bool,
+        request: SwapRequest<A, B, CPWit<W>, CPMM>,
         ctx: &mut TxContext,
-    ): SwapResult {
-        let mut request = self.swap_request();
-        request.push_receipt(SwapHook {});
+    ): SwapResponse<A, B, CPWit<W>, CPMM> {
+        let (reserve_a, reserve_b) = self.reserves();
 
-        let swap = quote_swap(
-            self,
-            amount_in,
-            a2b,
+        let amount_out = quote_swap_(
+            reserve_b, // reserve_out
+            reserve_a, // reserve_in
+            request.net_amount_in(), // amount_in
         );
 
-        let res = if (a2b) {
-            // IN: A && OUT: B
-            assert!(swap.amount_out >= min_amount_out, ESwapExceedsSlippage);
-
-            let (output_b, res) = self.swap_a2b(
-                coin_a.balance_mut().split(swap.amount_in),
-                swap.amount_out,
-                request,
-                ctx,
-            );
-
-            // Transfers amount out
-            coin_b.balance_mut().join(output_b);
-
-            res
-        } else {
-            // IN: B && OUT: A
-            assert!(swap.amount_out >= min_amount_out, ESwapExceedsSlippage);
-
-            let (output_a, res) = self.swap_b2a(
-                coin_b.balance_mut().split(swap.amount_in),
-                swap.amount_out,
-                request,
-                ctx,
-            );
-
-            // Transfers amount out
-            coin_a.balance_mut().join(output_a);
-
-            res
-        };
+        let response = self.swap(
+            CPWit<W> {},
+            coin_a,
+            coin_b,
+            amount_out,
+            request,
+            ctx,
+        );
 
         // Recompute invariant
         update_invariant_assert_increase(self);
 
-        res
+        response
     }
 
     // ===== View & Getters =====
 
     public fun quote_swap<A, B, W: drop>(
-        self: &Pool<A, B, W>,
+        self: &Pool<A, B, W, CPMM>,
         amount_in: u64,
         a2b: bool,
     ): SwapOutput {
@@ -272,7 +235,7 @@ module slamm::cpmm {
     }
 
     public fun quote_deposit<A, B, W: drop>(
-        self: &mut Pool<A, B, W>,
+        self: &mut Pool<A, B, W, CPMM>,
         ideal_a: u64,
         ideal_b: u64,
         min_a: u64,
@@ -298,7 +261,7 @@ module slamm::cpmm {
     }
 
     public fun quote_redeem<A, B, W: drop>(
-        self: &mut Pool<A, B, W>,
+        self: &mut Pool<A, B, W, CPMM>,
         lp_tokens: u64,
         min_a: u64,
         min_b: u64,
@@ -323,19 +286,11 @@ module slamm::cpmm {
     }
 
     public fun minimum_liquidity(): u64 { MINIMUM_LIQUIDITY }
-
-    public fun state<A, B, W: drop>(self: &Pool<A, B, W>): &State<A, B, W> {
-        self.get_field(StateKey {})
+    
+    public fun k<A, B, W: drop>(self: &Pool<A, B, CPWit<W>, CPMM>): u128 {
+        self.inner().k
     }
     
-    public fun k<A, B, W: drop>(self: &Pool<A, B, W>): u128 {
-        let state = state(self);
-        state.k
-    }
-    
-    public fun k_<A, B, W: drop>(self: &State<A, B, W>): u128 {
-        self.k
-    }
 
     // ===== Private Functions =====
 
@@ -440,29 +395,23 @@ module slamm::cpmm {
         safe_mul_div_u64(reserve_out, amount_in, reserve_in + amount_in) // amount_out
     }
     
-    fun state_mut<A, B, W: drop>(self: &mut Pool<A, B, W>): &mut State<A, B, W> {
-        self.get_field_mut(StateKey {})
-    }
 
-    fun update_invariant<A, B, W: drop>(self: &mut Pool<A, B, W>): u128 {
+    fun update_invariant<A, B, W: drop>(self: &mut Pool<A, B, W, CPMM>): u128 {
         let (reserve_a, reserve_b) = self.reserves();
-        let state = state_mut(self);
-        state.k = (reserve_a as u128) * (reserve_b as u128);
+        self.inner_mut().k = (reserve_a as u128) * (reserve_b as u128);
         
-        state.k
+        self.inner().k
     }
     
-    fun update_invariant_assert_increase<A, B, W: drop>(self: &mut Pool<A, B, W>) {
-        let state = state(self);
-        let k0 = state.k;
+    fun update_invariant_assert_increase<A, B, W: drop>(self: &mut Pool<A, B, W, CPMM>) {
+        let k0 = self.inner().k;
 
         let k1 = update_invariant(self);
         assert!(k1 > k0, EInvariantViolation);
     }
     
-    fun update_invariant_assert_decrease<A, B, W: drop>(self: &mut Pool<A, B, W>) {
-        let state = state(self);
-        let k0 = state.k;
+    fun update_invariant_assert_decrease<A, B, W: drop>(self: &mut Pool<A, B, W, CPMM>) {
+        let k0 = self.inner().k;
 
         let k1 = update_invariant(self);
         assert!(k1 < k0, EInvariantViolation);
@@ -503,7 +452,6 @@ module slamm::cpmm {
         assert_eq(delta_quote, 243539499);
     }
 
-    // TODO: add back
     #[test]
     fun test_deposit_liquidity_inner() {
         let (delta_a, delta_b, lp_tokens) = quote_deposit_(
