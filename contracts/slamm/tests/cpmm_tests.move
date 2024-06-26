@@ -1,6 +1,7 @@
 #[test_only]
 module slamm::slamm_tests {
     // use std::debug::print;
+    use slamm::pool;
     use slamm::cpmm::{Self, minimum_liquidity};
     use sui::test_scenario::{Self, ctx};
     use sui::sui::SUI;
@@ -568,6 +569,26 @@ module slamm::slamm_tests {
 
         destroy(pool);
         destroy(lp_coins);
+        destroy(pool_cap);
+        test_scenario::end(scenario);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = pool::EFeeAbove100Percent)]
+    fun test_fail_fee_above_100() {
+        let mut scenario = test_scenario::begin(ADMIN);
+
+        // Init Pool
+        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+        let ctx = ctx(&mut scenario);
+
+        let (pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+            Wit {},
+            10_000 + 1, // admin fees BPS
+            ctx,
+        );
+
+        destroy(pool);
         destroy(pool_cap);
         test_scenario::end(scenario);
     }
