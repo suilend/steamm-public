@@ -51,7 +51,7 @@ module slamm::slamm_tests {
 
         let (fees_a, fees_b) = pool.admin_fees().balances();
 
-        assert_eq(pool.cpmm().k_(), 500000000000000000000000000);
+        assert_eq(pool.cpmm_k(), 500000000000000000000000000);
         assert_eq(pool.lp_supply_val(), 22360679774997);
         assert_eq(reserve_a, e9(1_000));
         assert_eq(reserve_b, e9(500_000));

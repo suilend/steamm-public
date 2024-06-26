@@ -1,9 +1,9 @@
-module slamm::State {
+module slamm::cpmm {
     // use std::debug::print;
 
     use sui::coin::Coin;
     use sui::transfer::public_transfer;
-    use slamm::pool::{Self, Pool, PoolCap, LP, DepositResponse, SwapResponse, SwapRequest};
+    use slamm::pool::{Self, Pool, PoolCap, LP, DepositResult, SwapResult};
     use sui::math;
     use slamm::math::{safe_mul_div_u64};
 
@@ -11,11 +11,12 @@ module slamm::State {
     const MINIMUM_LIQUIDITY: u64 = 10;
     
     // Error codes
-    const EInsufficientDeposit: u64 = 0;
-    const EInsufficientDepositA: u64 = 1;
-    const EInsufficientDepositB: u64 = 2;
-    const ERedeemSlippageAExceeded: u64 = 3;
-    const ERedeemSlippageBExceeded: u64 = 4;
+    const ESwapExceedsSlippage: u64 = 0;
+    const EInsufficientDeposit: u64 = 1;
+    const EInsufficientDepositA: u64 = 2;
+    const EInsufficientDepositB: u64 = 3;
+    const ERedeemSlippageAExceeded: u64 = 4;
+    const ERedeemSlippageBExceeded: u64 = 5;
     const EInvariantViolation: u64 = 5;
 
     public struct Hook<phantom W> has drop {}
@@ -24,7 +25,7 @@ module slamm::State {
         k: u128,
     }
 
-    // Consider reusing SwapResponse?
+    // Consider reusing SwapResult?
     public struct SwapOutput has drop {
         amount_in: u64,
         amount_out: u64,
@@ -77,7 +78,7 @@ module slamm::State {
         min_a: u64,
         min_b: u64,
         ctx:  &mut TxContext,
-    ): (Coin<LP<A, B, Hook<W>>>, DepositResponse) {
+    ): (Coin<LP<A, B, Hook<W>>>, DepositResult) {
         let is_initial_deposit = self.lp_supply_val() == 0;
 
         let (reserve_a, reserve_b) = self.reserves();
@@ -166,23 +167,26 @@ module slamm::State {
         self: &mut Pool<A, B, Hook<W>, State>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
-        request: SwapRequest<A, B, Hook<W>, State>,
+        amount_in: u64,
+        min_amount_out: u64,
+        a2b: bool,
         ctx: &mut TxContext,
-    ): SwapResponse<A, B, Hook<W>, State> {
-        let (reserve_a, reserve_b) = self.reserves();
-
-        let amount_out = quote_swap_(
-            reserve_b, // reserve_out
-            reserve_a, // reserve_in
-            request.net_amount_in(), // amount_in
+    ): SwapResult {
+        let quote = quote_swap(
+            self,
+            amount_in,
+            a2b,
         );
+
+        assert!(quote.amount_out > min_amount_out, ESwapExceedsSlippage);
 
         let response = self.swap(
             Hook<W> {},
             coin_a,
             coin_b,
-            amount_out,
-            request,
+            amount_in,
+            quote.amount_out,
+            a2b,
             ctx,
         );
 
