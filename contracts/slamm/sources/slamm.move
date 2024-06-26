@@ -9,6 +9,9 @@ module slamm::pool {
     public use fun slamm::cpmm::deposit_liquidity as Pool.cpmm_deposit;
     public use fun slamm::cpmm::redeem_liquidity as Pool.cpmm_redeem;
     public use fun slamm::cpmm::swap as Pool.cpmm_swap;
+    public use fun slamm::cpmm::quote_swap as Pool.cpmm_quote_swap;
+    public use fun slamm::cpmm::quote_deposit as Pool.cpmm_quote_deposit;
+    public use fun slamm::cpmm::quote_redeem as Pool.cpmm_quote_redeem;
     public use fun slamm::cpmm::k as Pool.cpmm_k;
     
     public use fun swap_amount_in as SwapResult.amount_in;

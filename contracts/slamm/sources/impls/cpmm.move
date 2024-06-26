@@ -46,6 +46,20 @@ module slamm::cpmm {
         burn_lp: u64
     }
 
+    public fun amount_in(self: &SwapOutput): u64 { self.amount_in }
+    public fun amount_out(self: &SwapOutput): u64 { self.amount_out }
+    public fun protocol_fees(self: &SwapOutput): u64 { self.protocol_fees }
+    public fun admin_fees(self: &SwapOutput): u64 { self.admin_fees }
+    public fun a2b(self: &SwapOutput): bool { self.a2b }
+    
+    public fun deposit_a(self: &DepositOutput): u64 { self.deposit_a }
+    public fun deposit_b(self: &DepositOutput): u64 { self.deposit_b }
+    public fun mint_lp(self: &DepositOutput): u64 { self.mint_lp }
+    
+    public fun withdraw_a(self: &RedeemOutput): u64 { self.withdraw_a }
+    public fun withdraw_b(self: &RedeemOutput): u64 { self.withdraw_b }
+    public fun burn_lp(self: &RedeemOutput): u64 { self.burn_lp }
+
     // ===== Public Methods =====
 
     public fun new<A, B, W: drop>(
@@ -235,8 +249,6 @@ module slamm::cpmm {
         self: &mut Pool<A, B, Hook<W>, State>,
         ideal_a: u64,
         ideal_b: u64,
-        min_a: u64,
-        min_b: u64,
     ): DepositOutput {
         let (reserve_a, reserve_b) = self.reserves();
 
@@ -246,8 +258,8 @@ module slamm::cpmm {
             self.lp_supply_val(),
             ideal_a,
             ideal_b,
-            min_a,
-            min_b,
+            0,
+            0,
         );
 
         DepositOutput {
@@ -260,8 +272,6 @@ module slamm::cpmm {
     public fun quote_redeem<A, B, W: drop>(
         self: &mut Pool<A, B, Hook<W>, State>,
         lp_tokens: u64,
-        min_a: u64,
-        min_b: u64,
     ): RedeemOutput {
         let (reserve_a, reserve_b) = self.reserves();
 
@@ -271,8 +281,8 @@ module slamm::cpmm {
             reserve_b,
             self.lp_supply_val(),
             lp_tokens,
-            min_a,
-            min_b,
+            0,
+            0,
         );
 
         RedeemOutput {
@@ -287,7 +297,6 @@ module slamm::cpmm {
     public fun k<A, B, W: drop>(self: &Pool<A, B, Hook<W>, State>): u128 {
         self.inner().k
     }
-    
 
     // ===== Private Functions =====
 
