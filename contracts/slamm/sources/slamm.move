@@ -8,6 +8,11 @@ module slamm::pool {
 
     const ESwapExceedsSlippage: u64 = 0;
 
+    public use fun slamm::cpmm::deposit_liquidity as Pool.cpmm_deposit;
+    public use fun slamm::cpmm::redeem_liquidity as Pool.cpmm_redeem;
+    public use fun slamm::cpmm::swap as Pool.cpmm_swap;
+    public use fun slamm::cpmm::k as Pool.cpmm_k;
+
     public use fun swap_request_amount_in as SwapRequest.amount_in;
     public use fun swap_request_net_amount_in as SwapRequest.net_amount_in;
     public use fun swap_request_min_amount_out as SwapRequest.min_amount_out;
@@ -16,6 +21,7 @@ module slamm::pool {
     public use fun swap_request_a2b as SwapRequest.a2b;
     
     public use fun swap_response_amount_in as SwapResponse.amount_in;
+    public use fun swap_response_amount_out as SwapResponse.amount_out;
     public use fun swap_response_net_amount_in as SwapResponse.net_amount_in;
     public use fun swap_response_protocol_fees as SwapResponse.protocol_fees;
     public use fun swap_response_admin_fees as SwapResponse.admin_fees;
@@ -44,59 +50,6 @@ module slamm::pool {
         protocol_fees: Fees<A, B>,
         admin_fees: Fees<A, B>,
     }
-    
-    // Note: We add both Balance<A> and Balance<B> to avoid splitting the type and therefore
-    // allow for a unified swap interface
-    public struct SwapRequest<phantom A, phantom B, phantom Hook: drop, phantom State: store> {
-        amount_in: u64,
-        min_amount_out: u64,
-        protocol_fees: u64,
-        admin_fees: u64,
-        a2b: bool,
-        balance_a: Balance<A>,
-        balance_b: Balance<B>,
-    }
-
-    public struct SwapResponse<phantom A, phantom B, phantom Hook: drop,  phantom State: store> has drop {
-        amount_in: u64,
-        amount_out: u64,
-        protocol_fees: u64,
-        admin_fees: u64,
-        a2b: bool,
-    }
-
-    public fun swap_request_amount_in<A, B, Hook: drop, State: store>(request: &SwapRequest<A, B, Hook, State>): u64 { request.amount_in }
-    public fun swap_request_net_amount_in<A, B, Hook: drop, State: store>(request: &SwapRequest<A, B, Hook, State>): u64 { request.amount_in - request.protocol_fees - request.admin_fees}
-    public fun swap_request_min_amount_out<A, B, Hook: drop, State: store>(request: &SwapRequest<A, B, Hook, State>): u64 { request.min_amount_out }
-    public fun swap_request_protocol_fees<A, B, Hook: drop, State: store>(request: &SwapRequest<A, B, Hook, State>): u64 { request.protocol_fees }
-    public fun swap_request_admin_fees<A, B, Hook: drop, State: store>(request: &SwapRequest<A, B, Hook, State>): u64 { request.admin_fees }
-    public fun swap_request_a2b<A, B, Hook: drop, State: store>(request: &SwapRequest<A, B, Hook, State>): bool { request.a2b }
-    
-    public fun swap_response_amount_in<A, B, Hook: drop, State: store>(response: &SwapResponse<A, B, Hook, State>): u64 { response.amount_in }
-    public fun swap_response_net_amount_in<A, B, Hook: drop, State: store>(response: &SwapResponse<A, B, Hook, State>): u64 { response.amount_in - response.protocol_fees - response.admin_fees}
-    public fun swap_response_protocol_fees<A, B, Hook: drop, State: store>(response: &SwapResponse<A, B, Hook, State>): u64 { response.protocol_fees }
-    public fun swap_response_admin_fees<A, B, Hook: drop, State: store>(response: &SwapResponse<A, B, Hook, State>): u64 { response.admin_fees }
-    public fun swap_response_a2b<A, B, Hook: drop, State: store>(response: &SwapResponse<A, B, Hook, State>): bool { response.a2b }
-
-    public struct DepositResponse has drop {
-        deposit_a: u64,
-        deposit_b: u64,
-        mint_lp: u64,
-    }
-    
-    public struct RedeemResponse has drop {
-        withdraw_a: u64,
-        withdraw_b: u64,
-        burn_lp: u64
-    }
-
-    // public fun deposit_a(self: &DepositResult): u64 { self.deposit_a }
-    // public fun deposit_b(self: &DepositResult): u64 { self.deposit_b }
-    // public fun mint_lp(self: &DepositResult): u64 { self.mint_lp }
-
-    // public fun withdraw_a(self: &RedeemResult): u64 { self.withdraw_a }
-    // public fun withdraw_b(self: &RedeemResult): u64 { self.withdraw_a }
-    // public fun burn_lp(self: &RedeemResult): u64 { self.burn_lp }
     
     // ===== Public Methods =====
 
@@ -174,9 +127,9 @@ module slamm::pool {
         } = request;
 
         assert!(a2b == true, 0);
-        assert!(amount_out < min_amount_out, ESwapExceedsSlippage);
+        assert!(amount_out > min_amount_out, ESwapExceedsSlippage);
+        let (net_amount_in, _, _) = self.net_amount_in(amount_in);
         
-
         let response = SwapResponse {
             amount_in,
             amount_out,
@@ -186,7 +139,7 @@ module slamm::pool {
         };
 
         if (a2b) {
-            assert!(balance_a.value() == amount_in, 0);
+            assert!(balance_a.value() == net_amount_in, 0);
             balance_b.destroy_zero();
 
             // Transfers amount in
@@ -388,6 +341,62 @@ module slamm::pool {
         self.lp_supply.supply_value()
     }
 
+    // ===== Request/Responses =====
+
+    // Note: We add both Balance<A> and Balance<B> to avoid splitting the type and therefore
+    // allow for a unified swap interface
+    public struct SwapRequest<phantom A, phantom B, phantom Hook: drop, phantom State: store> {
+        amount_in: u64,
+        min_amount_out: u64,
+        protocol_fees: u64,
+        admin_fees: u64,
+        a2b: bool,
+        balance_a: Balance<A>,
+        balance_b: Balance<B>,
+    }
+
+    public struct SwapResponse<phantom A, phantom B, phantom Hook: drop,  phantom State: store> has drop {
+        amount_in: u64,
+        amount_out: u64,
+        protocol_fees: u64,
+        admin_fees: u64,
+        a2b: bool,
+    }
+
+    public fun swap_request_amount_in<A, B, Hook: drop, State: store>(request: &SwapRequest<A, B, Hook, State>): u64 { request.amount_in }
+    public fun swap_request_net_amount_in<A, B, Hook: drop, State: store>(request: &SwapRequest<A, B, Hook, State>): u64 { request.amount_in - request.protocol_fees - request.admin_fees}
+    public fun swap_request_min_amount_out<A, B, Hook: drop, State: store>(request: &SwapRequest<A, B, Hook, State>): u64 { request.min_amount_out }
+    public fun swap_request_protocol_fees<A, B, Hook: drop, State: store>(request: &SwapRequest<A, B, Hook, State>): u64 { request.protocol_fees }
+    public fun swap_request_admin_fees<A, B, Hook: drop, State: store>(request: &SwapRequest<A, B, Hook, State>): u64 { request.admin_fees }
+    public fun swap_request_a2b<A, B, Hook: drop, State: store>(request: &SwapRequest<A, B, Hook, State>): bool { request.a2b }
+    
+    public fun swap_response_amount_in<A, B, Hook: drop, State: store>(response: &SwapResponse<A, B, Hook, State>): u64 { response.amount_in }
+    public fun swap_response_amount_out<A, B, Hook: drop, State: store>(response: &SwapResponse<A, B, Hook, State>): u64 { response.amount_out }
+    public fun swap_response_net_amount_in<A, B, Hook: drop, State: store>(response: &SwapResponse<A, B, Hook, State>): u64 { response.amount_in - response.protocol_fees - response.admin_fees}
+    public fun swap_response_protocol_fees<A, B, Hook: drop, State: store>(response: &SwapResponse<A, B, Hook, State>): u64 { response.protocol_fees }
+    public fun swap_response_admin_fees<A, B, Hook: drop, State: store>(response: &SwapResponse<A, B, Hook, State>): u64 { response.admin_fees }
+    public fun swap_response_a2b<A, B, Hook: drop, State: store>(response: &SwapResponse<A, B, Hook, State>): bool { response.a2b }
+
+    public struct DepositResponse has drop {
+        deposit_a: u64,
+        deposit_b: u64,
+        mint_lp: u64,
+    }
+    
+    public struct RedeemResponse has drop {
+        withdraw_a: u64,
+        withdraw_b: u64,
+        burn_lp: u64
+    }
+
+    public fun deposit_a(self: &DepositResponse): u64 { self.deposit_a }
+    public fun deposit_b(self: &DepositResponse): u64 { self.deposit_b }
+    public fun mint_lp(self: &DepositResponse): u64 { self.mint_lp }
+
+    public fun withdraw_a(self: &RedeemResponse): u64 { self.withdraw_a }
+    public fun withdraw_b(self: &RedeemResponse): u64 { self.withdraw_a }
+    public fun burn_lp(self: &RedeemResponse): u64 { self.burn_lp }
+    
     // ===== Events =====
 
     public struct InitPoolEvent has copy, drop {

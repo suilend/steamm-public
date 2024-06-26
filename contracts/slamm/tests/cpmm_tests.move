@@ -51,7 +51,7 @@ module slamm::slamm_tests {
 
         let (fees_a, fees_b) = pool.admin_fees().balances();
 
-        assert_eq(pool.cpmm().k_(), 500000000000000000000000000);
+        assert_eq(pool.cpmm_k(), 500000000000000000000000000);
         assert_eq(pool.lp_supply_val(), 22360679774997);
         assert_eq(reserve_a, e9(1_000));
         assert_eq(reserve_b, e9(500_000));
@@ -119,18 +119,32 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(200), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        let swap_result = pool.cpmm_swap(
+        // public fun swap_request<A, B, Hook: drop, State: store>(
+        // self: &mut Pool<A, B, Hook, State>,
+        // coin_a: &mut Coin<A>,
+        // coin_b: &mut Coin<B>,
+        // amount_in: u64,
+        // min_amount_out: u64,
+        // a2b: bool,
+
+        let swap_request = pool.swap_request(
             &mut coin_a,
             &mut coin_b,
             e9(200),
             0,
             true, // a2b
+        );
+
+        let swap_result = pool.cpmm_swap(
+            &mut coin_a,
+            &mut coin_b,
+            swap_request,
             ctx,
         );
 
         assert_eq(swap_result.a2b(), true);
-        assert_eq(swap_result.swap_protocol_fees(), 4000000000);
-        assert_eq(swap_result.swap_admin_fees(), 2000000000);
+        assert_eq(swap_result.protocol_fees(), 4000000000);
+        assert_eq(swap_result.admin_fees(), 2000000000);
         assert_eq(swap_result.amount_out(), 81239530988208);
 
         destroy(coin_a);

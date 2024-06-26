@@ -1,4 +1,4 @@
-module slamm::State {
+module slamm::cpmm {
     // use std::debug::print;
 
     use sui::coin::Coin;
