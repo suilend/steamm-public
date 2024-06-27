@@ -2,6 +2,7 @@
 module slamm::slamm_tests {
     // use std::debug::print;
     use slamm::pool;
+    use slamm::registry;
     use slamm::cpmm::{Self, minimum_liquidity};
     use sui::test_scenario::{Self, ctx};
     use sui::sui::SUI;
@@ -28,8 +29,11 @@ module slamm::slamm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
+        let mut registry = registry::init_for_testing(ctx);
+
         let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
             Wit {},
+            &mut registry,
             100, // admin fees BPS
             ctx,
         );
@@ -134,6 +138,7 @@ module slamm::slamm_tests {
         assert_eq(swap_result.swap_admin_fees(), 2000000000);
         assert_eq(swap_result.amount_out(), 81239530988208);
 
+        destroy(registry);
         destroy(coin_a);
         destroy(coin_b);
         destroy(pool);
@@ -151,8 +156,11 @@ module slamm::slamm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
+        let mut registry = registry::init_for_testing(ctx);
+
         let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
             Wit {},
+            &mut registry,
             100, // admin fees BPS
             ctx,
         );
@@ -217,6 +225,7 @@ module slamm::slamm_tests {
         let reserve_ratio_1 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
         assert_eq(reserve_ratio_0, reserve_ratio_1);
 
+        destroy(registry);
         destroy(coin_a);
         destroy(lp_coins_2);
         destroy(coin_b);
@@ -235,8 +244,11 @@ module slamm::slamm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
+        let mut registry = registry::init_for_testing(ctx);
+
         let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
             Wit {},
+            &mut registry,
             100, // admin fees BPS
             ctx,
         );
@@ -301,6 +313,7 @@ module slamm::slamm_tests {
         let reserve_ratio_1 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
         assert_eq(reserve_ratio_0, reserve_ratio_1);
 
+        destroy(registry);
         destroy(coin_a);
         destroy(lp_coins_2);
         destroy(coin_b);
@@ -319,8 +332,11 @@ module slamm::slamm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
+        let mut registry = registry::init_for_testing(ctx);
+
         let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
             Wit {},
+            &mut registry,
             100, // admin fees BPS
             ctx,
         );
@@ -373,6 +389,7 @@ module slamm::slamm_tests {
             ctx,
         );
 
+        destroy(registry);
         destroy(coin_a);
         destroy(coin_b);
         destroy(pool);
@@ -390,8 +407,11 @@ module slamm::slamm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
+        let mut registry = registry::init_for_testing(ctx);
+
         let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
             Wit {},
+            &mut registry,
             100, // admin fees BPS
             ctx,
         );
@@ -468,9 +488,9 @@ module slamm::slamm_tests {
             ctx,
         );
 
+        destroy(registry);
         destroy(coin_a);
         destroy(coin_b);
-
         destroy(pool);
         destroy(lp_coins);
         destroy(pool_cap);
@@ -486,8 +506,11 @@ module slamm::slamm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
+        let mut registry = registry::init_for_testing(ctx);
+
         let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
             Wit {},
+            &mut registry,
             100, // admin fees BPS
             ctx,
         );
@@ -564,9 +587,9 @@ module slamm::slamm_tests {
             ctx,
         );
 
+        destroy(registry);
         destroy(coin_a);
         destroy(coin_b);
-
         destroy(pool);
         destroy(lp_coins);
         destroy(pool_cap);
@@ -582,12 +605,16 @@ module slamm::slamm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
+        let mut registry = registry::init_for_testing(ctx);
+
         let (pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
             Wit {},
+            &mut registry,
             10_000 + 1, // admin fees BPS
             ctx,
         );
 
+        destroy(registry);
         destroy(pool);
         destroy(pool_cap);
         test_scenario::end(scenario);

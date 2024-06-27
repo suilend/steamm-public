@@ -4,6 +4,7 @@ module slamm::pool {
     use slamm::events::emit_event;
     use slamm::math::{safe_mul_div_u64};
     use slamm::fees::{Self, Fees};
+    use slamm::registry::{Registry};
     use sui::tx_context::sender;
 
     public use fun slamm::cpmm::deposit_liquidity as Pool.cpmm_deposit;
@@ -49,6 +50,7 @@ module slamm::pool {
 
     public(package) fun new<A, B, Hook: drop, State: store>(
         _witness: Hook,
+        registry: &mut Registry,
         swap_fee_bps: u64,
         inner: State,
         ctx: &mut TxContext,
@@ -66,6 +68,8 @@ module slamm::pool {
             admin_fees: fees::new(swap_fee_bps, SWAP_FEE_DENOMINATOR),
             lp_supply,
         };
+
+        registry.add_amm(&pool);
 
         // Create pool cap
         let pool_cap = PoolCap {

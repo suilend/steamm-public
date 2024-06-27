@@ -6,6 +6,7 @@ module slamm::cpmm {
     use slamm::pool::{Self, Pool, PoolCap, LP, DepositResult, SwapResult};
     use sui::math;
     use slamm::math::{safe_mul_div_u64};
+    use slamm::registry::{Registry};
 
     // Consts
     const MINIMUM_LIQUIDITY: u64 = 10;
@@ -64,6 +65,7 @@ module slamm::cpmm {
 
     public fun new<A, B, W: drop>(
         _witness: W,
+        registry: &mut Registry,
         swap_fee_bps: u64,
         ctx: &mut TxContext,
     ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>>) {
@@ -75,6 +77,7 @@ module slamm::cpmm {
         // 2. Init pool
         let (pool, pool_cap) = pool::new<A, B, Hook<W>, State>(
             Hook<W> {},
+            registry,
             swap_fee_bps,
             inner,
             ctx,
