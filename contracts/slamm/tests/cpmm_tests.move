@@ -124,18 +124,24 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(200), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        let swap_result = pool.cpmm_swap(
+        let swap_request = pool.swap_request(
             &mut coin_a,
             &mut coin_b,
             e9(200),
             0,
             true, // a2b
+        );
+
+        let swap_result = pool.cpmm_swap(
+            &mut coin_a,
+            &mut coin_b,
+            swap_request,
             ctx,
         );
 
         assert_eq(swap_result.a2b(), true);
-        assert_eq(swap_result.swap_protocol_fees(), 4000000000);
-        assert_eq(swap_result.swap_admin_fees(), 2000000000);
+        assert_eq(swap_result.protocol_fees(), 4000000000);
+        assert_eq(swap_result.admin_fees(), 2000000000);
         assert_eq(swap_result.amount_out(), 81239530988208);
 
         destroy(registry);
@@ -324,7 +330,7 @@ module slamm::slamm_tests {
     }
     
     #[test]
-    #[expected_failure(abort_code = cpmm::ESwapExceedsSlippage)]
+    #[expected_failure(abort_code = pool::ESwapExceedsSlippage)]
     fun test_fail_swap_slippage() {
         let mut scenario = test_scenario::begin(ADMIN);
 
@@ -379,13 +385,19 @@ module slamm::slamm_tests {
             e9(200),
             true, // a2b
         );
-        
-        let _ = pool.cpmm_swap(
+
+        let swap_request = pool.swap_request(
             &mut coin_a,
             &mut coin_b,
             e9(200),
             swap_result.amount_out() + 1,
             true, // a2b
+        );
+
+        let _ = pool.cpmm_swap(
+            &mut coin_a,
+            &mut coin_b,
+            swap_request,
             ctx,
         );
 

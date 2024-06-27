@@ -3,7 +3,7 @@ module slamm::cpmm {
 
     use sui::coin::Coin;
     use sui::transfer::public_transfer;
-    use slamm::pool::{Self, Pool, PoolCap, LP, DepositResult, SwapResult};
+    use slamm::pool::{Self, Pool, PoolCap, LP, DepositResponse, SwapRequest, SwapResponse};
     use sui::math;
     use slamm::math::{safe_mul_div_u64};
     use slamm::registry::{Registry};
@@ -12,12 +12,11 @@ module slamm::cpmm {
     const MINIMUM_LIQUIDITY: u64 = 10;
     
     // Error codes
-    const ESwapExceedsSlippage: u64 = 0;
-    const EInsufficientDeposit: u64 = 1;
-    const EInsufficientDepositA: u64 = 2;
-    const EInsufficientDepositB: u64 = 3;
-    const ERedeemSlippageAExceeded: u64 = 4;
-    const ERedeemSlippageBExceeded: u64 = 5;
+    const EInsufficientDeposit: u64 = 0;
+    const EInsufficientDepositA: u64 = 1;
+    const EInsufficientDepositB: u64 = 2;
+    const ERedeemSlippageAExceeded: u64 = 3;
+    const ERedeemSlippageBExceeded: u64 = 4;
     const EInvariantViolation: u64 = 5;
 
     public struct Hook<phantom W> has drop {}
@@ -95,7 +94,7 @@ module slamm::cpmm {
         min_a: u64,
         min_b: u64,
         ctx:  &mut TxContext,
-    ): (Coin<LP<A, B, Hook<W>>>, DepositResult) {
+    ): (Coin<LP<A, B, Hook<W>>>, DepositResponse) {
         let is_initial_deposit = self.lp_supply_val() == 0;
 
         let (reserve_a, reserve_b) = self.reserves();
@@ -184,26 +183,23 @@ module slamm::cpmm {
         self: &mut Pool<A, B, Hook<W>, State>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
-        amount_in: u64,
-        min_amount_out: u64,
-        a2b: bool,
+        request: SwapRequest<A, B, Hook<W>, State>,
         ctx: &mut TxContext,
-    ): SwapResult {
-        let quote = quote_swap(
-            self,
-            amount_in,
-            a2b,
-        );
+    ): SwapResponse<A, B, Hook<W>, State> {
+        let (reserve_a, reserve_b) = self.reserves();
 
-        assert!(quote.amount_out > min_amount_out, ESwapExceedsSlippage);
+        let amount_out = quote_swap_(
+            reserve_b, // reserve_out
+            reserve_a, // reserve_in
+            request.net_amount_in(), // amount_in
+        );
 
         let response = self.swap(
             Hook<W> {},
             coin_a,
             coin_b,
-            amount_in,
-            quote.amount_out,
-            a2b,
+            amount_out,
+            request,
             ctx,
         );
 
