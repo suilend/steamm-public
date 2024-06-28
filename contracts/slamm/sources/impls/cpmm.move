@@ -1,11 +1,12 @@
+/// Constant-Product AMM Hook implementation
 module slamm::cpmm {
-    // use std::debug::print;
-
+    use sui::math;
     use sui::coin::Coin;
     use sui::transfer::public_transfer;
-    use slamm::pool::{Self, Pool, PoolCap, LP, DepositResponse, SwapResponse, SwapRequest};
-    use sui::math;
+    use slamm::registry::{Registry};
     use slamm::math::{safe_mul_div_u64};
+    use slamm::pool::{Self, Pool, PoolCap, LP, DepositResponse, SwapRequest, SwapResponse};
+    use slamm::quote::{Self, SwapQuote, DepositQuote, RedeemQuote};
 
     // Consts
     const MINIMUM_LIQUIDITY: u64 = 10;
@@ -18,48 +19,38 @@ module slamm::cpmm {
     const ERedeemSlippageBExceeded: u64 = 4;
     const EInvariantViolation: u64 = 5;
 
+    /// Hook type for the constant-product AMM implementation. Serves as both
+    /// the hook's witness (authentication) as well as it wraps around the pool
+    /// creator's witness.admin_fees
+    /// 
+    /// This has the advantage that we do not require an extra generic
+    /// type on the `Pool` object.
+    /// 
+    /// Other hook implementations can decide to leverage this property and
+    /// provide pathways for the inner witness contract to add further logic,
+    /// therefore making the hook extendable.
     public struct Hook<phantom W> has drop {}
 
+    /// Constant-Product AMM specific state, containing the invariant.
     public struct State has store {
         k: u128,
-    }
-
-    // Consider reusing SwapResponse?
-    public struct SwapOutput has drop {
-        amount_in: u64,
-        amount_out: u64,
-        protocol_fees: u64,
-        admin_fees: u64,
-        a2b: bool,
-    }
-
-    public struct DepositOutput has drop {
-        deposit_a: u64,
-        deposit_b: u64,
-        mint_lp: u64,
-    }
-    
-    public struct RedeemOutput has drop {
-        withdraw_a: u64,
-        withdraw_b: u64,
-        burn_lp: u64
     }
 
     // ===== Public Methods =====
 
     public fun new<A, B, W: drop>(
         _witness: W,
+        registry: &mut Registry,
         swap_fee_bps: u64,
         ctx: &mut TxContext,
     ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>>) {
-
         let inner = State {
             k: 0, // K is zero only for unseeded pool
         };
 
-        // 2. Init pool
         let (pool, pool_cap) = pool::new<A, B, Hook<W>, State>(
             Hook<W> {},
+            registry,
             swap_fee_bps,
             inner,
             ctx,
@@ -80,6 +71,8 @@ module slamm::cpmm {
     ): (Coin<LP<A, B, Hook<W>>>, DepositResponse) {
         let is_initial_deposit = self.lp_supply_val() == 0;
 
+        // We consider the liquidity available for trading
+        // as well as the net accumulated fees, as these belong to LPs
         let (reserve_a, reserve_b) = self.reserves();
 
         // 1. Compute token deposits and delta lp tokens
@@ -136,6 +129,9 @@ module slamm::cpmm {
         ctx:  &mut TxContext,
     ): (Coin<A>, Coin<B>) {
         let lp_burn = lp_tokens.value();
+
+        // We consider the liquidity available for trading
+        // as well as the net accumulated fees, as these belong to LPs
         let (reserve_a, reserve_b) = self.reserves();
 
         // 1. Compute amounts to withdraw
@@ -198,7 +194,7 @@ module slamm::cpmm {
         self: &Pool<A, B, Hook<W>, State>,
         amount_in: u64,
         a2b: bool,
-    ): SwapOutput {
+    ): SwapQuote {
         let (reserve_a, reserve_b) = self.reserves();
         let (net_amount_in, protocol_fees, admin_fees) = self.net_amount_in(amount_in);
 
@@ -218,22 +214,22 @@ module slamm::cpmm {
             )
         };
 
-        SwapOutput {
+        quote::swap_quote(
             amount_in,
             amount_out,
             protocol_fees,
             admin_fees,
             a2b,
-        }
+        )
     }
 
     public fun quote_deposit<A, B, W: drop>(
         self: &mut Pool<A, B, Hook<W>, State>,
         ideal_a: u64,
         ideal_b: u64,
-        min_a: u64,
-        min_b: u64,
-    ): DepositOutput {
+    ): DepositQuote {
+        // We need to consider the liquidity available for trading
+        // as well as the net accumulated fees, as these belong to LPs
         let (reserve_a, reserve_b) = self.reserves();
 
         let (deposit_a, deposit_b, lp_tokens) = quote_deposit_(
@@ -242,40 +238,40 @@ module slamm::cpmm {
             self.lp_supply_val(),
             ideal_a,
             ideal_b,
-            min_a,
-            min_b,
+            0,
+            0,
         );
 
-        DepositOutput {
+        quote::deposit_quote(
             deposit_a,
             deposit_b,
-            mint_lp: lp_tokens,
-        }
+            lp_tokens,
+        )
     }
 
     public fun quote_redeem<A, B, W: drop>(
         self: &mut Pool<A, B, Hook<W>, State>,
         lp_tokens: u64,
-        min_a: u64,
-        min_b: u64,
-    ): RedeemOutput {
+    ): RedeemQuote {
+        // We need to consider the liquidity available for trading
+        // as well as the net accumulated fees, as these belong to LPs
         let (reserve_a, reserve_b) = self.reserves();
 
-        // 1. Compute amounts to withdraw
+        // Compute amounts to withdraw
         let (withdraw_a, withdraw_b) = quote_redeem_(
             reserve_a,
             reserve_b,
             self.lp_supply_val(),
             lp_tokens,
-            min_a,
-            min_b,
+            0,
+            0,
         );
 
-        RedeemOutput {
+        quote::redeem_quote(
             withdraw_a,
             withdraw_b,
-            burn_lp: lp_tokens,
-        }
+            lp_tokens,
+        )
     }
 
     public fun minimum_liquidity(): u64 { MINIMUM_LIQUIDITY }
@@ -283,7 +279,6 @@ module slamm::cpmm {
     public fun k<A, B, W: drop>(self: &Pool<A, B, Hook<W>, State>): u128 {
         self.inner().k
     }
-    
 
     // ===== Private Functions =====
 
@@ -305,7 +300,7 @@ module slamm::cpmm {
             min_b,
         );
 
-        // 8. Compute new LP Tokens
+        // Compute new LP Tokens
         let delta_lp = lp_tokens_to_mint(
             reserve_a,
             reserve_b,
