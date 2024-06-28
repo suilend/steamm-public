@@ -3,7 +3,7 @@ module slamm::pool {
     use sui::coin::{Self, Coin};
     use slamm::events::emit_event;
     use slamm::math::{safe_mul_div_u64};
-    use slamm::fees::{Self, Fees};
+    use slamm::fees::{Self, Fees, FeeData};
     use slamm::registry::{Registry};
     use sui::tx_context::sender;
     
@@ -19,14 +19,14 @@ module slamm::pool {
     public use fun swap_request_net_amount_in as SwapRequest.net_amount_in;
     public use fun swap_request_min_amount_out as SwapRequest.min_amount_out;
     public use fun swap_request_protocol_fees as SwapRequest.protocol_fees;
-    public use fun swap_request_admin_fees as SwapRequest.admin_fees;
+    public use fun swap_request_pool_fees as SwapRequest.pool_fees;
     public use fun swap_request_a2b as SwapRequest.a2b;
     
     public use fun swap_response_amount_in as SwapResponse.amount_in;
     public use fun swap_response_amount_out as SwapResponse.amount_out;
     public use fun swap_response_net_amount_in as SwapResponse.net_amount_in;
     public use fun swap_response_protocol_fees as SwapResponse.protocol_fees;
-    public use fun swap_response_admin_fees as SwapResponse.admin_fees;
+    public use fun swap_response_pool_fees as SwapResponse.pool_fees;
     public use fun swap_response_a2b as SwapResponse.a2b;
 
     // Consts
@@ -36,6 +36,8 @@ module slamm::pool {
     // Error codes
     const EFeeAbove100Percent: u64 = 0;
     const ESwapExceedsSlippage: u64 = 1;
+    const EOutputAExceedsLiquidity: u64 = 2;
+    const EOutputBExceedsLiquidity: u64 = 3;
 
     /// Marker type for the LP coins of a pool. There can only be one
     /// pool per type, albeit given the permissionless aspect of the pool
@@ -58,7 +60,17 @@ module slamm::pool {
         reserve_b: Balance<B>,
         lp_supply: Supply<LP<A, B, Hook>>,
         protocol_fees: Fees<A, B>,
-        admin_fees: Fees<A, B>,
+        pool_fees: FeeData,
+        trading_data: TradingData,
+    }
+
+    public struct TradingData has store {
+        // swap a2b
+        swap_a_in_amount: u128,
+        swap_b_out_amount: u128,
+        // swap b2a
+        swap_a_out_amount: u128,
+        swap_b_in_amount: u128,
     }
     
     // ===== Public Methods =====
@@ -80,8 +92,14 @@ module slamm::pool {
             reserve_a: balance::zero(),
             reserve_b: balance::zero(),
             protocol_fees: fees::new(SWAP_FEE_NUMERATOR, SWAP_FEE_DENOMINATOR),
-            admin_fees: fees::new(swap_fee_bps, SWAP_FEE_DENOMINATOR),
+            pool_fees: fees::new_(swap_fee_bps, SWAP_FEE_DENOMINATOR),
             lp_supply,
+            trading_data: TradingData {
+                swap_a_in_amount: 0,
+                swap_b_out_amount: 0,
+                swap_a_out_amount: 0,
+                swap_b_in_amount: 0,
+            },
         };
 
         registry.add_amm(&pool);
@@ -128,16 +146,16 @@ module slamm::pool {
         a2b: bool,
     ): (SwapRequest<A, B, Hook, State>) {
         let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees.fee_ratio();
-        let (admin_fee_num, admin_fee_denom) = self.admin_fees.fee_ratio();
+        let (pool_fee_num, pool_fee_denom) = self.pool_fees.fee_ratio();
         
         let protocol_fees = safe_mul_div_u64(amount_in, protocol_fee_num, protocol_fee_denom);
-        let admin_fees = safe_mul_div_u64(amount_in, admin_fee_num, admin_fee_denom);
+        let pool_fees = safe_mul_div_u64(amount_in, pool_fee_num, pool_fee_denom);
 
         let mut request = SwapRequest {
             amount_in,
             min_amount_out,
             protocol_fees,
-            admin_fees,
+            pool_fees,
             a2b: true,
             balance_a: balance::zero(),
             balance_b: balance::zero(),
@@ -148,9 +166,6 @@ module slamm::pool {
 
             // Transfers protocol fees in
             self.protocol_fees.deposit_a(balance_in.split(protocol_fees));
-            
-            // Transfers protocol fees in
-            self.admin_fees.deposit_a(balance_in.split(admin_fees));
 
             // Add amount in to request
             request.balance_a.join(balance_in);
@@ -159,9 +174,6 @@ module slamm::pool {
 
             // Transfers protocol fees in
             self.protocol_fees.deposit_b(balance_in.split(protocol_fees));
-            
-            // Transfers protocol fees in
-            self.admin_fees.deposit_b(balance_in.split(admin_fees));
 
             // Transfers amount in
             request.balance_b.join(balance_in);
@@ -173,7 +185,7 @@ module slamm::pool {
     /// Witness-protected function to be called by the hook implementation module
     /// of said pool. Only the module that owns the hook type can call this function
     /// for the respective pools of that hook. This guarantees that only the respective
-    /// hook hsa control over the destruction of the respective request, and thus
+    /// hook has control over the destruction of the respective request, and thus
     /// control over the logic that defines the value of the output amount `amount_out`
     public fun swap<A, B, Hook: drop, State: store>(
         self: &mut Pool<A, B, Hook, State>,
@@ -188,38 +200,54 @@ module slamm::pool {
             amount_in,
             min_amount_out,
             protocol_fees,
-            admin_fees,
+            pool_fees,
             a2b,
             balance_a,
             balance_b,
         } = request;
 
         assert!(amount_out > min_amount_out, ESwapExceedsSlippage);
-        let (net_amount_in, _, _) = self.net_amount_in(amount_in);
         
         let response = SwapResponse {
             amount_in,
             amount_out,
             protocol_fees,
-            admin_fees,
+            pool_fees,
             a2b,
         };
 
         if (a2b) {
-            assert!(balance_a.value() == net_amount_in, 0);
+            assert!(amount_out < self.reserve_b.value(), EOutputBExceedsLiquidity);
+            assert!(balance_a.value() == amount_in - protocol_fees, 0);
             balance_b.destroy_zero();
 
             // Transfers amount in
             self.reserve_a.join(balance_a);
+
+            // Register pool fees
+            self.pool_fees.increment_fee_a(pool_fees);
+
+            // Register trade
+            self.trading_data.swap_a_in_amount = self.trading_data.swap_a_in_amount + (amount_in as u128);
+            self.trading_data.swap_b_out_amount = self.trading_data.swap_b_out_amount + (amount_out as u128);
         
             // Transfers amount out
             coin_b.balance_mut().join(self.reserve_b.split(amount_out));
+
         } else {
-            assert!(balance_b.value() == amount_in, 0);
+            assert!(amount_out < self.reserve_a.value(), EOutputAExceedsLiquidity);
+            assert!(balance_b.value() == amount_in - protocol_fees, 0);
             balance_a.destroy_zero();
 
             // Transfers amount in
             self.reserve_b.join(balance_b);
+
+            // Register pool fees
+            self.pool_fees.increment_fee_b(pool_fees);
+
+            // Register trade
+            self.trading_data.swap_b_in_amount = self.trading_data.swap_b_in_amount + (amount_in as u128);
+            self.trading_data.swap_a_out_amount = self.trading_data.swap_a_out_amount + (amount_out as u128);
         
             // Transfers amount out
             coin_a.balance_mut().join(self.reserve_a.split(amount_out));
@@ -233,7 +261,7 @@ module slamm::pool {
                 amount_in: amount_in,
                 amount_out: amount_out,
                 protocol_fees: protocol_fees,
-                admin_fees: admin_fees,
+                pool_fees: pool_fees,
                 a2b,
             }
         );
@@ -328,17 +356,31 @@ module slamm::pool {
 
     public fun net_amount_in<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, amount_in: u64): (u64, u64, u64) {
         let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees.fee_ratio();
-        let (admin_fee_num, admin_fee_denom) = self.admin_fees.fee_ratio();
+        let (pool_fee_num, pool_fee_denom) = self.pool_fees.fee_ratio();
         
         let protocol_fees = safe_mul_div_u64(amount_in, protocol_fee_num, protocol_fee_denom);
-        let admin_fees = safe_mul_div_u64(amount_in, admin_fee_num, admin_fee_denom);
-        let net_amount_in = amount_in - protocol_fees - admin_fees;
+        let pool_fees = safe_mul_div_u64(amount_in, pool_fee_num, pool_fee_denom);
+        let net_amount_in = amount_in - protocol_fees - pool_fees;
 
-        (net_amount_in, protocol_fees, admin_fees)
+        (net_amount_in, protocol_fees, pool_fees)
+    }
+    
+    public fun amount_in_net_of_protocol_fees<A, B, Hook: drop, State: store>(
+        self: &Pool<A, B, Hook, State>,
+        amount_in: u64
+    ): (u64, u64, u64) {
+        let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees.fee_ratio();
+        let (pool_fee_num, pool_fee_denom) = self.pool_fees.fee_ratio();
+        
+        let protocol_fees = safe_mul_div_u64(amount_in, protocol_fee_num, protocol_fee_denom);
+        let pool_fees = safe_mul_div_u64(amount_in, pool_fee_num, pool_fee_denom);
+        let net_amount_in = amount_in - protocol_fees - pool_fees;
+
+        (net_amount_in, protocol_fees, pool_fees)
     }
 
     // ===== View & Getters =====
-
+    
     public fun reserves<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>): (u64, u64) {
         (self.reserve_a.value(), self.reserve_b.value())
     }
@@ -347,8 +389,8 @@ module slamm::pool {
         &self.protocol_fees
     }
     
-    public fun admin_fees<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>): &Fees<A, B> {
-        &self.admin_fees
+    public fun pool_fees<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>): &FeeData {
+        &self.pool_fees
     }
     
     public fun lp_supply_val<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>): u64 {
@@ -386,7 +428,7 @@ module slamm::pool {
         amount_in: u64,
         min_amount_out: u64,
         protocol_fees: u64,
-        admin_fees: u64,
+        pool_fees: u64,
         a2b: bool,
         balance_a: Balance<A>,
         balance_b: Balance<B>,
@@ -396,24 +438,24 @@ module slamm::pool {
         amount_in: u64,
         amount_out: u64,
         protocol_fees: u64,
-        admin_fees: u64,
+        pool_fees: u64,
         a2b: bool,
     }
 
     public fun swap_request_amount_in<A, B, Hook: drop, State: store>(request: &SwapRequest<A, B, Hook, State>): u64 { request.amount_in }
-    public fun swap_request_net_amount_in<A, B, Hook: drop, State: store>(request: &SwapRequest<A, B, Hook, State>): u64 { request.amount_in - request.protocol_fees - request.admin_fees}
+    public fun swap_request_net_amount_in<A, B, Hook: drop, State: store>(request: &SwapRequest<A, B, Hook, State>): u64 { request.amount_in - request.protocol_fees - request.pool_fees}
     public fun swap_request_min_amount_out<A, B, Hook: drop, State: store>(request: &SwapRequest<A, B, Hook, State>): u64 { request.min_amount_out }
     public fun swap_request_protocol_fees<A, B, Hook: drop, State: store>(request: &SwapRequest<A, B, Hook, State>): u64 { request.protocol_fees }
-    public fun swap_request_admin_fees<A, B, Hook: drop, State: store>(request: &SwapRequest<A, B, Hook, State>): u64 { request.admin_fees }
+    public fun swap_request_pool_fees<A, B, Hook: drop, State: store>(request: &SwapRequest<A, B, Hook, State>): u64 { request.pool_fees }
     public fun swap_request_a2b<A, B, Hook: drop, State: store>(request: &SwapRequest<A, B, Hook, State>): bool { request.a2b }
     
     public fun swap_response_amount_in<A, B, Hook: drop, State: store>(response: &SwapResponse<A, B, Hook, State>): u64 { response.amount_in }
     public fun swap_response_amount_out<A, B, Hook: drop, State: store>(response: &SwapResponse<A, B, Hook, State>): u64 { response.amount_out }
-    public fun swap_response_net_amount_in<A, B, Hook: drop, State: store>(response: &SwapResponse<A, B, Hook, State>): u64 { response.amount_in - response.protocol_fees - response.admin_fees}
+    public fun swap_response_net_amount_in<A, B, Hook: drop, State: store>(response: &SwapResponse<A, B, Hook, State>): u64 { response.amount_in - response.protocol_fees - response.pool_fees}
     public fun swap_response_protocol_fees<A, B, Hook: drop, State: store>(response: &SwapResponse<A, B, Hook, State>): u64 { response.protocol_fees }
-    public fun swap_response_admin_fees<A, B, Hook: drop, State: store>(response: &SwapResponse<A, B, Hook, State>): u64 { response.admin_fees }
+    public fun swap_response_pool_fees<A, B, Hook: drop, State: store>(response: &SwapResponse<A, B, Hook, State>): u64 { response.pool_fees }
     public fun swap_response_a2b<A, B, Hook: drop, State: store>(response: &SwapResponse<A, B, Hook, State>): bool { response.a2b }
-
+    
     public struct DepositResponse has drop {
         deposit_a: u64,
         deposit_b: u64,
@@ -423,7 +465,7 @@ module slamm::pool {
     public struct RedeemResponse has drop {
         withdraw_a: u64,
         withdraw_b: u64,
-        burn_lp: u64
+        burn_lp: u64,
     }
 
     public fun deposit_a(self: &DepositResponse): u64 { self.deposit_a }
@@ -463,7 +505,45 @@ module slamm::pool {
         amount_in: u64,
         amount_out: u64,
         protocol_fees: u64,
-        admin_fees: u64,
+        pool_fees: u64,
         a2b: bool,
+    }
+
+
+    // ===== Test-Only =====
+
+    #[test_only]
+    public(package) fun reserve_a_mut_for_testing<A, B, Hook: drop, State: store>(
+        self: &mut Pool<A, B, Hook, State>,
+    ): &mut Balance<A> {
+        &mut self.reserve_a
+    }
+    
+    #[test_only]
+    public(package) fun reserve_b_mut_for_testing<A, B, Hook: drop, State: store>(
+        self: &mut Pool<A, B, Hook, State>,
+    ): &mut Balance<A> {
+        &mut self.reserve_a
+    }
+    
+    #[test_only]
+    public(package) fun lp_supply_mut_for_testing<A, B, Hook: drop, State: store>(
+        self: &mut Pool<A, B, Hook, State>,
+    ): &mut Supply<LP<A, B, Hook>> {
+        &mut self.lp_supply
+    }
+    
+    #[test_only]
+    public(package) fun protocol_fees_mut_for_testing<A, B, Hook: drop, State: store>(
+        self: &mut Pool<A, B, Hook, State>,
+    ): &mut Fees<A, B> {
+        &mut self.protocol_fees
+    }
+    
+    #[test_only]
+    public(package) fun pool_fees_mut_for_testing<A, B, Hook: drop, State: store>(
+        self: &mut Pool<A, B, Hook, State>,
+    ): &mut FeeData {
+        &mut self.pool_fees
     }
 }

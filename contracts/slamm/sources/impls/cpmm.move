@@ -71,6 +71,8 @@ module slamm::cpmm {
     ): (Coin<LP<A, B, Hook<W>>>, DepositResponse) {
         let is_initial_deposit = self.lp_supply_val() == 0;
 
+        // We consider the liquidity available for trading
+        // as well as the net accumulated fees, as these belong to LPs
         let (reserve_a, reserve_b) = self.reserves();
 
         // 1. Compute token deposits and delta lp tokens
@@ -127,6 +129,9 @@ module slamm::cpmm {
         ctx:  &mut TxContext,
     ): (Coin<A>, Coin<B>) {
         let lp_burn = lp_tokens.value();
+
+        // We consider the liquidity available for trading
+        // as well as the net accumulated fees, as these belong to LPs
         let (reserve_a, reserve_b) = self.reserves();
 
         // 1. Compute amounts to withdraw
@@ -223,6 +228,8 @@ module slamm::cpmm {
         ideal_a: u64,
         ideal_b: u64,
     ): DepositQuote {
+        // We need to consider the liquidity available for trading
+        // as well as the net accumulated fees, as these belong to LPs
         let (reserve_a, reserve_b) = self.reserves();
 
         let (deposit_a, deposit_b, lp_tokens) = quote_deposit_(
@@ -246,9 +253,11 @@ module slamm::cpmm {
         self: &mut Pool<A, B, Hook<W>, State>,
         lp_tokens: u64,
     ): RedeemQuote {
+        // We need to consider the liquidity available for trading
+        // as well as the net accumulated fees, as these belong to LPs
         let (reserve_a, reserve_b) = self.reserves();
 
-        // 1. Compute amounts to withdraw
+        // Compute amounts to withdraw
         let (withdraw_a, withdraw_b) = quote_redeem_(
             reserve_a,
             reserve_b,
@@ -291,7 +300,7 @@ module slamm::cpmm {
             min_b,
         );
 
-        // 8. Compute new LP Tokens
+        // Compute new LP Tokens
         let delta_lp = lp_tokens_to_mint(
             reserve_a,
             reserve_b,
