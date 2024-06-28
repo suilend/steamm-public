@@ -1,11 +1,12 @@
 module slamm::pool {
-    use sui::balance::{Self, Balance, Supply};
-    use sui::coin::{Self, Coin};
-    use slamm::events::emit_event;
-    use slamm::math::{safe_mul_div_u64};
-    use slamm::fees::{Self, Fees, FeeData};
-    use slamm::registry::{Registry};
     use sui::tx_context::sender;
+    use sui::coin::{Self, Coin};
+    use sui::balance::{Self, Balance, Supply};
+    use slamm::events::emit_event;
+    use slamm::registry::{Registry};
+    use slamm::math::{safe_mul_div_u64};
+    use slamm::global_admin::GlobalAdmin;
+    use slamm::fees::{Self, Fees, FeeData};
     
     public use fun slamm::cpmm::deposit_liquidity as Pool.cpmm_deposit;
     public use fun slamm::cpmm::redeem_liquidity as Pool.cpmm_redeem;
@@ -127,7 +128,7 @@ module slamm::pool {
     /// the generic types of its pool. This prevents request switching attacks where a malicious
     /// actor calls `swap_request` for two different pools and proceeds to switch the requests.
     /// 
-    /// When this object is instantiated, protocol and admin fees are guaranteed to be already paid to
+    /// When this object is instantiated, protocol and pool fees are guaranteed to be already paid to
     /// the pool on the gross `amount_in`. Hence why the balances herein only contain the net amount.
     /// 
     /// Since the swap action has not taken place yet, we avoid mutating the liquidity balances of the
@@ -333,10 +334,7 @@ module slamm::pool {
             ctx,
         );
 
-        // 3. Confirm redemption
-        // self.confirm_redeem(request); // TODO
-
-        // 4. Emit events
+        // 3. Emit events
         emit_event(
             RedeemLiquidityEvent {
                 user: sender(ctx),
@@ -355,20 +353,6 @@ module slamm::pool {
     }
 
     public fun net_amount_in<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, amount_in: u64): (u64, u64, u64) {
-        let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees.fee_ratio();
-        let (pool_fee_num, pool_fee_denom) = self.pool_fees.fee_ratio();
-        
-        let protocol_fees = safe_mul_div_u64(amount_in, protocol_fee_num, protocol_fee_denom);
-        let pool_fees = safe_mul_div_u64(amount_in, pool_fee_num, pool_fee_denom);
-        let net_amount_in = amount_in - protocol_fees - pool_fees;
-
-        (net_amount_in, protocol_fees, pool_fees)
-    }
-    
-    public fun amount_in_net_of_protocol_fees<A, B, Hook: drop, State: store>(
-        self: &Pool<A, B, Hook, State>,
-        amount_in: u64
-    ): (u64, u64, u64) {
         let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees.fee_ratio();
         let (pool_fee_num, pool_fee_denom) = self.pool_fees.fee_ratio();
         
@@ -411,6 +395,23 @@ module slamm::pool {
         &mut self.inner
     }
 
+    // ===== Admin endpoints =====
+
+    public fun collect_protol_fees<A, B, Hook: drop, State: store>(
+        _global_admin: &GlobalAdmin,
+        self: &mut Pool<A, B, Hook, State>,
+        ctx: &mut TxContext,
+    ): (Coin<A>, Coin<B>) {
+
+        let (fees_a, fees_b) = self.protocol_fees.withdraw();
+
+        (
+            coin::from_balance(fees_a, ctx),
+            coin::from_balance(fees_b, ctx)
+        )
+    }
+    
+
     // ===== Request/Responses =====
 
     /// Hot Potato object created on swap request. The only way to consume this object
@@ -422,7 +423,7 @@ module slamm::pool {
     /// allow for a unified swap interface. If the swap is `a2b` the `Balance<A>` will contain
     /// the `net_amount_in` and `Balance<B>` will be zero. If the swap is `b2a` the other way applies
     /// 
-    /// When this object is instantiated, protocol and admin fees are guaranteed to be already paid to
+    /// When this object is instantiated, protocol and pool fees are guaranteed to be already paid to
     /// the pool on the gross `amount_in`. Hence why the balances herein only contain the net amount.
     public struct SwapRequest<phantom A, phantom B, phantom Hook: drop, phantom State: store> {
         amount_in: u64,
