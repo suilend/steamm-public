@@ -6,6 +6,7 @@ module slamm::registry {
 
     // === Errors ===
     const EIncorrectVersion: u64 = 1;
+    const EDuplicatedPoolType: u64 = 2;
 
     // === Constants ===
     const CURRENT_VERSION: u64 = 1;
@@ -28,13 +29,12 @@ module slamm::registry {
 
     public(package) fun add_amm<AMM: key>(registry: &mut Registry, pool: &AMM) {
         assert!(registry.version == CURRENT_VERSION, EIncorrectVersion);
+        
+        let amm_type = type_name::get<AMM>();
+        assert!(!table::contains(&registry.amms, amm_type), EDuplicatedPoolType);
 
-
-        table::add(&mut registry.amms, type_name::get<AMM>(), object::id(pool));
+        table::add(&mut registry.amms, amm_type, object::id(pool));
     }
-
-    #[test_only]
-    use sui::dynamic_field::{Self};
 
     #[test_only]
     public fun init_for_testing(ctx: &mut TxContext): Registry {
@@ -85,7 +85,7 @@ module slamm::registry {
     }
 
     #[test]
-    #[expected_failure(abort_code = 0, location = dynamic_field)]
+    #[expected_failure(abort_code = EDuplicatedPoolType)]
     fun test_fail_duplicate_lending_market_type() {
         use sui::test_utils::{Self};
         use sui::test_scenario::{Self};
