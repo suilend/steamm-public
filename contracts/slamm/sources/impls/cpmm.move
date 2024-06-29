@@ -5,7 +5,7 @@ module slamm::cpmm {
     use sui::transfer::public_transfer;
     use slamm::registry::{Registry};
     use slamm::math::{safe_mul_div_u64};
-    use slamm::pool::{Self, Pool, PoolCap, LP, DepositResponse, SwapRequest, SwapResponse};
+    use slamm::pool::{Self, Pool, PoolCap, LP, DepositResult, SwapResult};
     use slamm::quote::{Self, SwapQuote, DepositQuote, RedeemQuote};
 
     // Consts
@@ -68,7 +68,7 @@ module slamm::cpmm {
         min_a: u64,
         min_b: u64,
         ctx:  &mut TxContext,
-    ): (Coin<LP<A, B, Hook<W>>>, DepositResponse) {
+    ): (Coin<LP<A, B, Hook<W>>>, DepositResult) {
         let is_initial_deposit = self.lp_supply_val() == 0;
 
         // We consider the liquidity available for trading
@@ -162,23 +162,25 @@ module slamm::cpmm {
         self: &mut Pool<A, B, Hook<W>, State>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
-        request: SwapRequest<A, B, Hook<W>, State>,
+        amount_in: u64,
+        min_amount_out: u64,
+        a2b: bool,
         ctx: &mut TxContext,
-    ): SwapResponse<A, B, Hook<W>, State> {
-        let (reserve_a, reserve_b) = self.reserves();
-
-        let amount_out = quote_swap_(
-            reserve_b, // reserve_out
-            reserve_a, // reserve_in
-            request.net_amount_in(), // amount_in
+    ): SwapResult {
+        let quote = quote_swap(
+            self,
+            amount_in,
+            a2b,
         );
 
         let response = self.swap(
             Hook<W> {},
             coin_a,
             coin_b,
-            amount_out,
-            request,
+            amount_in,
+            quote.amount_out(),
+            min_amount_out,
+            a2b,
             ctx,
         );
 

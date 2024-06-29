@@ -37,9 +37,6 @@ module slamm::registry {
     }
 
     #[test_only]
-    use sui::dynamic_field::{Self};
-
-    #[test_only]
     public fun init_for_testing(ctx: &mut TxContext): Registry {
         let registry = Registry {
             id: object::new(ctx),
@@ -88,7 +85,7 @@ module slamm::registry {
     }
 
     #[test]
-    #[expected_failure(abort_code = 0, location = dynamic_field)]
+    #[expected_failure(abort_code = EDuplicatedPoolType)]
     fun test_fail_duplicate_lending_market_type() {
         use sui::test_utils::{Self};
         use sui::test_scenario::{Self};

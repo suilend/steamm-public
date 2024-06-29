@@ -126,18 +126,12 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(200), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        let swap_request = pool.swap_request(
+        let swap_result = pool.cpmm_swap(
             &mut coin_a,
             &mut coin_b,
             e9(200),
             0,
             true, // a2b
-        );
-
-        let swap_result = pool.cpmm_swap(
-            &mut coin_a,
-            &mut coin_b,
-            swap_request,
             ctx,
         );
 
@@ -383,18 +377,12 @@ module slamm::slamm_tests {
             true, // a2b
         );
 
-        let swap_request = pool.swap_request(
+        let _ = pool.cpmm_swap(
             &mut coin_a,
             &mut coin_b,
             e9(200),
             swap_result.amount_out() + 1,
             true, // a2b
-        );
-
-        let _ = pool.cpmm_swap(
-            &mut coin_a,
-            &mut coin_b,
-            swap_request,
             ctx,
         );
 
@@ -718,21 +706,12 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000_000), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        let swap_request = pool.swap_request(
+        let swap_result = pool.cpmm_swap(
             &mut coin_a,
             &mut coin_b,
             e9(1_000_000),
             0,
             true, // a2b
-        );
-
-        assert_eq(swap_request.protocol_fees(), expected_protocol_fees);
-        assert_eq(swap_request.pool_fees(), expected_pool_fees);
-
-        let swap_result = pool.cpmm_swap(
-            &mut coin_a,
-            &mut coin_b,
-            swap_request,
             ctx,
         );
 
@@ -756,18 +735,12 @@ module slamm::slamm_tests {
         let mut acc_pool_fees = 0;
 
         while (len > 0) {
-                let swap_request = pool_2.swap_request(
+            let swap_result = pool_2.cpmm_swap(
                 &mut coin_a,
                 &mut coin_b,
                 e9(10_000),
                 0,
                 true, // a2b
-            );
-
-            let swap_result = pool_2.cpmm_swap(
-                &mut coin_a,
-                &mut coin_b,
-                swap_request,
                 ctx,
             );
 
