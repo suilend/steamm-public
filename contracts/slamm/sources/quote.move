@@ -9,6 +9,7 @@ module slamm::quote {
     }
 
     public struct DepositQuote has store, drop {
+        initial_deposit: bool,
         deposit_a: u64,
         deposit_b: u64,
         mint_lp: u64,
@@ -39,11 +40,13 @@ module slamm::quote {
     }
     
     public(package) fun deposit_quote(
+        initial_deposit: bool,
         deposit_a: u64,
         deposit_b: u64,
         mint_lp: u64,
     ): DepositQuote {
         DepositQuote {
+            initial_deposit,
             deposit_a,
             deposit_b,
             mint_lp,
@@ -70,6 +73,7 @@ module slamm::quote {
     public fun admin_fees(self: &SwapQuote): u64 { self.admin_fees }
     public fun a2b(self: &SwapQuote): bool { self.a2b }
     
+    public fun initial_deposit(self: &DepositQuote): bool { self.initial_deposit }
     public fun deposit_a(self: &DepositQuote): u64 { self.deposit_a }
     public fun deposit_b(self: &DepositQuote): u64 { self.deposit_b }
     public fun mint_lp(self: &DepositQuote): u64 { self.mint_lp }

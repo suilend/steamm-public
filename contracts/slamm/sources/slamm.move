@@ -1,5 +1,7 @@
 module slamm::pool {
+    use sui::transfer::public_transfer;
     use sui::tx_context::sender;
+    use sui::math::{sqrt_u128, min};
     use sui::coin::{Self, Coin};
     use sui::balance::{Self, Balance, Supply};
     use slamm::events::emit_event;
@@ -7,24 +9,27 @@ module slamm::pool {
     use slamm::math::{safe_mul_div_u64};
     use slamm::global_admin::GlobalAdmin;
     use slamm::fees::{Self, Fees, FeeData};
+    use slamm::quote::{Self, DepositQuote, RedeemQuote};
     
-    public use fun slamm::cpmm::deposit_liquidity as Pool.cpmm_deposit;
-    public use fun slamm::cpmm::redeem_liquidity as Pool.cpmm_redeem;
     public use fun slamm::cpmm::swap as Pool.cpmm_swap;
     public use fun slamm::cpmm::quote_swap as Pool.cpmm_quote_swap;
-    public use fun slamm::cpmm::quote_deposit as Pool.cpmm_quote_deposit;
-    public use fun slamm::cpmm::quote_redeem as Pool.cpmm_quote_redeem;
     public use fun slamm::cpmm::k as Pool.cpmm_k;
 
     // Consts
     const SWAP_FEE_NUMERATOR: u64 = 200;
     const SWAP_FEE_DENOMINATOR: u64 = 10_000;
+    const MINIMUM_LIQUIDITY: u64 = 10;
 
     // Error codes
     const EFeeAbove100Percent: u64 = 0;
     const ESwapExceedsSlippage: u64 = 1;
     const EOutputAExceedsLiquidity: u64 = 2;
     const EOutputBExceedsLiquidity: u64 = 3;
+    const EInsufficientDepositB: u64 = 4;
+    const EInsufficientDepositA: u64 = 5;
+    const EInsufficientDeposit: u64 = 6;
+    const ERedeemSlippageAExceeded: u64 = 7;
+    const ERedeemSlippageBExceeded: u64 = 8;
 
     /// Marker type for the LP coins of a pool. There can only be one
     /// pool per type, albeit given the permissionless aspect of the pool
@@ -178,70 +183,96 @@ module slamm::pool {
 
     public fun deposit_liquidity<A, B, Hook: drop, State: store>(
         self: &mut Pool<A, B, Hook, State>,
-        _witness: Hook,
-        balance_a: Balance<A>,
-        balance_b: Balance<B>,
-        lp_to_mint: u64,
+        coin_a: &mut Coin<A>,
+        coin_b: &mut Coin<B>,
+        max_a: u64,
+        max_b: u64,
+        min_a: u64,
+        min_b: u64,
         ctx:  &mut TxContext,
     ): (Coin<LP<A, B, Hook>>, DepositResult) {
-        let deposit_a = balance_a.value();
-        let deposit_b = balance_b.value();
+        // Compute token deposits and delta lp tokens
+        let quote = quote_deposit_impl(
+            self,
+            max_a,
+            max_b,
+            min_a,
+            min_b,
+        );
+
+        let is_initial_deposit = quote.initial_deposit();
+
+        let balance_a = coin_a.balance_mut().split(quote.deposit_a());
+        let balance_b = coin_b.balance_mut().split(quote.deposit_b());
         
-        // 1. Add liquidity to pool
+        // Add liquidity to pool
         self.reserve_a.join(balance_a);
         self.reserve_b.join(balance_b);
 
-        // 2. Mint LP Tokens
-        let lp_coins = coin::from_balance(
-            self.lp_supply.increase_supply(lp_to_mint),
+        // Mint LP Tokens
+        let mut lp_coins = coin::from_balance(
+            self.lp_supply.increase_supply(quote.mint_lp()),
             ctx
         );
 
-        // 4. Emit event
+        // Emit event
         let result = DepositResult {
             user: sender(ctx),
             pool_id: object::id(self),
-            deposit_a,
-            deposit_b,
-            mint_lp: lp_to_mint,
+            deposit_a: quote.deposit_a(),
+            deposit_b: quote.deposit_b(),
+            mint_lp: quote.mint_lp(),
         };
         
         emit_event(result);
+
+        // Lock minimum liquidity if initial seed liquidity - prevents inflation attack
+        if (is_initial_deposit) {
+            public_transfer(lp_coins.split(MINIMUM_LIQUIDITY, ctx), @0x0);
+
+        };
 
         (lp_coins, result)
     }
     
     public fun redeem_liquidity<A, B, Hook: drop, State: store>(
         self: &mut Pool<A, B, Hook, State>,
-        _witness: Hook,
-        withdraw_a: u64,
-        withdraw_b: u64,
         lp_tokens: Coin<LP<A, B, Hook>>,
+        min_a: u64,
+        min_b: u64,
         ctx:  &mut TxContext,
     ): (Coin<A>, Coin<B>, RedeemResult) {
         let lp_burn = lp_tokens.value();
 
-        // 1. Burn LP Tokens
+        // Compute amounts to withdraw
+        let quote = quote_redeem_impl(
+            self,
+            lp_tokens.value(),
+            min_a,
+            min_b,
+        );
+
+        // Burn LP Tokens
         self.lp_supply.decrease_supply(
             lp_tokens.into_balance()
         );
 
-        // 2. Prepare tokens to send
+        // Prepare tokens to send
         let base_tokens = coin::from_balance(
-            self.reserve_a.split(withdraw_a),
+            self.reserve_a.split(quote.withdraw_a()),
             ctx,
         );
         let quote_tokens = coin::from_balance(
-            self.reserve_b.split(withdraw_b),
+            self.reserve_b.split(quote.withdraw_b()),
             ctx,
         );
 
-        // 3. Emit events
+        // Emit events
         let result = RedeemResult {
             user: sender(ctx),
             pool_id: object::id(self),
-            withdraw_a,
-            withdraw_b,
+            withdraw_a: quote.withdraw_a(),
+            withdraw_b: quote.withdraw_b(),
             burn_lp: lp_burn,
         };
 
@@ -259,6 +290,34 @@ module slamm::pool {
         let net_amount_in = amount_in - protocol_fees - pool_fees;
 
         (net_amount_in, protocol_fees, pool_fees)
+    }
+
+    // ===== Public Quote Functions =====
+
+    public fun quote_deposit<A, B, Hook: drop, State: store>(
+        self: &Pool<A, B, Hook, State>,
+        ideal_a: u64,
+        ideal_b: u64,
+    ): DepositQuote {
+        quote_deposit_impl(
+            self,
+            ideal_a,
+            ideal_b,
+            0,
+            0,
+        )
+    }
+
+    public fun quote_redeem<A, B, Hook: drop, State: store>(
+        self: &mut Pool<A, B, Hook, State>,
+        lp_tokens: u64,
+    ): RedeemQuote {
+        quote_redeem_impl(
+            self,
+            lp_tokens,
+            0,
+            0,
+        )
     }
 
     // ===== View & Getters =====
@@ -279,6 +338,8 @@ module slamm::pool {
         self.lp_supply.supply_value()
     }
 
+    public fun minimum_liquidity(): u64 { MINIMUM_LIQUIDITY }
+
     // ===== Package functions =====
 
     public(package) fun inner<A, B, Hook: drop, State: store>(
@@ -295,7 +356,7 @@ module slamm::pool {
 
     // ===== Admin endpoints =====
 
-    public fun collect_protol_fees<A, B, Hook: drop, State: store>(
+    public fun collect_protocol_fees<A, B, Hook: drop, State: store>(
         _global_admin: &GlobalAdmin,
         self: &mut Pool<A, B, Hook, State>,
         ctx: &mut TxContext,
@@ -307,6 +368,159 @@ module slamm::pool {
             coin::from_balance(fees_a, ctx),
             coin::from_balance(fees_b, ctx)
         )
+    }
+
+    // ===== Private endpoints =====
+
+    fun quote_deposit_impl<A, B, Hook: drop, State: store>(
+        self: &Pool<A, B, Hook, State>,
+        ideal_a: u64,
+        ideal_b: u64,
+        min_a: u64,
+        min_b: u64,
+    ): DepositQuote {
+        let is_initial_deposit = self.lp_supply_val() == 0;
+
+        // We consider the liquidity available for trading
+        // as well as the net accumulated fees, as these belong to LPs
+        let (reserve_a, reserve_b) = self.reserves();
+
+        // Compute token deposits and delta lp tokens
+        let (deposit_a, deposit_b, lp_tokens) = quote_deposit_(
+            reserve_a,
+            reserve_b,
+            self.lp_supply_val(),
+            ideal_a,
+            ideal_b,
+            min_a,
+            min_b,
+        );
+
+        quote::deposit_quote(
+            is_initial_deposit,
+            deposit_a,
+            deposit_b,
+            lp_tokens,
+        )
+    }
+
+    fun quote_deposit_(
+        reserve_a: u64,
+        reserve_b: u64,
+        lp_supply: u64,
+        max_a: u64,
+        max_b: u64,
+        min_a: u64,
+        min_b: u64
+    ): (u64, u64, u64) {
+        let (delta_a, delta_b) = tokens_to_deposit(
+            reserve_a,
+            reserve_b,
+            max_a,
+            max_b,
+            min_a,
+            min_b,
+        );
+
+        // Compute new LP Tokens
+        let delta_lp = lp_tokens_to_mint(
+            reserve_a,
+            reserve_b,
+            lp_supply,
+            delta_a,
+            delta_b,
+        );
+
+        (delta_a, delta_b, delta_lp)
+    }
+
+    fun tokens_to_deposit(
+        reserve_a: u64,
+        reserve_b: u64,
+        max_a: u64,
+        max_b: u64,
+        min_a: u64,
+        min_b: u64
+    ): (u64, u64) {
+        if(reserve_a == 0 && reserve_b == 0) {
+            (max_a, max_b)
+        } else {
+            let b_star = safe_mul_div_u64(max_a, reserve_b, reserve_a);
+            if (b_star <= max_b) {
+
+                assert!(b_star >= min_b, EInsufficientDepositB);
+                (max_a, b_star)
+            } else {
+                let a_star = safe_mul_div_u64(max_b, reserve_a, reserve_b);
+                assert!(a_star <= max_a, EInsufficientDeposit);
+                assert!(a_star >= min_a, EInsufficientDepositA);
+                (a_star, max_b)
+            } 
+        }
+    }
+
+    fun lp_tokens_to_mint(
+        reserve_a: u64,
+        reserve_b: u64,
+        lp_supply: u64,
+        amount_a: u64,
+        amount_b: u64
+    ): u64 {
+        if (lp_supply == 0) {
+            (sqrt_u128((amount_a as u128) * (amount_b as u128)) as u64)
+        } else {
+            min(
+                safe_mul_div_u64(amount_a, lp_supply, reserve_a),
+                safe_mul_div_u64(amount_b, lp_supply, reserve_b)
+            )
+        }
+    }
+
+    fun quote_redeem_impl<A, B, Hook: drop, State: store>(
+        self: &Pool<A, B, Hook, State>,
+        lp_tokens: u64,
+        min_a: u64,
+        min_b: u64,
+    ): RedeemQuote {
+        // We need to consider the liquidity available for trading
+        // as well as the net accumulated fees, as these belong to LPs
+        let (reserve_a, reserve_b) = self.reserves();
+
+        // Compute amounts to withdraw
+        let (withdraw_a, withdraw_b) = quote_redeem_(
+            reserve_a,
+            reserve_b,
+            self.lp_supply_val(),
+            lp_tokens,
+            min_a,
+            min_b,
+        );
+
+        quote::redeem_quote(
+            withdraw_a,
+            withdraw_b,
+            lp_tokens,
+        )
+    }
+
+    fun quote_redeem_(
+        reserve_a: u64,
+        reserve_b: u64,
+        lp_supply: u64,
+        lp_tokens: u64,
+        min_a: u64,
+        min_b: u64,
+    ): (u64, u64) {
+        // Compute the amount of tokens the user is allowed to
+        // receive for each reserve, via the lp ratio
+        let withdraw_a = safe_mul_div_u64(reserve_a, lp_tokens, lp_supply);
+        let withdraw_b = safe_mul_div_u64(reserve_b, lp_tokens, lp_supply);
+
+        // Assert slippage
+        assert!(withdraw_a >= min_a, ERedeemSlippageAExceeded);
+        assert!(withdraw_b >= min_b, ERedeemSlippageBExceeded);
+
+        (withdraw_a, withdraw_b)
     }
     
 

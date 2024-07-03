@@ -4,9 +4,9 @@
 #[test_only]
 module slamm::slamm_tests {
     // use std::debug::print;
-    use slamm::pool;
+    use slamm::pool::{Self, minimum_liquidity};
     use slamm::registry;
-    use slamm::cpmm::{Self, minimum_liquidity};
+    use slamm::cpmm::{Self};
     use sui::test_scenario::{Self, ctx};
     use sui::sui::SUI;
     use sui::coin::{Self};
@@ -45,7 +45,7 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
 
-        let (lp_coins, _) = pool.cpmm_deposit(
+        let (lp_coins, _) = pool.deposit_liquidity(
             &mut coin_a,
             &mut coin_b,
             e9(1_000),
@@ -76,7 +76,7 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(10), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(e9(10), ctx);
 
-        let (lp_coins_2, _) = pool.cpmm_deposit(
+        let (lp_coins_2, _) = pool.deposit_liquidity(
             &mut coin_a,
             &mut coin_b,
             e9(10), // max_a
@@ -101,7 +101,7 @@ module slamm::slamm_tests {
         test_scenario::next_tx(&mut scenario, LP_PROVIDER);
         let ctx = ctx(&mut scenario);
 
-        let (coin_a, coin_b) = pool.cpmm_redeem(
+        let (coin_a, coin_b, _) = pool.redeem_liquidity(
             lp_coins_2,
             0,
             0,
@@ -150,7 +150,7 @@ module slamm::slamm_tests {
     }
     
     #[test]
-    #[expected_failure(abort_code = cpmm::EInsufficientDepositA)]
+    #[expected_failure(abort_code = pool::EInsufficientDepositA)]
     fun test_fail_deposit_slippage_a() {
         let mut scenario = test_scenario::begin(ADMIN);
 
@@ -171,7 +171,7 @@ module slamm::slamm_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
 
         // Initial deposit
-        let (lp_coins, _) = pool.cpmm_deposit(
+        let (lp_coins, _) = pool.deposit_liquidity(
             &mut coin_a,
             &mut coin_b,
             e9(1_000),
@@ -202,12 +202,12 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(10), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(e9(10), ctx);
 
-        let deposit_result = pool.cpmm_quote_deposit(
+        let deposit_result = pool.quote_deposit(
             e9(10), // max_a
             e9(10), // max_b
         );
         
-        let (lp_coins_2, _) = pool.cpmm_deposit(
+        let (lp_coins_2, _) = pool.deposit_liquidity(
             &mut coin_a,
             &mut coin_b,
             e9(10), // max_a
@@ -236,7 +236,7 @@ module slamm::slamm_tests {
     }
     
     #[test]
-    #[expected_failure(abort_code = cpmm::EInsufficientDepositB)]
+    #[expected_failure(abort_code = pool::EInsufficientDepositB)]
     fun test_fail_deposit_slippage_b() {
         let mut scenario = test_scenario::begin(ADMIN);
 
@@ -257,7 +257,7 @@ module slamm::slamm_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
 
         // Initial deposit
-        let (lp_coins, _) = pool.cpmm_deposit(
+        let (lp_coins, _) = pool.deposit_liquidity(
             &mut coin_a,
             &mut coin_b,
             e9(1_000),
@@ -288,12 +288,12 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(10), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(e9(10), ctx);
 
-        let deposit_result = pool.cpmm_quote_deposit(
+        let deposit_result = pool.quote_deposit(
             e9(10), // max_a
             e9(10), // max_b
         );
         
-        let (lp_coins_2, _) = pool.cpmm_deposit(
+        let (lp_coins_2, _) = pool.deposit_liquidity(
             &mut coin_a,
             &mut coin_b,
             e9(10), // max_a
@@ -342,7 +342,7 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
 
-        let (lp_coins, _) = pool.cpmm_deposit(
+        let (lp_coins, _) = pool.deposit_liquidity(
             &mut coin_a,
             &mut coin_b,
             e9(1_000),
@@ -396,7 +396,7 @@ module slamm::slamm_tests {
     }
 
     #[test]
-    #[expected_failure(abort_code = cpmm::ERedeemSlippageAExceeded)]
+    #[expected_failure(abort_code = pool::ERedeemSlippageAExceeded)]
     fun test_fail_redeem_slippage_a() {
         let mut scenario = test_scenario::begin(ADMIN);
 
@@ -416,7 +416,7 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
 
-        let (lp_coins, _) = pool.cpmm_deposit(
+        let (lp_coins, _) = pool.deposit_liquidity(
             &mut coin_a,
             &mut coin_b,
             e9(1_000),
@@ -447,7 +447,7 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(10), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(e9(10), ctx);
 
-        let (lp_coins_2, _) = pool.cpmm_deposit(
+        let (lp_coins_2, _) = pool.deposit_liquidity(
             &mut coin_a,
             &mut coin_b,
             e9(10), // max_a
@@ -472,11 +472,11 @@ module slamm::slamm_tests {
         test_scenario::next_tx(&mut scenario, LP_PROVIDER);
         let ctx = ctx(&mut scenario);
 
-        let redeem_result = pool.cpmm_quote_redeem(
+        let redeem_result = pool.quote_redeem(
             lp_coins_2.value()
         );
         
-        let (coin_a, coin_b) = pool.cpmm_redeem(
+        let (coin_a, coin_b, _) = pool.redeem_liquidity(
             lp_coins_2,
             redeem_result.withdraw_a() + 1,
             redeem_result.withdraw_b() + 1,
@@ -493,7 +493,7 @@ module slamm::slamm_tests {
     }
     
     #[test]
-    #[expected_failure(abort_code = cpmm::ERedeemSlippageBExceeded)]
+    #[expected_failure(abort_code = pool::ERedeemSlippageBExceeded)]
     fun test_fail_redeem_slippage_b() {
         let mut scenario = test_scenario::begin(ADMIN);
 
@@ -513,7 +513,7 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
 
-        let (lp_coins, _) = pool.cpmm_deposit(
+        let (lp_coins, _) = pool.deposit_liquidity(
             &mut coin_a,
             &mut coin_b,
             e9(1_000),
@@ -544,7 +544,7 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(10), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(e9(10), ctx);
 
-        let (lp_coins_2, _) = pool.cpmm_deposit(
+        let (lp_coins_2, _) = pool.deposit_liquidity(
             &mut coin_a,
             &mut coin_b,
             e9(10), // max_a
@@ -569,11 +569,11 @@ module slamm::slamm_tests {
         test_scenario::next_tx(&mut scenario, LP_PROVIDER);
         let ctx = ctx(&mut scenario);
 
-        let redeem_result = pool.cpmm_quote_redeem(
+        let redeem_result = pool.quote_redeem(
             lp_coins_2.value()
         );
         
-        let (coin_a, coin_b) = pool.cpmm_redeem(
+        let (coin_a, coin_b, _) = pool.redeem_liquidity(
             lp_coins_2,
             redeem_result.withdraw_a(),
             redeem_result.withdraw_b() + 1,
@@ -673,7 +673,7 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(200_000_000), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(e9(200_000_000), ctx);
 
-        let (lp_coins, _) = pool.cpmm_deposit(
+        let (lp_coins, _) = pool.deposit_liquidity(
             &mut coin_a,
             &mut coin_b,
             e9(100_000_000),
@@ -683,7 +683,7 @@ module slamm::slamm_tests {
             ctx,
         );
         
-        let (lp_coins_2, _) = pool_2.cpmm_deposit(
+        let (lp_coins_2, _) = pool_2.deposit_liquidity(
             &mut coin_a,
             &mut coin_b,
             e9(100_000_000),
@@ -760,14 +760,14 @@ module slamm::slamm_tests {
         test_scenario::next_tx(&mut scenario, LP_PROVIDER);
         let ctx = ctx(&mut scenario);
 
-        let (coin_a, coin_b) = pool.cpmm_redeem(
+        let (coin_a, coin_b, _) = pool.redeem_liquidity(
             lp_coins,
             0,
             0,
             ctx,
         );
         
-        let (coin_a_2, coin_b_2) = pool_2.cpmm_redeem(
+        let (coin_a_2, coin_b_2, _) = pool_2.redeem_liquidity(
             lp_coins_2,
             0,
             0,
@@ -806,7 +806,7 @@ module slamm::slamm_tests {
     //     let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000), ctx);
     //     let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
 
-    //     let (lp_coins, _) = pool.cpmm_deposit(
+    //     let (lp_coins, _) = pool.deposit_liquidity(
     //         &mut coin_a,
     //         &mut coin_b,
     //         e9(1_000),
@@ -835,7 +835,7 @@ module slamm::slamm_tests {
     //     let mut coin_a = coin::mint_for_testing<SUI>(e9(10), ctx);
     //     let mut coin_b = coin::mint_for_testing<COIN>(e9(10), ctx);
 
-    //     let (lp_coins_2, _) = pool.cpmm_deposit(
+    //     let (lp_coins_2, _) = pool.deposit_liquidity(
     //         &mut coin_a,
     //         &mut coin_b,
     //         e9(10_000_000), // max_a
@@ -852,7 +852,7 @@ module slamm::slamm_tests {
     //     test_scenario::next_tx(&mut scenario, LP_PROVIDER);
     //     let ctx = ctx(&mut scenario);
 
-    //     let (coin_a, coin_b) = pool.cpmm_redeem(
+    //     let (coin_a, coin_b) = pool.redeem_liquidity(
     //         lp_coins_2,
     //         0,
     //         0,
