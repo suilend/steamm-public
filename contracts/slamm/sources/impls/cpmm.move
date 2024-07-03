@@ -63,8 +63,8 @@ module slamm::cpmm {
         self: &mut Pool<A, B, Hook<W>, State>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
-        ideal_a: u64,
-        ideal_b: u64,
+        max_a: u64,
+        max_b: u64,
         min_a: u64,
         min_b: u64,
         ctx:  &mut TxContext,
@@ -78,14 +78,14 @@ module slamm::cpmm {
         // 1. Compute token deposits and delta lp tokens
         let (deposit_a, deposit_b, lp_tokens) = if (is_initial_deposit) {
             (
-                ideal_a,
-                ideal_b,
+                max_a,
+                max_b,
                 lp_tokens_to_mint(
                     0,
                     0,
                     self.lp_supply_val(),
-                    ideal_a,
-                    ideal_b,
+                    max_a,
+                    max_b,
                 )
             )
         } else {
@@ -93,8 +93,8 @@ module slamm::cpmm {
                 reserve_a,
                 reserve_b,
                 self.lp_supply_val(),
-                ideal_a,
-                ideal_b,
+                max_a,
+                max_b,
                 min_a,
                 min_b,
             )
@@ -227,8 +227,8 @@ module slamm::cpmm {
 
     public fun quote_deposit<A, B, W: drop>(
         self: &mut Pool<A, B, Hook<W>, State>,
-        ideal_a: u64,
-        ideal_b: u64,
+        max_a: u64,
+        max_b: u64,
     ): DepositQuote {
         // We need to consider the liquidity available for trading
         // as well as the net accumulated fees, as these belong to LPs
@@ -238,8 +238,8 @@ module slamm::cpmm {
             reserve_a,
             reserve_b,
             self.lp_supply_val(),
-            ideal_a,
-            ideal_b,
+            max_a,
+            max_b,
             0,
             0,
         );
@@ -288,16 +288,16 @@ module slamm::cpmm {
         reserve_a: u64,
         reserve_b: u64,
         lp_supply: u64,
-        ideal_a: u64,
-        ideal_b: u64,
+        max_a: u64,
+        max_b: u64,
         min_a: u64,
         min_b: u64
     ): (u64, u64, u64) {
         let (delta_a, delta_b) = tokens_to_deposit(
             reserve_a,
             reserve_b,
-            ideal_a,
-            ideal_b,
+            max_a,
+            max_b,
             min_a,
             min_b,
         );
@@ -317,24 +317,24 @@ module slamm::cpmm {
     fun tokens_to_deposit(
         reserve_a: u64,
         reserve_b: u64,
-        ideal_a: u64,
-        ideal_b: u64,
+        max_a: u64,
+        max_b: u64,
         min_a: u64,
         min_b: u64
     ): (u64, u64) {
         if(reserve_a == 0 && reserve_b == 0) {
-            (ideal_a, ideal_b)
+            (max_a, max_b)
         } else {
-            let b_star = safe_mul_div_u64(ideal_a, reserve_b, reserve_a);
-            if (b_star <= ideal_b) {
+            let b_star = safe_mul_div_u64(max_a, reserve_b, reserve_a);
+            if (b_star <= max_b) {
 
                 assert!(b_star >= min_b, EInsufficientDepositB);
-                (ideal_a, b_star)
+                (max_a, b_star)
             } else {
-                let a_star = safe_mul_div_u64(ideal_b, reserve_a, reserve_b);
-                assert!(a_star <= ideal_a, EInsufficientDeposit);
+                let a_star = safe_mul_div_u64(max_b, reserve_a, reserve_b);
+                assert!(a_star <= max_a, EInsufficientDeposit);
                 assert!(a_star >= min_a, EInsufficientDepositA);
-                (a_star, ideal_b)
+                (a_star, max_b)
             } 
         }
     }

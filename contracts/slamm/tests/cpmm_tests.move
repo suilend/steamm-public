@@ -79,8 +79,8 @@ module slamm::slamm_tests {
         let (lp_coins_2, _) = pool.cpmm_deposit(
             &mut coin_a,
             &mut coin_b,
-            e9(10), // ideal_a
-            e9(10), // ideal_b
+            e9(10), // max_a
+            e9(10), // max_b
             0,
             0,
             ctx,
@@ -203,15 +203,15 @@ module slamm::slamm_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(e9(10), ctx);
 
         let deposit_result = pool.cpmm_quote_deposit(
-            e9(10), // ideal_a
-            e9(10), // ideal_b
+            e9(10), // max_a
+            e9(10), // max_b
         );
         
         let (lp_coins_2, _) = pool.cpmm_deposit(
             &mut coin_a,
             &mut coin_b,
-            e9(10), // ideal_a
-            e9(10), // ideal_b
+            e9(10), // max_a
+            e9(10), // max_b
             deposit_result.deposit_a() + 1, // min_a
             deposit_result.deposit_b() + 1, // min_b
             ctx,
@@ -289,15 +289,15 @@ module slamm::slamm_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(e9(10), ctx);
 
         let deposit_result = pool.cpmm_quote_deposit(
-            e9(10), // ideal_a
-            e9(10), // ideal_b
+            e9(10), // max_a
+            e9(10), // max_b
         );
         
         let (lp_coins_2, _) = pool.cpmm_deposit(
             &mut coin_a,
             &mut coin_b,
-            e9(10), // ideal_a
-            e9(10), // ideal_b
+            e9(10), // max_a
+            e9(10), // max_b
             deposit_result.deposit_a(), // min_a
             deposit_result.deposit_b() + 1, // min_b
             ctx,
@@ -450,8 +450,8 @@ module slamm::slamm_tests {
         let (lp_coins_2, _) = pool.cpmm_deposit(
             &mut coin_a,
             &mut coin_b,
-            e9(10), // ideal_a
-            e9(10), // ideal_b
+            e9(10), // max_a
+            e9(10), // max_b
             0,
             0,
             ctx,
@@ -547,8 +547,8 @@ module slamm::slamm_tests {
         let (lp_coins_2, _) = pool.cpmm_deposit(
             &mut coin_a,
             &mut coin_b,
-            e9(10), // ideal_a
-            e9(10), // ideal_b
+            e9(10), // max_a
+            e9(10), // max_b
             0,
             0,
             ctx,
@@ -838,8 +838,8 @@ module slamm::slamm_tests {
     //     let (lp_coins_2, _) = pool.cpmm_deposit(
     //         &mut coin_a,
     //         &mut coin_b,
-    //         e9(10_000_000), // ideal_a
-    //         e9(10_000_000), // ideal_b
+    //         e9(10_000_000), // max_a
+    //         e9(10_000_000), // max_b
     //         0,
     //         0,
     //         ctx,
