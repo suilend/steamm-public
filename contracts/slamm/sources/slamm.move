@@ -141,6 +141,13 @@ module slamm::pool {
         
             // Transfers amount out
             coin_b.balance_mut().join(self.reserve_b.split(quote.amount_out()));
+            
+            // Update trading data
+            self.trading_data.swap_a_in_amount =
+                self.trading_data.swap_a_in_amount + (quote.amount_in() as u128);
+
+            self.trading_data.swap_b_out_amount =
+                self.trading_data.swap_b_out_amount + (quote.amount_out() as u128);
         } else {
             assert!(quote.amount_out() < self.reserve_a.value(), EOutputAExceedsLiquidity);
             let mut balance_in = coin_b.balance_mut().split(quote.amount_in());
@@ -156,6 +163,13 @@ module slamm::pool {
         
             // Transfers amount out
             coin_a.balance_mut().join(self.reserve_a.split(quote.amount_out()));
+
+            // Update trading data
+            self.trading_data.swap_a_out_amount =
+                self.trading_data.swap_a_out_amount + (quote.amount_in() as u128);
+            
+            self.trading_data.swap_b_in_amount =
+                self.trading_data.swap_b_in_amount + (quote.amount_out() as u128);
         };
 
         // Emit event
