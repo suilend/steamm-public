@@ -136,9 +136,9 @@ module slamm::slamm_tests {
         );
 
         assert_eq(swap_result.a2b(), true);
-        assert_eq(swap_result.protocol_fees(), 4000000000);
-        assert_eq(swap_result.pool_fees(), 2000000000);
-        assert_eq(swap_result.amount_out(), 81239530988208);
+        assert_eq(swap_result.pool_fees(), 1600000000);
+        assert_eq(swap_result.protocol_fees(), 400000000);
+        assert_eq(swap_result.amount_out(), 82637729549181);
 
         destroy(registry);
         destroy(coin_a);
@@ -697,8 +697,8 @@ module slamm::slamm_tests {
         destroy(coin_b);
 
         // Swap first pool
-        let expected_protocol_fees = 20_000_000_000_000;
-        let expected_pool_fees = 10_000_000_000_000;
+        let expected_pool_fees = 8_000_000_000_000;
+        let expected_protocol_fees = 2_000_000_000_000;
 
         test_scenario::next_tx(&mut scenario, TRADER);
         let ctx = ctx(&mut scenario);
@@ -716,8 +716,8 @@ module slamm::slamm_tests {
         );
 
         assert_eq(swap_result.a2b(), true);
-        assert_eq(swap_result.protocol_fees(), expected_protocol_fees);
         assert_eq(swap_result.pool_fees(), expected_pool_fees);
+        assert_eq(swap_result.protocol_fees(), expected_protocol_fees);
 
         destroy(coin_a);
         destroy(coin_b);

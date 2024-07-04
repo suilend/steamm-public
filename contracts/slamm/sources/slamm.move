@@ -16,7 +16,7 @@ module slamm::pool {
     public use fun slamm::cpmm::k as Pool.cpmm_k;
 
     // Consts
-    const SWAP_FEE_NUMERATOR: u64 = 200;
+    const SWAP_FEE_NUMERATOR: u64 = 2_000;
     const SWAP_FEE_DENOMINATOR: u64 = 10_000;
     const MINIMUM_LIQUIDITY: u64 = 10;
 
@@ -310,8 +310,9 @@ module slamm::pool {
         let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees.fee_ratio();
         let (pool_fee_num, pool_fee_denom) = self.pool_fees.fee_ratio();
         
-        let protocol_fees = safe_mul_div_u64(amount_in, protocol_fee_num, protocol_fee_denom);
-        let pool_fees = safe_mul_div_u64(amount_in, pool_fee_num, pool_fee_denom);
+        let total_fees = safe_mul_div_u64(amount_in, pool_fee_num, pool_fee_denom);
+        let protocol_fees = safe_mul_div_u64(total_fees, protocol_fee_num, protocol_fee_denom);
+        let pool_fees = total_fees - protocol_fees;
         let net_amount_in = amount_in - protocol_fees - pool_fees;
 
         swap_inputs(net_amount_in, protocol_fees, pool_fees)

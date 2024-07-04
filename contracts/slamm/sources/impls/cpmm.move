@@ -11,7 +11,7 @@ module slamm::cpmm {
 
     /// Hook type for the constant-product AMM implementation. Serves as both
     /// the hook's witness (authentication) as well as it wraps around the pool
-    /// creator's witness.admin_fees
+    /// creator's witness.
     /// 
     /// This has the advantage that we do not require an extra generic
     /// type on the `Pool` object.
