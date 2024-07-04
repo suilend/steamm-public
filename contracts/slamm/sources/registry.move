@@ -3,17 +3,18 @@
 module slamm::registry {
     use sui::table::{Self, Table};
     use std::type_name::{Self, TypeName};
+    use slamm::global_admin::GlobalAdmin;
 
     // === Errors ===
     const EIncorrectVersion: u64 = 1;
     const EDuplicatedPoolType: u64 = 2;
 
     // === Constants ===
-    const CURRENT_VERSION: u64 = 1;
+    const CURRENT_VERSION: u16 = 1;
 
     public struct Registry has key {
         id: UID,
-        version: u64,
+        version: u16,
         amms: Table<TypeName, ID>
     }
 
@@ -28,12 +29,39 @@ module slamm::registry {
     }
 
     public(package) fun add_amm<AMM: key>(registry: &mut Registry, pool: &AMM) {
-        assert!(registry.version == CURRENT_VERSION, EIncorrectVersion);
+        registry.assert_version_and_upgrade();
         
         let amm_type = type_name::get<AMM>();
         assert!(!table::contains(&registry.amms, amm_type), EDuplicatedPoolType);
 
         table::add(&mut registry.amms, amm_type, object::id(pool));
+    }
+
+    // ===== Versioning =====
+
+    fun assert_version(self: &Registry) {
+        assert!(self.version == CURRENT_VERSION, EIncorrectVersion);
+    }
+
+    fun assert_version_and_upgrade(self: &mut Registry) {
+        if (self.version < CURRENT_VERSION) {
+            self.version = CURRENT_VERSION;
+        };
+        assert_version(self);
+    }
+    
+    entry fun migrate_as_global_admin(
+        self: &mut Registry,
+        _admin: &GlobalAdmin,
+    ) {
+        migrate_(self);
+    }
+
+    fun migrate_(
+        self: &mut Registry
+    ) {
+        assert!(self.version < CURRENT_VERSION, EIncorrectVersion);
+        self.version = CURRENT_VERSION;
     }
 
     #[test_only]

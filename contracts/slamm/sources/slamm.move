@@ -19,18 +19,20 @@ module slamm::pool {
     const SWAP_FEE_NUMERATOR: u64 = 2_000;
     const SWAP_FEE_DENOMINATOR: u64 = 10_000;
     const MINIMUM_LIQUIDITY: u64 = 10;
+    const CURRENT_VERSION: u16 = 1;
 
     // Error codes
-    const EFeeAbove100Percent: u64 = 0;
-    const ESwapExceedsSlippage: u64 = 1;
-    const EOutputAExceedsLiquidity: u64 = 2;
-    const EOutputBExceedsLiquidity: u64 = 3;
-    const EInsufficientDepositB: u64 = 4;
-    const EInsufficientDepositA: u64 = 5;
-    const EInsufficientDeposit: u64 = 6;
-    const ERedeemSlippageAExceeded: u64 = 7;
-    const ERedeemSlippageBExceeded: u64 = 8;
-    const ELpSupplyToReserveRatioViolation: u64 = 9;
+    const EIncorrectVersion: u64 = 0;
+    const EFeeAbove100Percent: u64 = 1;
+    const ESwapExceedsSlippage: u64 = 2;
+    const EOutputAExceedsLiquidity: u64 = 3;
+    const EOutputBExceedsLiquidity: u64 = 4;
+    const EInsufficientDepositB: u64 = 5;
+    const EInsufficientDepositA: u64 = 6;
+    const EInsufficientDeposit: u64 = 7;
+    const ERedeemSlippageAExceeded: u64 = 8;
+    const ERedeemSlippageBExceeded: u64 = 9;
+    const ELpSupplyToReserveRatioViolation: u64 = 10;
 
     /// Marker type for the LP coins of a pool. There can only be one
     /// pool per type, albeit given the permissionless aspect of the pool
@@ -41,7 +43,7 @@ module slamm::pool {
     /// type on the `LP` as well as on the `Pool`
     public struct LP<phantom A, phantom B, phantom Hook: drop> has copy, drop {}
 
-    public struct PoolCap<phantom A, phantom B, phantom Hook: drop> {
+    public struct PoolCap<phantom A, phantom B, phantom Hook: drop> has key {
         id: UID,
         pool_id: ID,
     }
@@ -55,6 +57,7 @@ module slamm::pool {
         protocol_fees: Fees<A, B>,
         pool_fees: FeeData,
         trading_data: TradingData,
+        version: u16,
     }
 
     public struct TradingData has store {
@@ -93,6 +96,7 @@ module slamm::pool {
                 swap_a_out_amount: 0,
                 swap_b_in_amount: 0,
             },
+            version: CURRENT_VERSION,
         };
 
         registry.add_amm(&pool);
@@ -124,6 +128,8 @@ module slamm::pool {
         min_amount_out: u64,
         ctx: &mut TxContext,
     ): SwapResult {
+        self.assert_version_and_upgrade();
+
         assert!(quote.amount_out() > min_amount_out, ESwapExceedsSlippage);
 
         if (quote.a2b()) {
@@ -198,6 +204,8 @@ module slamm::pool {
         min_b: u64,
         ctx:  &mut TxContext,
     ): (Coin<LP<A, B, Hook>>, DepositResult) {
+        self.assert_version_and_upgrade();
+
         let initial_lp_supply = self.lp_supply.supply_value();
         let initial_reserve_a = self.reserve_a.value();
 
@@ -258,6 +266,8 @@ module slamm::pool {
         min_b: u64,
         ctx:  &mut TxContext,
     ): (Coin<A>, Coin<B>, RedeemResult) {
+        self.assert_version_and_upgrade();
+
         let initial_lp_supply = self.lp_supply.supply_value();
         let initial_reserve_a = self.reserve_a.value();
         let lp_burn = lp_tokens.value();
@@ -306,7 +316,7 @@ module slamm::pool {
         (base_tokens, quote_tokens, result)
     }
 
-    public fun compute_fees<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, amount_in: u64): SwapInputs {
+    public(package) fun compute_fees<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, amount_in: u64): SwapInputs {
         let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees.fee_ratio();
         let (pool_fee_num, pool_fee_denom) = self.pool_fees.fee_ratio();
         
@@ -387,6 +397,7 @@ module slamm::pool {
         self: &mut Pool<A, B, Hook, State>,
         ctx: &mut TxContext,
     ): (Coin<A>, Coin<B>) {
+        self.assert_version_and_upgrade();
 
         let (fees_a, fees_b) = self.protocol_fees.withdraw();
 
@@ -396,6 +407,44 @@ module slamm::pool {
         )
     }
 
+    // ===== Versioning =====
+
+    fun assert_version<A, B, Hook: drop, State: store>(
+        self: &Pool<A, B, Hook, State>,
+    ) {
+            assert!(self.version == CURRENT_VERSION, EIncorrectVersion);
+    }
+
+    fun assert_version_and_upgrade<A, B, Hook: drop, State: store>(
+        self: &mut Pool<A, B, Hook, State>,
+    ) {
+        if (self.version < CURRENT_VERSION) {
+            self.version = CURRENT_VERSION;
+        };
+        assert_version(self);
+    }
+    
+    entry fun migrate<A, B, Hook: drop, State: store>(
+        self: &mut Pool<A, B, Hook, State>,
+        _cap: &PoolCap<A, B, Hook>,
+    ) {
+        self.migrate_();
+    }
+    
+    entry fun migrate_as_global_admin<A, B, Hook: drop, State: store>(
+        self: &mut Pool<A, B, Hook, State>,
+        _admin: &GlobalAdmin,
+    ) {
+        self.migrate_();
+    }
+
+    fun migrate_<A, B, Hook: drop, State: store>(
+        self: &mut Pool<A, B, Hook, State>,
+    ) {
+        assert!(self.version < CURRENT_VERSION, EIncorrectVersion);
+        self.version = CURRENT_VERSION;
+    }
+    
     // ===== Private endpoints =====
 
     fun quote_deposit_impl<A, B, Hook: drop, State: store>(
