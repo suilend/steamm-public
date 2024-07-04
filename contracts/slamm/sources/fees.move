@@ -15,7 +15,7 @@ module slamm::fees {
         acc_fees_a: u64,
         acc_fees_b: u64,
     }
-    
+
     public(package) fun new<A, B>(
         swap_fee_numerator: u64,
         swap_fee_denominator: u64,

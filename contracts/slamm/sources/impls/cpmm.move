@@ -45,7 +45,6 @@ module slamm::cpmm {
         (pool, pool_cap)
     }
 
-    
 
     public fun swap<A, B, W: drop>(
         self: &mut Pool<A, B, Hook<W>, State>,
@@ -68,10 +67,8 @@ module slamm::cpmm {
             Hook<W> {},
             coin_a,
             coin_b,
-            amount_in,
-            quote.amount_out(),
+            quote,
             min_amount_out,
-            a2b,
             ctx,
         );
 
@@ -89,29 +86,27 @@ module slamm::cpmm {
         a2b: bool,
     ): SwapQuote {
         let (reserve_a, reserve_b) = self.reserves();
-        let (net_amount_in, protocol_fees, admin_fees) = self.net_amount_in(amount_in);
+        let inputs = self.compute_fees(amount_in);
 
         let amount_out = if (a2b) {
             // IN: A && OUT: B
             quote_swap_(
                 reserve_b, // reserve_out
                 reserve_a, // reserve_in
-                net_amount_in, // amount_in
+                inputs.amount_in_net(), // amount_in net of fees
             )
         } else {
             // IN: B && OUT: A
             quote_swap_(
                 reserve_a, // reserve_out
                 reserve_b, // reserve_in
-                net_amount_in, // amount_in
+                inputs.amount_in_net(), // amount_in net of fees
             )
         };
 
         quote::swap_quote(
-            amount_in,
+            inputs,
             amount_out,
-            protocol_fees,
-            admin_fees,
             a2b,
         )
     }
