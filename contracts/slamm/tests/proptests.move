@@ -1,19 +1,16 @@
 #[test_only]
 module slamm::proptests {
-    use slamm::pool::{Self, minimum_liquidity};
     use slamm::registry;
-    use slamm::global_admin;
     use slamm::cpmm::{Self};
     use slamm::test_utils::COIN;
     use sui::test_scenario::{Self, ctx};
     use sui::sui::SUI;
     use sui::random;
     use sui::coin::{Self};
-    use sui::test_utils::{destroy, assert_eq};
+    use sui::test_utils::{destroy};
 
     const ADMIN: address = @0x10;
     const POOL_CREATOR: address = @0x11;
-    const LP_PROVIDER: address = @0x12;
     const TRADER: address = @0x13;
 
     public struct Wit has drop {}
@@ -86,11 +83,6 @@ module slamm::proptests {
 
             trades = trades - 1;
         };
-
-        // assert_eq(swap_result.a2b(), true);
-        // assert_eq(swap_result.pool_fees(), 1600000000);
-        // assert_eq(swap_result.protocol_fees(), 400000000);
-        // assert_eq(swap_result.amount_out(), 82637729549181);
 
         destroy(registry);
         destroy(pool);

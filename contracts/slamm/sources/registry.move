@@ -5,12 +5,14 @@ module slamm::registry {
     use std::type_name::{Self, TypeName};
     use slamm::global_admin::GlobalAdmin;
 
-    // === Errors ===
+    // ===== Constants =====
+
+    const CURRENT_VERSION: u16 = 1;
+
+    // ===== Errors =====
+
     const EIncorrectVersion: u64 = 1;
     const EDuplicatedPoolType: u64 = 2;
-
-    // === Constants ===
-    const CURRENT_VERSION: u16 = 1;
 
     public struct Registry has key {
         id: UID,
@@ -38,17 +40,6 @@ module slamm::registry {
     }
 
     // ===== Versioning =====
-
-    fun assert_version(self: &Registry) {
-        assert!(self.version == CURRENT_VERSION, EIncorrectVersion);
-    }
-
-    fun assert_version_and_upgrade(self: &mut Registry) {
-        if (self.version < CURRENT_VERSION) {
-            self.version = CURRENT_VERSION;
-        };
-        assert_version(self);
-    }
     
     entry fun migrate_as_global_admin(
         self: &mut Registry,
@@ -63,6 +54,19 @@ module slamm::registry {
         assert!(self.version < CURRENT_VERSION, EIncorrectVersion);
         self.version = CURRENT_VERSION;
     }
+
+    fun assert_version(self: &Registry) {
+        assert!(self.version == CURRENT_VERSION, EIncorrectVersion);
+    }
+
+    fun assert_version_and_upgrade(self: &mut Registry) {
+        if (self.version < CURRENT_VERSION) {
+            self.version = CURRENT_VERSION;
+        };
+        assert_version(self);
+    }
+
+    // ===== Tests =====
 
     #[test_only]
     public fun init_for_testing(ctx: &mut TxContext): Registry {
