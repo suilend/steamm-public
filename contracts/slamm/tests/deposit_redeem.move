@@ -31,6 +31,116 @@ module slamm::deposit_redeem {
     }
 
     #[test]
+    fun test_simple_deposit() {
+        let pool = test_utils::new_for_testing(
+            5,
+            1,
+            sqrt_u128(5 as u128) as u64,
+            0,
+        );
+
+        let quote = pool.quote_deposit_impl_test(
+            5, // max_base
+            5, // max_quote,
+            0, // min_a
+            0, // min_b
+        );
+
+        assert_eq(quote.initial_deposit(), false);
+        assert_eq(quote.deposit_a(), 5);
+        assert_eq(quote.deposit_b(), 1);
+        assert_eq(quote.mint_lp(), 2);
+
+        destroy(pool);
+    }
+    
+    #[test]
+    fun test_simple_redeem() {
+        let pool = test_utils::new_for_testing(
+            6,
+            6,
+            6,
+            0,
+        );
+
+        let quote = pool.quote_redeem_impl_test(
+            2, // lp_tokens
+            0, // min_a
+            0, // min_b
+        );
+
+        assert_eq(quote.withdraw_a(), 2);
+        assert_eq(quote.withdraw_b(), 2);
+
+        destroy(pool);
+    }
+    
+    #[test]
+    #[expected_failure(abort_code = pool::ERedeemSlippageAExceeded)]
+    fun test_fail_min_a_too_high() {
+        let pool = test_utils::new_for_testing(
+            6,
+            6,
+            6,
+            0,
+        );
+
+        let quote = pool.quote_redeem_impl_test(
+            2, // lp_tokens
+            99_999, // min_a
+            0, // min_b
+        );
+
+        assert_eq(quote.withdraw_a(), 2);
+        assert_eq(quote.withdraw_b(), 2);
+
+        destroy(pool);
+    }
+    
+    #[test]
+    #[expected_failure(abort_code = pool::ERedeemSlippageBExceeded)]
+    fun test_fail_min_b_too_high() {
+        let pool = test_utils::new_for_testing(
+            6,
+            6,
+            6,
+            0,
+        );
+
+        let quote = pool.quote_redeem_impl_test(
+            2, // lp_tokens
+            0, // min_a
+            99_999, // min_b
+        );
+
+        assert_eq(quote.withdraw_a(), 2);
+        assert_eq(quote.withdraw_b(), 2);
+
+        destroy(pool);
+    }
+    
+    #[test]
+    fun test_last_redeem() {
+        let pool = test_utils::new_for_testing(
+            6,
+            6,
+            6,
+            0,
+        );
+
+        let quote = pool.quote_redeem_impl_test(
+            6, // lp_tokens
+            0, // min_a
+            0, // min_b
+        );
+
+        assert_eq(quote.withdraw_a(), 6);
+        assert_eq(quote.withdraw_b(), 6);
+
+        destroy(pool);
+    }
+
+    #[test]
     fun test_deposit_liquidity_inner() {
         let (delta_a, delta_b, lp_tokens) = quote_deposit_test(
             50_000_000, // reserve_a
@@ -133,30 +243,6 @@ module slamm::deposit_redeem {
         assert_eq(delta_, 886029611);
         assert_eq(delta_b, 656376365);
         assert_eq(lp_tokens, 251342774830);
-    }
-    
-    #[test]
-    fun test_simple_deposit() {
-        let pool = test_utils::new_for_testing(
-            5,
-            1,
-            sqrt_u128(5 as u128) as u64,
-            0,
-        );
-
-        let quote = pool.quote_deposit_impl_test(
-            5, // max_base
-            5, // max_quote,
-            0, // min_a
-            0, // min_b
-        );
-
-        assert_eq(quote.initial_deposit(), false);
-        assert_eq(quote.deposit_a(), 5);
-        assert_eq(quote.deposit_b(), 1);
-        assert_eq(quote.mint_lp(), 2);
-
-        destroy(pool);
     }
     
     #[test]
