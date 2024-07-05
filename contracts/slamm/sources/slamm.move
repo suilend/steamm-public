@@ -128,6 +128,24 @@ module slamm::pool {
     
     // ===== Hook Methods =====
 
+    /// Initializes and returns a new AMM Pool along with its associated PoolCap.
+    /// The pool is initialized with zero reserves for both coin types `A` and `B`,
+    /// specified protocol fees, and the provided swap fee. The pool's LP supply
+    /// object is initialized at zero supply and the pool is added to the `registry`.
+    ///
+    /// This function is meant to be called by the hook module and therefore it
+    /// it witness-protected.
+    ///
+    /// # Returns
+    ///
+    /// A tuple containing:
+    /// - `Pool<A, B, Hook, State>`: The created AMM pool object.
+    /// - `PoolCap<A, B, Hook>`: The associated pool capability object.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if `swap_fee_bps` is greater than or equal to
+    /// `SWAP_FEE_DENOMINATOR`
     public(package) fun new<A, B, Hook: drop, State: store>(
         _witness: Hook,
         registry: &mut Registry,
@@ -176,6 +194,24 @@ module slamm::pool {
         (pool, pool_cap)
     }
 
+    /// Executes inner swap logic that is generalised accross all hooks. It takes
+    /// care of fee handling, management of reserve inputs and outputs as well
+    /// as slippage protections.
+    /// 
+    /// This function is meant to be called by the hook module and therefore it
+    /// it witness-protected.
+    ///
+    /// # Returns
+    ///
+    /// `SwapResult`: An object containing details of the executed swap,
+    /// including input and output amounts, fees, and the direction of the swap.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if:
+    /// - `quote.amount_out()` is zero
+    /// - `quote.amount_out()` is less than `min_amount_out`
+    /// - if the `quote.amount_out()` exceeds the funds in the assocatied reserve
     #[allow(unused_mut_parameter)]
     public(package) fun swap<A, B, Hook: drop, State: store>(
         self: &mut Pool<A, B, Hook, State>,
@@ -267,6 +303,23 @@ module slamm::pool {
     
     // ===== Public Methods =====
 
+    /// Adds liquidity to the AMM Pool and mints LP tokens for the depositor.
+    /// In respect to the initial deposit, the first supply value `minimum_liquidity`
+    /// is frozen to prevent inflation attacks. /// This function ensures that
+    /// liquidity is added to the pool in a balanced manner,
+    /// maintaining the pool's reserves and LP supply ratio.
+    /// 
+    /// # Returns
+    ///
+    /// A tuple containing:
+    /// - `Coin<LP<A, B, Hook>>`: The minted LP tokens for the depositor.
+    /// - `DepositResult`: An object containing details of the deposit, including the amounts of coins `A` and `B` deposited and the number of LP tokens minted.
+    ///
+    /// # Panics
+    ///
+    /// - If `max` params lead to an invalid ratio
+    /// - If resulting deposit amounts violate slippage defined by `min` params
+    /// - If results in an inconsisten reserve-to-LP supply ratio
     public fun deposit_liquidity<A, B, Hook: drop, State: store>(
         self: &mut Pool<A, B, Hook, State>,
         coin_a: &mut Coin<A>,
@@ -330,6 +383,25 @@ module slamm::pool {
         (lp_coins, result)
     }
     
+    /// Redeems liquidity from the AMM Pool by burning LP tokens and
+    /// withdrawing the corresponding coins `A` and `B`.
+    ///
+    /// Liquidity is redeemed from the pool in a balanced manner,
+    /// maintaining the pool's reserves and LP supply ratio.
+    ///
+    /// # Returns
+    ///
+    /// A tuple containing:
+    /// - `Coin<A>`: The withdrawn amount of coin `A`.
+    /// - `Coin<B>`: The withdrawn amount of coin `B`.
+    /// - `RedeemResult`: An object containing details of the redeem transaction,
+    /// including the amounts of coins `A` and `B` withdrawn and the
+    /// number of LP tokens burned.
+    ///
+    /// # Panics
+    ///
+    /// - If it results in an inconsistent reserve-to-LP supply ratio
+    /// - If it results in withdraw amounts that violate the slippage `min` params
     public fun redeem_liquidity<A, B, Hook: drop, State: store>(
         self: &mut Pool<A, B, Hook, State>,
         lp_tokens: Coin<LP<A, B, Hook>>,
@@ -844,6 +916,21 @@ module slamm::pool {
             self,
             ideal_a,
             ideal_b,
+            min_a,
+            min_b,
+        )
+    }
+
+    #[test_only]
+    public(package)fun quote_redeem_impl_test<A, B, Hook: drop, State: store>(
+        self: &Pool<A, B, Hook, State>,
+        lp_tokens: u64,
+        min_a: u64,
+        min_b: u64,
+    ): RedeemQuote {
+        quote_redeem_impl(
+            self,
+            lp_tokens,
             min_a,
             min_b,
         )
