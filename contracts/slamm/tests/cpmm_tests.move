@@ -1,12 +1,10 @@
-// TODO:
-// - Test swapping with highly imbalanced pool
-// - Test guarantee fees can't be syphoned
 #[test_only]
 module slamm::slamm_tests {
-    // use std::debug::print;
     use slamm::pool::{Self, minimum_liquidity};
     use slamm::registry;
+    use slamm::global_admin;
     use slamm::cpmm::{Self};
+    use slamm::test_utils::COIN;
     use sui::test_scenario::{Self, ctx};
     use sui::sui::SUI;
     use sui::coin::{Self};
@@ -19,12 +17,179 @@ module slamm::slamm_tests {
 
     public struct Wit has drop {}
     public struct Wit2 has drop {}
-    public struct COIN has drop {}
 
     fun e9(amt: u64): u64 {
         1_000_000_000 * amt
     }
 
+    #[test]
+    fun test_full_amm_cycle() {
+        let mut scenario = test_scenario::begin(ADMIN);
+
+        // Init Pool
+        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+        let ctx = ctx(&mut scenario);
+
+        let mut registry = registry::init_for_testing(ctx);
+
+        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+            Wit {},
+            &mut registry,
+            100, // admin fees BPS
+            ctx,
+        );
+
+        let mut coin_a = coin::mint_for_testing<SUI>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
+
+        let (lp_coins, _) = pool.deposit_liquidity(
+            &mut coin_a,
+            &mut coin_b,
+            500_000,
+            500_000,
+            0,
+            0,
+            ctx,
+        );
+
+        let (reserve_a, reserve_b) = pool.reserves();
+        let reserve_ratio_0 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
+
+        assert_eq(pool.cpmm_k(), 500_000 * 500_000);
+        assert_eq(pool.lp_supply_val(), 500_000);
+        assert_eq(reserve_a, 500_000);
+        assert_eq(reserve_b, 500_000);
+        assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
+        assert_eq(pool.pool_fees().acc_fees_a(), 0);
+        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+
+        destroy(coin_a);
+        destroy(coin_b);
+
+        // Deposit liquidity
+        test_scenario::next_tx(&mut scenario, LP_PROVIDER);
+        let ctx = ctx(&mut scenario);
+
+        let mut coin_a = coin::mint_for_testing<SUI>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
+
+        let (lp_coins_2, _) = pool.deposit_liquidity(
+            &mut coin_a,
+            &mut coin_b,
+            500_000, // max_a
+            500_000, // max_b
+            0,
+            0,
+            ctx,
+        );
+
+        assert_eq(coin_a.value(), 0);
+        assert_eq(coin_b.value(), 0);
+        assert_eq(lp_coins_2.value(), 500_000);
+        assert_eq(pool.lp_supply_val(), 500_000 + 500_000);
+
+        let (reserve_a, reserve_b) = pool.reserves();
+        let reserve_ratio_1 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
+        assert_eq(reserve_ratio_0, reserve_ratio_1);
+
+        destroy(coin_a);
+        destroy(coin_b);
+
+        // Redeem liquidity
+        test_scenario::next_tx(&mut scenario, LP_PROVIDER);
+        let ctx = ctx(&mut scenario);
+
+        let (coin_a, coin_b, _) = pool.redeem_liquidity(
+            lp_coins_2,
+            0,
+            0,
+            ctx,
+        );
+
+        // Guarantees that roundings are in favour of the pool
+        assert_eq(coin_a.value(), 500_000);
+        assert_eq(coin_b.value(), 500_000);
+
+        let (reserve_a, reserve_b) = pool.reserves();
+        let reserve_ratio_2 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
+        assert_eq(reserve_ratio_0, reserve_ratio_2);
+
+        destroy(coin_a);
+        destroy(coin_b);
+
+        // Swap
+        test_scenario::next_tx(&mut scenario, TRADER);
+        let ctx = ctx(&mut scenario);
+
+        let mut coin_a = coin::mint_for_testing<SUI>(e9(200), ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
+
+        let swap_result = pool.cpmm_swap(
+            &mut coin_a,
+            &mut coin_b,
+            50_000,
+            0,
+            true, // a2b
+            ctx,
+        );
+
+        assert_eq(swap_result.a2b(), true);
+        assert_eq(swap_result.pool_fees(), 400);
+        assert_eq(swap_result.protocol_fees(), 100);
+        assert_eq(swap_result.amount_out(), 45040);
+
+        destroy(coin_a);
+        destroy(coin_b);
+
+        // Redeem remaining liquidity
+        test_scenario::next_tx(&mut scenario, LP_PROVIDER);
+        let ctx = ctx(&mut scenario);
+
+        let (coin_a, coin_b, _) = pool.redeem_liquidity(
+            lp_coins,
+            0,
+            0,
+            ctx,
+        );
+
+        let (reserve_a, reserve_b) = pool.reserves();
+
+        // Guarantees that roundings are in favour of the pool
+        assert_eq(coin_a.value(), 549_889);
+        assert_eq(coin_b.value(), 454_950);
+        assert_eq(reserve_a, 11);
+        assert_eq(reserve_b, 10);
+        assert_eq(pool.lp_supply_val(), minimum_liquidity());
+
+        destroy(coin_a);
+        destroy(coin_b);
+
+        // Collect Protocol fees
+        let global_admin = global_admin::init_for_testing(ctx);
+        let (coin_a, coin_b) = pool.collect_protocol_fees(&global_admin, ctx);
+
+        assert_eq(coin_a.value(), 100);
+        assert_eq(coin_b.value(), 0);
+        assert_eq(pool.protocol_fees().fee_data().acc_fees_a(), 100);
+        assert_eq(pool.protocol_fees().fee_data().acc_fees_b(), 0);
+        assert_eq(pool.pool_fees().acc_fees_a(), 400);
+        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+        
+        assert_eq(pool.trading_data().total_swap_a_in_amount(), 50_000);
+        assert_eq(pool.trading_data().total_swap_b_out_amount(), 45040);
+        assert_eq(pool.trading_data().total_swap_a_out_amount(), 0);
+        assert_eq(pool.trading_data().total_swap_b_in_amount(), 0);
+
+        destroy(coin_a);
+        destroy(coin_b);
+        destroy(registry);
+        destroy(pool);
+        destroy(pool_cap);
+        destroy(global_admin);
+        test_scenario::end(scenario);
+    }
+    
+    
     #[test]
     fun test_slamm() {
         let mut scenario = test_scenario::begin(ADMIN);
@@ -145,6 +310,129 @@ module slamm::slamm_tests {
         destroy(coin_b);
         destroy(pool);
         destroy(lp_coins);
+        destroy(pool_cap);
+        test_scenario::end(scenario);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = pool::ESwapOutputAmountIsZero)]
+    fun test_fail_handle_full_precision_loss_from_highly_imbalanced_pool() {
+        let mut scenario = test_scenario::begin(ADMIN);
+
+        // Init Pool
+        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+        let ctx = ctx(&mut scenario);
+
+        let mut registry = registry::init_for_testing(ctx);
+
+        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+            Wit {},
+            &mut registry,
+            100, // admin fees BPS
+            ctx,
+        );
+
+        let mut coin_a = coin::mint_for_testing<SUI>(500_000_000_000_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(1, ctx);
+
+        let (lp_coins, _) = pool.deposit_liquidity(
+            &mut coin_a,
+            &mut coin_b,
+            500_000_000_000_000,
+            1,
+            0,
+            0,
+            ctx,
+        );
+
+        destroy(coin_a);
+        destroy(coin_b);
+
+        // // Swap
+        test_scenario::next_tx(&mut scenario, TRADER);
+        let ctx = ctx(&mut scenario);
+
+        let mut coin_a = coin::mint_for_testing<SUI>(50_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
+
+        let _swap_result = pool.cpmm_swap(
+            &mut coin_a,
+            &mut coin_b,
+            50_000,
+            0,
+            true, // a2b
+            ctx,
+        );
+
+        destroy(coin_a);
+        destroy(coin_b);
+        destroy(registry);
+        destroy(lp_coins);
+        destroy(pool);
+        destroy(pool_cap);
+        test_scenario::end(scenario);
+    }
+    
+    #[test]
+    fun test_trade_that_balances_highly_imbalanced_pool() {
+        let mut scenario = test_scenario::begin(ADMIN);
+
+        // Init Pool
+        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+        let ctx = ctx(&mut scenario);
+
+        let mut registry = registry::init_for_testing(ctx);
+
+        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+            Wit {},
+            &mut registry,
+            100, // admin fees BPS
+            ctx,
+        );
+
+        let mut coin_a = coin::mint_for_testing<SUI>(500_000_000_000_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(1, ctx);
+
+        let (lp_coins, _) = pool.deposit_liquidity(
+            &mut coin_a,
+            &mut coin_b,
+            500_000_000_000_000,
+            1,
+            0,
+            0,
+            ctx,
+        );
+
+        destroy(coin_a);
+        destroy(coin_b);
+
+        // Swap
+        test_scenario::next_tx(&mut scenario, TRADER);
+        let ctx = ctx(&mut scenario);
+
+        let mut coin_a = coin::mint_for_testing<SUI>(0, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(10_000_000_000_000, ctx);
+
+        let swap_result = pool.cpmm_swap(
+            &mut coin_a,
+            &mut coin_b,
+            10_000_000_000_000,
+            0,
+            false, // a2b
+            ctx,
+        );
+
+        assert_eq(swap_result.amount_out(), 499999999999949);
+        assert_eq(swap_result.amount_in(), 10000000000000);
+        assert_eq(swap_result.protocol_fees(), 20000000000);
+        assert_eq(swap_result.pool_fees(), 80000000000);
+        assert_eq(swap_result.a2b(), false);
+
+        destroy(coin_a);
+        destroy(coin_b);
+        destroy(registry);
+        destroy(lp_coins);
+        destroy(pool);
         destroy(pool_cap);
         test_scenario::end(scenario);
     }
@@ -785,124 +1073,4 @@ module slamm::slamm_tests {
         destroy(pool_cap_2);
         test_scenario::end(scenario);
     }
-
-    // #[test]
-    // fun test_fees_cannot_be_syphoned_by_large_lp_deposit() {
-    //     let mut scenario = test_scenario::begin(ADMIN);
-
-    //     // Init Pool
-    //     test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-    //     let ctx = ctx(&mut scenario);
-
-    //     let mut registry = registry::init_for_testing(ctx);
-
-    //     let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
-    //         Wit {},
-    //         &mut registry,
-    //         100, // admin fees BPS
-    //         ctx,
-    //     );
-
-    //     let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000), ctx);
-    //     let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
-
-    //     let (lp_coins, _) = pool.deposit_liquidity(
-    //         &mut coin_a,
-    //         &mut coin_b,
-    //         e9(1_000),
-    //         e9(1_000),
-    //         0,
-    //         0,
-    //         ctx,
-    //     );
-
-    //     destroy(coin_a);
-    //     destroy(coin_b);
-
-
-    //     // Assume a trading occurs and pool fees accumulate
-    //     let pool_fees = pool.pool_fees_mut_for_testing();
-    //     let (fees_a, fees_b) = pool_fees.balances_mut_for_testing();
-
-    //     fees_a.join(balance::create_for_testing(100));
-    //     fees_b.join(balance::create_for_testing(100));
-
-
-    //     // Deposit liquidity
-    //     test_scenario::next_tx(&mut scenario, LP_PROVIDER);
-    //     let ctx = ctx(&mut scenario);
-
-    //     let mut coin_a = coin::mint_for_testing<SUI>(e9(10), ctx);
-    //     let mut coin_b = coin::mint_for_testing<COIN>(e9(10), ctx);
-
-    //     let (lp_coins_2, _) = pool.deposit_liquidity(
-    //         &mut coin_a,
-    //         &mut coin_b,
-    //         e9(10_000_000), // max_a
-    //         e9(10_000_000), // max_b
-    //         0,
-    //         0,
-    //         ctx,
-    //     );
-
-    //     destroy(coin_a);
-    //     destroy(coin_b);
-
-    //     // Redeem liquidity
-    //     test_scenario::next_tx(&mut scenario, LP_PROVIDER);
-    //     let ctx = ctx(&mut scenario);
-
-    //     let (coin_a, coin_b) = pool.redeem_liquidity(
-    //         lp_coins_2,
-    //         0,
-    //         0,
-    //         ctx,
-    //     );
-
-    //     // Guarantees that roundings are in favour of the pool
-    //     assert_eq(coin_a.value(), 20_000_000 - 1); // -1 for the rounddown
-    //     assert_eq(coin_b.value(), e9(10) - 12); // double rounddown: inital lp tokens minted + redeed
-
-    //     let (reserve_a, reserve_b) = pool.reserves();
-    //     let reserve_ratio_2 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
-    //     assert_eq(reserve_ratio_0, reserve_ratio_2);
-
-    //     destroy(coin_a);
-    //     destroy(coin_b);
-
-    //     // Swap
-    //     test_scenario::next_tx(&mut scenario, TRADER);
-    //     let ctx = ctx(&mut scenario);
-
-    //     let mut coin_a = coin::mint_for_testing<SUI>(e9(200), ctx);
-    //     let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
-
-    //     let swap_request = pool.swap_request(
-    //         &mut coin_a,
-    //         &mut coin_b,
-    //         e9(200),
-    //         0,
-    //         true, // a2b
-    //     );
-
-    //     let swap_result = pool.cpmm_swap(
-    //         &mut coin_a,
-    //         &mut coin_b,
-    //         swap_request,
-    //         ctx,
-    //     );
-
-    //     assert_eq(swap_result.a2b(), true);
-    //     assert_eq(swap_result.protocol_fees(), 4000000000);
-    //     assert_eq(swap_result.pool_fees(), 2000000000);
-    //     assert_eq(swap_result.amount_out(), 81239530988208);
-
-    //     destroy(registry);
-    //     destroy(coin_a);
-    //     destroy(coin_b);
-    //     destroy(pool);
-    //     destroy(lp_coins);
-    //     destroy(pool_cap);
-    //     test_scenario::end(scenario);
-    // }
 }

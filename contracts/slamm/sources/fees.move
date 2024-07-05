@@ -16,6 +16,8 @@ module slamm::fees {
         acc_fees_b: u64,
     }
 
+    // ===== Package Functions =====
+
     public(package) fun new<A, B>(
         swap_fee_numerator: u64,
         swap_fee_denominator: u64,
@@ -97,7 +99,7 @@ module slamm::fees {
         )
     }
 
-    // ===== Public View Functions =====
+    // ===== View Functions =====
 
     public fun balances<A, B>(
         self: &Fees<A, B>,

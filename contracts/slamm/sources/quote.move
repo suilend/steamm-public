@@ -1,4 +1,4 @@
-/// Module for informative structs which provide the output of a given quotation.
+/// Module for informative structs which provide the input/outputs of a given quotation.
 module slamm::quote {
     public use fun slamm::quote::swap_input_amount_in_net as SwapInputs.amount_in_net;
     public use fun slamm::quote::swap_input_protocol_fees as SwapInputs.protocol_fees;

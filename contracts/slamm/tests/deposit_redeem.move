@@ -1,7 +1,34 @@
 #[test_only]
 module slamm::deposit_redeem {
-    use slamm::pool::{quote_deposit_test, quote_redeem_test};
-    use sui::test_utils::{assert_eq};
+    use slamm::pool::{Self, quote_deposit_test, quote_redeem_test};
+    use slamm::test_utils;
+    use sui::test_utils::{destroy, assert_eq};
+    use sui::math::sqrt_u128;
+    use slamm::math::{Self as slamm_math};
+
+    #[test]
+    fun test_initial_deposit() {
+        let pool = test_utils::new_for_testing(
+            0,
+            0,
+            0,
+            0,
+        );
+
+        let quote = pool.quote_deposit_impl_test(
+            5, // max_base
+            5, // max_quote,
+            0, // min_a
+            0, // min_b
+        );
+
+        assert_eq(quote.initial_deposit(), true);
+        assert_eq(quote.deposit_a(), 5);
+        assert_eq(quote.deposit_b(), 5);
+        assert_eq(quote.mint_lp(), 5);
+
+        destroy(pool);
+    }
 
     #[test]
     fun test_deposit_liquidity_inner() {
@@ -106,6 +133,90 @@ module slamm::deposit_redeem {
         assert_eq(delta_, 886029611);
         assert_eq(delta_b, 656376365);
         assert_eq(lp_tokens, 251342774830);
+    }
+    
+    #[test]
+    fun test_simple_deposit() {
+        let pool = test_utils::new_for_testing(
+            5,
+            1,
+            sqrt_u128(5 as u128) as u64,
+            0,
+        );
+
+        let quote = pool.quote_deposit_impl_test(
+            5, // max_base
+            5, // max_quote,
+            0, // min_a
+            0, // min_b
+        );
+
+        assert_eq(quote.initial_deposit(), false);
+        assert_eq(quote.deposit_a(), 5);
+        assert_eq(quote.deposit_b(), 1);
+        assert_eq(quote.mint_lp(), 2);
+
+        destroy(pool);
+    }
+    
+    #[test]
+    #[expected_failure(abort_code = pool::EDepositRatioLeadsToZeroB)]
+    fun test_fail_deposit_ratio_leads_to_zero() {
+        let pool = test_utils::new_for_testing(
+            5,
+            0,
+            sqrt_u128(5 as u128) as u64,
+            0,
+        );
+
+        let _quote = pool.quote_deposit_impl_test(
+            5, // max_base
+            5, // max_quote,
+            0, // min_a
+            0, // min_b
+        );
+
+        destroy(pool);
+    }
+    
+    #[test]
+    #[expected_failure(abort_code = pool::EDepositMaxParamsCantBeZero)]
+    fun test_fail_max_params_as_zero() {
+        let pool = test_utils::new_for_testing(
+            5,
+            5,
+            sqrt_u128(5 as u128) as u64,
+            0,
+        );
+
+        let _quote = pool.quote_deposit_impl_test(
+            0, // max_base
+            0, // max_quote,
+            0, // min_a
+            0, // min_b
+        );
+
+        destroy(pool);
+    }
+    
+    #[test]
+    #[expected_failure(abort_code = slamm_math::EMathOverflow)]
+    fun test_fail_deposit_maximally_imbalanced_pool() {
+        let pool = test_utils::new_for_testing(
+            1,
+            5_000_000_000_000_000,
+            sqrt_u128(5_000_000_000_000_00 as u128) as u64,
+            0,
+        );
+
+        let _quote = pool.quote_deposit_impl_test(
+            50_000_000, // max_a
+            50, // max_b,
+            0, // min_a
+            50_000_000, // min_b
+        );
+
+        destroy(pool);
     }
     
     #[test]

@@ -1,13 +1,20 @@
 /// Constant-Product AMM Hook implementation
 module slamm::cpmm {
     use sui::coin::Coin;
+    use slamm::global_admin::GlobalAdmin;
     use slamm::registry::{Registry};
     use slamm::math::{safe_mul_div_u64};
     use slamm::quote::{Self, SwapQuote};
     use slamm::pool::{Self, Pool, PoolCap, SwapResult};
 
-    // Error codes
-    const EInvariantViolation: u64 = 5;
+    // ===== Constants =====
+
+    const CURRENT_VERSION: u16 = 1;
+
+    // ===== Errors =====
+
+    const EIncorrectVersion: u64 = 0;
+    const EInvariantViolation: u64 = 1;
 
     /// Hook type for the constant-product AMM implementation. Serves as both
     /// the hook's witness (authentication) as well as it wraps around the pool
@@ -21,8 +28,11 @@ module slamm::cpmm {
     /// therefore making the hook extendable.
     public struct Hook<phantom W> has drop {}
 
-    /// Constant-Product AMM specific state
-    public struct State has store {}
+    /// Constant-Product AMM specific state. We do not store the invariant,
+    /// instead we compute it at runtime.
+    public struct State has store {
+        version: u16,
+    }
 
     // ===== Public Methods =====
 
@@ -32,7 +42,7 @@ module slamm::cpmm {
         swap_fee_bps: u64,
         ctx: &mut TxContext,
     ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>>) {
-        let inner = State {};
+        let inner = State { version: CURRENT_VERSION };
 
         let (pool, pool_cap) = pool::new<A, B, Hook<W>, State>(
             Hook<W> {},
@@ -45,7 +55,6 @@ module slamm::cpmm {
         (pool, pool_cap)
     }
 
-
     public fun swap<A, B, W: drop>(
         self: &mut Pool<A, B, Hook<W>, State>,
         coin_a: &mut Coin<A>,
@@ -55,6 +64,8 @@ module slamm::cpmm {
         a2b: bool,
         ctx: &mut TxContext,
     ): SwapResult {
+        assert_version_and_upgrade(self);
+
         let k0 = k(self);
 
         let quote = quote_swap(
@@ -77,8 +88,6 @@ module slamm::cpmm {
 
         response
     }
-
-    // ===== View & Getters =====
 
     public fun quote_swap<A, B, W: drop>(
         self: &Pool<A, B, Hook<W>, State>,
@@ -110,10 +119,50 @@ module slamm::cpmm {
             a2b,
         )
     }
+
+    // ===== View Functions =====
     
     public fun k<A, B, W: drop>(self: &Pool<A, B, Hook<W>, State>): u128 {
         let (reserve_a, reserve_b) = self.reserves();
         ((reserve_a as u128) * (reserve_b as u128))
+    }
+
+    // ===== Versioning =====
+    
+    entry fun migrate<A, B, W>(
+        self: &mut Pool<A, B, Hook<W>, State>,
+        _cap: &PoolCap<A, B, Hook<W>>,
+    ) {
+        migrate_(self);
+    }
+    
+    entry fun migrate_as_global_admin<A, B, W>(
+        self: &mut Pool<A, B, Hook<W>, State>,
+        _admin: &GlobalAdmin,
+    ) {
+        migrate_(self);
+    }
+
+    fun migrate_<A, B, W>(
+        self: &mut Pool<A, B, Hook<W>, State>,
+    ) {
+        assert!(self.inner().version < CURRENT_VERSION, EIncorrectVersion);
+        self.inner_mut().version = CURRENT_VERSION;
+    }
+
+    fun assert_version<A, B, W>(
+        self: &Pool<A, B, Hook<W>, State>,
+    ) {
+            assert!(self.inner().version == CURRENT_VERSION, EIncorrectVersion);
+    }
+
+    fun assert_version_and_upgrade<A, B, W>(
+        self: &mut Pool<A, B, Hook<W>, State>,
+    ) {
+        if (self.inner().version < CURRENT_VERSION) {
+            self.inner_mut().version = CURRENT_VERSION;
+        };
+        assert_version(self);
     }
 
     // ===== Private Functions =====
