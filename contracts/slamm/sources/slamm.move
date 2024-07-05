@@ -509,7 +509,7 @@ module slamm::pool {
         assert_version(self);
     }
     
-    // ===== Private endpoints =====
+    // ===== Private functions =====
 
     fun quote_deposit_impl<A, B, Hook: drop, State: store>(
         self: &Pool<A, B, Hook, State>,
