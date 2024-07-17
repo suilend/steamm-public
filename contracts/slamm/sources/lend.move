@@ -1,4 +1,5 @@
 module slamm::lend {
+    use std::debug::print;
     use std::option::none;
     use std::type_name::{Self, TypeName};
     use sui::bag::{Self, Bag};
@@ -14,13 +15,20 @@ module slamm::lend {
         lending_market: ID,
         p_type: TypeName,
         reserve: Balance<T>,
-        // c_tokens: Balance<CToken<P, T>>,
         lent: u64,
         liquidity_ratio_bps: u16,
         liquidity_buffer_bps: u16,
         reserve_array_index: u64,
         fields: Bag,
     }
+
+    public fun lending_market<T>(self: &Bank<T>): ID { self.lending_market }
+    public fun p_type<T>(self: &Bank<T>): TypeName { self.p_type }
+    public fun reserve<T>(self: &Bank<T>): &Balance<T> { &self.reserve }
+    public fun lent<T>(self: &Bank<T>): u64 { self.lent }
+    public fun liquidity_ratio_bps<T>(self: &Bank<T>): u16 { self.liquidity_ratio_bps }
+    public fun liquidity_buffer_bps<T>(self: &Bank<T>): u16 { self.liquidity_buffer_bps }
+    public fun reserve_array_index<T>(self: &Bank<T>): u64 { self.reserve_array_index }
 
     public enum ReserveAction has copy, store, drop {
         PushFunds(u64),
@@ -36,11 +44,6 @@ module slamm::lend {
 
     public struct LendingReserveKey<phantom T> has copy, store, drop {}
 
-    public struct LendingReserve<phantom P, phantom T> has store {
-        c_tokens: Balance<CToken<P, T>>
-    }
-
-    public fun lent<T>(self: &Bank<T>): u64 { self.lent }
     public(package) fun lent_mut<T>(self: &mut Bank<T>): &mut u64 { &mut self.lent }
     
     public fun is_ok(self: &LendingAction): bool {
@@ -61,7 +64,7 @@ module slamm::lend {
         ctx: &mut TxContext,
     ): Bank<T> {
         let mut fields = bag::new(ctx);
-        fields.add(LendingReserveKey<T> {}, LendingReserve<P, T> { c_tokens: balance::zero() });
+        fields.add(LendingReserveKey<T> {}, balance::zero<CToken<P, T>>());
 
         Bank<T> {
             id: object::new(ctx),
@@ -239,28 +242,6 @@ module slamm::lend {
         let c_balance: &mut Balance<CToken<P, T>> = reserve.fields.borrow_mut(LendingReserveKey<T> {});
         c_balance.split(c_tokens)
     }
-    
-    public fun add_c_token_field_<P, T>(
-        fields: &mut Bag,
-    ) {
-        fields.add(LendingReserveKey<T> {}, LendingReserve<P, T> { c_tokens: balance::zero() })
-    }
-    
-    public fun deposit_c_tokens_<P, T>(
-        fields: &mut Bag,
-        c_tokens: Balance<CToken<P, T>>
-    ) {
-        let c_balance: &mut Balance<CToken<P, T>> = fields.borrow_mut(LendingReserveKey<T> {});
-        c_balance.join(c_tokens);
-    }
-    
-    public fun withdraw_c_tokens_<P, T>(
-        fields: &mut Bag,
-        c_tokens: u64,
-    ): Balance<CToken<P, T>> {
-        let c_balance: &mut Balance<CToken<P, T>> = fields.borrow_mut(LendingReserveKey<T> {});
-        c_balance.split(c_tokens)
-    }
 
     public fun compute_lending_action_(
         reserve: u64,
@@ -354,7 +335,7 @@ module slamm::lend {
         liquidity_ratio_bps: u64,
         liquidity_buffer_bps: u64
     ): u64 {
-        (reserve + input) - ((liquidity_ratio_bps + liquidity_buffer_bps) * (reserve + input + lent) / 10_000) 
+        (reserve + input) - (liquidity_ratio_bps * (reserve + input + lent) / 10_000) 
     }
 
     public fun liquidity_ratio(
