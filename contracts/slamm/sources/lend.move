@@ -21,14 +21,6 @@ module slamm::lend {
         fields: Bag,
     }
 
-    public fun lending_market<T>(self: &Bank<T>): ID { self.lending_market }
-    public fun p_type<T>(self: &Bank<T>): TypeName { self.p_type }
-    public fun reserve<T>(self: &Bank<T>): &Balance<T> { &self.reserve }
-    public fun lent<T>(self: &Bank<T>): u64 { self.lent }
-    public fun liquidity_ratio_bps<T>(self: &Bank<T>): u16 { self.liquidity_ratio_bps }
-    public fun liquidity_buffer_bps<T>(self: &Bank<T>): u16 { self.liquidity_buffer_bps }
-    public fun reserve_array_index<T>(self: &Bank<T>): u64 { self.reserve_array_index }
-
     public enum ReserveAction has copy, store, drop {
         PushFunds(u64),
         Ok,
@@ -43,16 +35,8 @@ module slamm::lend {
 
     public struct LendingReserveKey<phantom T> has copy, store, drop {}
 
-    public(package) fun lent_mut<T>(self: &mut Bank<T>): &mut u64 { &mut self.lent }
-    
-    public fun is_ok(self: &LendingAction): bool {
-        match(self) {
-            LendingAction::Ok => true,
-            _ => false,
-        }
-    }
-    
-    public(package) fun no_op(): LendingAction { LendingAction::Ok }
+
+    // ====== Public Functions =====
 
     public fun init_bank<P, T>(
         _: &GlobalAdmin,
@@ -92,89 +76,42 @@ module slamm::lend {
             bank.liquidity_buffer_bps as u64,
         )
     }
+
+    public fun liquidity_ratio(
+        liquid_reserve: u64,
+        iliquid_reserve: u64,
+    ): u16 {
+        ((liquid_reserve * 10_000) / (liquid_reserve + iliquid_reserve)) as u16
+    }
     
-    public(package) fun reserve_mut<T>(
-        bank: &mut Bank<T>,
-    ): &mut Balance<T> {
-        &mut bank.reserve
+    public fun assert_liquidity_requirements<T>(
+        self: &Bank<T>,
+        reserve: u64,
+        amount: u64,
+        is_input: bool,
+        lent: u64,
+    ) {
+        if (is_input) {
+            let liquidity_ratio = liquidity_ratio(reserve + amount, lent) as u64;
+            assert!(liquidity_ratio <= (self.liquidity_ratio_bps + self.liquidity_buffer_bps) as u64, 0);
+        } else {
+            assert!(reserve + lent > amount, 0);
+            assert!(reserve > amount, 0);
+
+            let liquidity_ratio = liquidity_ratio(reserve - amount, lent) as u64;
+
+            assert!(liquidity_ratio >= (self.liquidity_ratio_bps - self.liquidity_buffer_bps) as u64, 0);
+        }
     }
 
-    // public(package) fun deposit_liquidity<T>(
-    //     deposit: Balance<T>,
-    //     lending: &mut Lending,
-    //     lending_pool: &mut Bank<T>,
-    // ): LendingAction {
-    //     let deposit_amt = deposit.value();
-    //     lending.lent = lending.lent + deposit_amt;
+    public fun is_ok(self: &LendingAction): bool {
+        match(self) {
+            LendingAction::Ok => true,
+            _ => false,
+        }
+    }
 
-    //     let lending_action = compute_lending_action_(
-    //         lending_pool.reserve.value(),
-    //         deposit.value(),
-    //         true,
-    //         lending_pool.lent,
-    //         lending_pool.liquidity_ratio_bps as u64,
-    //         lending_pool.liquidity_buffer_bps as u64,
-    //     );
-
-    //     lending_pool.reserve.join(deposit);
-
-    //     lending_action
-    // }
-    
-    // public(package) fun withdraw_liquidity<T>(
-    //     reserve: &mut Balance<T>,
-    //     withdraw: u64,
-    //     lending: &mut Lending,
-    //     lending_pool: &mut Bank<T>,
-    // ): LendingAction {
-    //     lending.lent = lending.lent - withdraw;
-
-    //     let lending_action = compute_lending_action_(
-    //         lending_pool.reserve.value(),
-    //         withdraw,
-    //         false,
-    //         lending_pool.lent,
-    //         lending_pool.liquidity_ratio_bps as u64,
-    //         lending_pool.liquidity_buffer_bps as u64,
-    //     );
-
-    //     reserve.join(lending_pool.reserve.split(withdraw));
-
-    //     lending_action
-    // }
-
-    // public(package) fun rebalance_pool<T>(
-    //     reserve: &mut Balance<T>,
-    //     lending: &mut Lending,
-    //     lending_action: &LendingAction,
-    //     lending_pool: &mut Bank<T>,
-    // ): LendingAction {
-    //     match (lending_action) {
-    //         LendingAction::Lend(amount) => {
-    //             let balance_to_lend = reserve.split(*amount);
-
-    //             let action = deposit_liquidity(
-    //                 balance_to_lend,
-    //                 lending,
-    //                 lending_pool,
-    //             );
-
-    //             action
-    //         },
-    //         LendingAction::Ok => { LendingAction::Ok },
-    //         LendingAction::Recall(amount) => {
-    //             let action = withdraw_liquidity(
-    //                 reserve,
-    //                 *amount,
-    //                 lending,
-    //                 lending_pool,
-    //             );
-
-    //             action
-    //         },
-    //     }
-
-    // }
+    // ====== Package Functions =====
 
     public(package) fun rebalance_lending<T, P>(
         bank: &mut Bank<T>,
@@ -217,7 +154,6 @@ module slamm::lend {
                 *lending_action = LendingAction::Ok;
             },
         };
-
     }
 
     public(package) fun assert_p_type<P, T>(
@@ -226,7 +162,15 @@ module slamm::lend {
         assert!(type_name::get<P>() == reserve.p_type, 0);
     }
 
-    public(package) fun deposit_c_tokens<P, T>(
+    public(package) fun reserve_mut<T>(
+        bank: &mut Bank<T>,
+    ): &mut Balance<T> {
+        &mut bank.reserve
+    }
+
+    // ====== Private Functions =====
+
+    fun deposit_c_tokens<P, T>(
         reserve: &mut Bank<T>,
         c_tokens: Balance<CToken<P, T>>
     ) {
@@ -234,7 +178,7 @@ module slamm::lend {
         c_balance.join(c_tokens);
     }
     
-    public(package) fun withdraw_c_tokens<P, T>(
+    fun withdraw_c_tokens<P, T>(
         reserve: &mut Bank<T>,
         c_tokens: u64,
     ): Balance<CToken<P, T>> {
@@ -242,7 +186,7 @@ module slamm::lend {
         c_balance.split(c_tokens)
     }
 
-    public fun compute_lending_action_(
+    fun compute_lending_action_(
         reserve: u64,
         amount: u64,
         is_input: bool,
@@ -259,7 +203,6 @@ module slamm::lend {
                         amount,
                         lent,
                         liquidity_ratio_bps,
-                        liquidity_buffer_bps,
                 ))
             } else {
                 LendingAction::Ok
@@ -275,7 +218,6 @@ module slamm::lend {
                     amount,
                     lent,
                     liquidity_ratio_bps,
-                    liquidity_buffer_bps,
                 ))
             };
 
@@ -287,31 +229,10 @@ module slamm::lend {
                         amount,
                         lent,
                         liquidity_ratio_bps,
-                        liquidity_buffer_bps,
                 ))
             } else {
                 LendingAction::Ok
             }
-        }
-    }
-    
-    public fun assert_liquidity_requirements<T>(
-        self: &Bank<T>,
-        reserve: u64,
-        amount: u64,
-        is_input: bool,
-        lent: u64,
-    ) {
-        if (is_input) {
-            let liquidity_ratio = liquidity_ratio(reserve + amount, lent) as u64;
-            assert!(liquidity_ratio <= (self.liquidity_ratio_bps + self.liquidity_buffer_bps) as u64, 0);
-        } else {
-            assert!(reserve + lent > amount, 0);
-            assert!(reserve > amount, 0);
-
-            let liquidity_ratio = liquidity_ratio(reserve - amount, lent) as u64;
-
-            assert!(liquidity_ratio >= (self.liquidity_ratio_bps - self.liquidity_buffer_bps) as u64, 0);
         }
     }
 
@@ -320,7 +241,6 @@ module slamm::lend {
         output: u64,
         lent: u64,
         liquidity_ratio_bps: u64,
-        liquidity_buffer_bps: u64
     ): u64 {
         (
             liquidity_ratio_bps * (reserve + lent - output) + (output * 10_000) - (reserve * 10_000)
@@ -332,19 +252,17 @@ module slamm::lend {
         input: u64,
         lent: u64,
         liquidity_ratio_bps: u64,
-        liquidity_buffer_bps: u64
     ): u64 {
         (reserve + input) - (liquidity_ratio_bps * (reserve + input + lent) / 10_000) 
     }
 
-    public fun liquidity_ratio(
-        liquid_reserve: u64,
-        iliquid_reserve: u64,
-    ): u16 {
-        ((liquid_reserve * 10_000) / (liquid_reserve + iliquid_reserve)) as u16
-    }
+    // ====== Getters Functions =====
 
-    public(package) fun funds_mut<T>(reserve: &mut Bank<T>): &mut Balance<T> {
-        &mut reserve.reserve
-    }
+    public fun lending_market<T>(self: &Bank<T>): ID { self.lending_market }
+    public fun p_type<T>(self: &Bank<T>): TypeName { self.p_type }
+    public fun reserve<T>(self: &Bank<T>): &Balance<T> { &self.reserve }
+    public fun lent<T>(self: &Bank<T>): u64 { self.lent }
+    public fun liquidity_ratio_bps<T>(self: &Bank<T>): u16 { self.liquidity_ratio_bps }
+    public fun liquidity_buffer_bps<T>(self: &Bank<T>): u16 { self.liquidity_buffer_bps }
+    public fun reserve_array_index<T>(self: &Bank<T>): u64 { self.reserve_array_index }
 }

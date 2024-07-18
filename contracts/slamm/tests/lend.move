@@ -120,9 +120,6 @@ module slamm::lend_tests {
     fun test_lend_amm_deposit_and_redeem() {
         let mut scenario = test_scenario::begin(ADMIN);
 
-        // Create lending registry and market
-        // let lending_registry = lending_market_registry::init_for_testing(ctx(&mut scenario));
-
         let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup_external(&mut scenario);
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
