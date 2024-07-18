@@ -22,6 +22,8 @@ module slamm::pool {
     use suilend::lending_market::{LendingMarket};
     
     public use fun slamm::cpmm::swap as Pool.cpmm_swap;
+    public use fun slamm::cpmm::intent_swap as Pool.cpmm_intent_swap;
+    public use fun slamm::cpmm::execute_swap as Pool.cpmm_execute_swap;
     public use fun slamm::cpmm::quote_swap as Pool.cpmm_quote_swap;
     public use fun slamm::cpmm::k as Pool.cpmm_k;
 

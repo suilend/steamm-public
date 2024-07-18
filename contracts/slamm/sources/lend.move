@@ -253,6 +253,7 @@ module slamm::lend {
     ): LendingAction {
         if (is_input) {
             let liquidity_ratio = liquidity_ratio(reserve + amount, lent) as u64;
+            print(&liquidity_ratio);
 
             if (liquidity_ratio > liquidity_ratio_bps + liquidity_buffer_bps) {
                 return LendingAction::Lend(compute_lend(
@@ -324,7 +325,7 @@ module slamm::lend {
         liquidity_buffer_bps: u64
     ): u64 {
         (
-            (liquidity_ratio_bps + liquidity_buffer_bps) * (reserve + lent - output) + (output * 10_000) - (reserve * 10_000)
+            liquidity_ratio_bps * (reserve + lent - output) + (output * 10_000) - (reserve * 10_000)
         ) / 10_000
     }
     
