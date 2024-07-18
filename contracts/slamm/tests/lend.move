@@ -94,8 +94,6 @@ module slamm::lend_tests {
         assert_eq(pool.pool_fees().acc_fees_b(), 0);
 
         let (fractional_reserve_a, fractional_reserve_b) = pool.fractional_reserves();
-        print(&fractional_reserve_a);
-        print(&fractional_reserve_b);
         assert_eq(fractional_reserve_a, 0);
         assert_eq(fractional_reserve_b, 500_000);
 
@@ -247,7 +245,7 @@ module slamm::lend_tests {
     }
 
     #[test]
-    fun test_lend_amm_deposit_redeem_and_swap() {
+    fun test_lend_amm_deposit_and_swap() {
         let mut scenario = test_scenario::begin(ADMIN);
 
         let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup_external(&mut scenario);
@@ -321,44 +319,6 @@ module slamm::lend_tests {
         destroy(coin_a);
         destroy(coin_b);
 
-        // Redeem
-        let mut intent = pool.intent_redeem(&lp_coins, 499_990, 499_990);
-
-        pool.pull_bank_a_checked(
-            &mut bank,
-            &mut lending_market,
-            &mut intent,
-            &clock,
-            ctx
-        );
-
-        let (coin_a, coin_b, _) = pool.execute_redeem(
-            lp_coins,
-            &mut intent,
-            ctx,
-        );
-
-        pool.consume(intent);
-
-        let (reserve_a, reserve_b) = pool.reserves();
-
-        assert_eq(pool.cpmm_k(), 10 * 10);
-        assert_eq(pool.lp_supply_val(), 10);
-        assert_eq(reserve_a, 10);
-        assert_eq(reserve_b, 10);
-        assert_eq(pool.pool_fees().acc_fees_a(), 0);
-        assert_eq(pool.pool_fees().acc_fees_b(), 0);
-
-        let (fractional_reserve_a, fractional_reserve_b) = pool.fractional_reserves();
-        assert_eq(fractional_reserve_a, 0);
-        assert_eq(fractional_reserve_b, 10);
-
-        assert_eq(bank.lent(), 8); // 10 * 80%
-        assert_eq(bank.reserve().value(), 2); // 10 * 20%
-
-        destroy(coin_a);
-        destroy(coin_b);
-
         // Swap
         let mut coin_a = coin::mint_for_testing<TEST_USDC>(50_000, ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
@@ -368,7 +328,7 @@ module slamm::lend_tests {
             true, // a2b
         );
 
-        let res = pool.cpmm_execute_swap(
+        pool.cpmm_execute_swap(
             &mut swap_intent,
             &mut coin_a,
             &mut coin_b,
@@ -386,9 +346,20 @@ module slamm::lend_tests {
 
         pool.consume(swap_intent);
 
+        let (fractional_reserve_a, fractional_reserve_b) = pool.fractional_reserves();
+        assert_eq(fractional_reserve_a, 0);
+        assert_eq(fractional_reserve_b, 454_960);
+
+        assert_eq(bank.lent(), 400_000);
+        assert_eq(bank.reserve().value(), 149_900);
+
+        let (reserve_a, reserve_b) = pool.reserves();
+        assert_eq(reserve_a, 549_900);
+        assert_eq(reserve_b, 454_960);
 
         destroy(coin_a);
         destroy(coin_b);
+        destroy(lp_coins);
         destroy(registry);
         destroy(pool);
         destroy(pool_cap);

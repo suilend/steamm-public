@@ -106,6 +106,7 @@ module slamm::quote {
     public fun swap_input_pool_fees(self: &SwapInputs): u64 { self.pool_fees }
     
     public fun amount_in(self: &SwapQuote): u64 { self.amount_in }
+    public fun amount_in_net(self: &SwapQuote): u64 { self.amount_in - self.protocol_fees - self.pool_fees }
     public fun amount_out(self: &SwapQuote): u64 { self.amount_out }
     public fun protocol_fees(self: &SwapQuote): u64 { self.protocol_fees }
     public fun pool_fees(self: &SwapQuote): u64 { self.pool_fees }

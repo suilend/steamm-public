@@ -3,7 +3,6 @@
 /// called directly. Is also exports an intializer and swap method to be
 /// called by the hook modules.
 module slamm::pool {
-    use std::debug::print;
     use sui::clock::Clock;
     use std::option::{none, some};
     use sui::transfer::public_transfer;
@@ -77,11 +76,18 @@ module slamm::pool {
     const EDepositRatioLeadsToZeroB: u64 = 13;
     // The deposit ratio computed leads to a coin A deposit of zero
     const EDepositRatioLeadsToZeroA: u64 = 14;
+    // There cannot be two intents concurrently
     const EPoolGuarded: u64 = 15;
+    // Attempting to unguard pool that is already unguarded
     const EPoolUnguarded: u64 = 16;
+    // Attempting to turn lending on for A when already on
     const ELendingAlreadyOnForA: u64 = 17;
+    // Attempting to turn lending on for B when already on
     const ELendingAlreadyOnForB: u64 = 18;
+    // Mismatch between inteet and pool
     const EPoolIdMistmatch: u64 = 19;
+    // Can only turn lending on before the pool having any deposits
+    const EAmmAlreadyInitialized: u64 = 20;
 
     /// Marker type for the LP coins of a pool. There can only be one
     /// pool per type, albeit given the permissionless aspect of the pool
@@ -766,9 +772,9 @@ module slamm::pool {
         _: &PoolCap<A, B, Hook>,
         bank: &Bank<A>,
     ) {
-        // todo: reserves must be at zero, or lp supply
         bank.assert_p_type<P, A>();
         assert!(self.reserve_a.lending_on == false, ELendingAlreadyOnForA);
+        assert!(self.lp_supply_val() == 0, EAmmAlreadyInitialized);
 
         self.reserve_a.lending_on = true;
     }
@@ -779,41 +785,11 @@ module slamm::pool {
         bank: &Bank<B>,
     ) {
         bank.assert_p_type<P, B>();
-        assert!(self.reserve_b.lending_on == false, ELendingAlreadyOnForA);
+        assert!(self.reserve_b.lending_on == false, ELendingAlreadyOnForB);
+        assert!(self.lp_supply_val() == 0, EAmmAlreadyInitialized);
 
         self.reserve_b.lending_on = true;
     }
-
-    // public fun rebalance_pool_a<A, B, Hook: drop, State: store, IntentOp>(
-    //     self: &mut Pool<A, B, Hook, State>,
-    //     amm_intent: &Intent<IntentOp, A, B, Hook>,
-    //     lending_pool: &mut LendingPool<A>, 
-    // ): LendingAction {
-    //     let lending = self.lending_a.borrow_mut();
-        
-    //     lend::rebalance_pool(
-    //         &mut self.reserve_a,
-    //         lending,
-    //         &amm_intent.lending_a,
-    //         lending_pool,
-    //     )
-    // }
-    
-    // public fun rebalance_pool_b<A, B, Hook: drop, State: store, IntentOp>(
-    //     self: &mut Pool<A, B, Hook, State>,
-    //     amm_intent: &Intent<IntentOp, A, B, Hook>,
-    //     lending_pool: &mut LendingPool<B>, 
-    // ): LendingAction {
-    //     let lending = self.lending_b.borrow_mut();
-        
-    //     lend::rebalance_pool(
-    //         &mut self.reserve_b,
-    //         lending,
-    //         &amm_intent.lending_b,
-    //         lending_pool,
-    //     )
-    // }
-    
 
     // ===== View & Getters =====
     
@@ -911,13 +887,13 @@ module slamm::pool {
 
         let (a, b) = if (quote.a2b()) {
             (
-                Amount { amount: quote.amount_in(), funds: funds_a, lending_action, direction: Direction::Input },
+                Amount { amount: quote.amount_in() - quote.protocol_fees(), funds: funds_a, lending_action, direction: Direction::Input },
                 Amount { amount: quote.amount_out(), funds: funds_b, lending_action, direction: Direction::Output },
             )
         } else {
             (
                 Amount { amount: quote.amount_out(), funds: funds_a, lending_action, direction: Direction::Output },
-                Amount { amount: quote.amount_in(), funds: funds_b, lending_action, direction: Direction::Input },
+                Amount { amount: quote.amount_in() - quote.protocol_fees(), funds: funds_b, lending_action, direction: Direction::Input },
             )
         };
 

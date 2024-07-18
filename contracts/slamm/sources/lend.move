@@ -1,5 +1,4 @@
 module slamm::lend {
-    use std::debug::print;
     use std::option::none;
     use std::type_name::{Self, TypeName};
     use sui::bag::{Self, Bag};
@@ -253,7 +252,6 @@ module slamm::lend {
     ): LendingAction {
         if (is_input) {
             let liquidity_ratio = liquidity_ratio(reserve + amount, lent) as u64;
-            print(&liquidity_ratio);
 
             if (liquidity_ratio > liquidity_ratio_bps + liquidity_buffer_bps) {
                 return LendingAction::Lend(compute_lend(
