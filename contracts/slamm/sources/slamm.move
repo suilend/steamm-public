@@ -532,12 +532,12 @@ module slamm::pool {
         self.reserve_b.balance.join(bank.reserve_mut().split(amount));
     }
     
-    public fun pull_bank_b_unchecked<A, B, Hook: drop, State: store, Quote, P>(
+    public fun pull_bank_b_checked<A, B, Hook: drop, State: store, Quote, P>(
         self: &mut Pool<A, B, Hook, State>,
         bank: &mut Bank<B>,
         lending_market: &mut LendingMarket<P>,
-        clock: &Clock,
         intent: &mut Intent<Quote, A, B, Hook>,
+        clock: &Clock,
         ctx: &mut TxContext,
     ) {
         let amount = self.sync_bank(
@@ -611,8 +611,8 @@ module slamm::pool {
         self: &mut Pool<A, B, Hook, State>,
         bank: &mut Bank<B>,
         lending_market: &mut LendingMarket<P>,
-        clock: &Clock,
         intent: &mut Intent<Quote, A, B, Hook>,
+        clock: &Clock,
         ctx: &mut TxContext,
     ) {
         let amount = self.sync_bank(

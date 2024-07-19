@@ -1,32 +1,25 @@
 #[test_only]
 module slamm::lend_tests {
-    use std::debug::print;
-    use slamm::pool::{Self, minimum_liquidity};
+    // use std::debug::print;
+    use slamm::pool::minimum_liquidity;
     use slamm::registry;
     use slamm::global_admin;
     use slamm::cpmm::{Self};
     use slamm::test_utils::COIN;
     use slamm::lend;
     use sui::test_scenario::{Self, ctx};
-    use sui::sui::SUI;
     use sui::coin::{Self};
     use sui::test_utils::{destroy, assert_eq};
     use suilend::lending_market::{Self, LENDING_MARKET};
-    use suilend::lending_market_registry;
 
     use suilend::test_usdc::{TEST_USDC};
+    use suilend::test_sui::{TEST_SUI};
 
     const ADMIN: address = @0x10;
     const POOL_CREATOR: address = @0x11;
-    const LP_PROVIDER: address = @0x12;
-    const TRADER: address = @0x13;
 
     public struct Wit has drop {}
     public struct Wit2 has drop {}
-
-    fun e9(amt: u64): u64 {
-        1_000_000_000 * amt
-    }
 
     #[test]
     fun test_lend_amm_deposit() {
@@ -369,6 +362,423 @@ module slamm::lend_tests {
         destroy(clock);
         test_scenario::end(scenario);
     }
+
+    #[test]
+    fun test_lend_amm_deposit_both() {
+        let mut scenario = test_scenario::begin(ADMIN);
+
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup_external(&mut scenario);
+        // Create amm bank
+        let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
+
+        let mut bank_usdc = lend::init_bank<LENDING_MARKET, TEST_USDC>(
+            &global_admin,
+            &lending_market,
+            2_000, // liquidity_ratio_bps
+            1_000, // liquidity_buffer_bps
+            0, // reserve_array_index
+            ctx(&mut scenario),
+        );
+        
+        let mut bank_sui = lend::init_bank<LENDING_MARKET, TEST_SUI>(
+            &global_admin,
+            &lending_market,
+            2_000, // liquidity_ratio_bps
+            1_000, // liquidity_buffer_bps
+            1, // reserve_array_index
+            ctx(&mut scenario),
+        );
+
+        // Init Pool
+        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+        let ctx = ctx(&mut scenario);
+
+        let mut registry = registry::init_for_testing(ctx);
+
+        let (mut pool, pool_cap) = cpmm::new<TEST_USDC, TEST_SUI, Wit>(
+            Wit {},
+            &mut registry,
+            100, // admin fees BPS
+            ctx,
+        );
+
+        pool.init_lending_a<TEST_USDC, TEST_SUI, cpmm::Hook<Wit>, cpmm::State, LENDING_MARKET>(&pool_cap, &bank_usdc);
+        pool.init_lending_b<TEST_USDC, TEST_SUI, cpmm::Hook<Wit>, cpmm::State, LENDING_MARKET>(&pool_cap, &bank_sui);
+
+        // Deposit funds in AMM Pool
+        let mut coin_a = coin::mint_for_testing<TEST_USDC>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<TEST_SUI>(500_000, ctx);
+
+        let mut intent = pool.intent_deposit(
+            500_000,
+            500_000,
+            0,
+            0,
+        );
+
+        let (lp_coins, _) = pool.execute_deposit(&mut coin_a, &mut coin_b, &mut intent, ctx);
+
+        pool.push_bank_a_checked(
+            &mut bank_usdc,
+            &mut lending_market,
+            &mut intent,
+            &clock,
+            ctx
+        );
+        
+        pool.push_bank_b_checked(
+            &mut bank_sui,
+            &mut lending_market,
+            &mut intent,
+            &clock,
+            ctx
+        );
+
+        pool.consume(intent);
+
+        let (reserve_a, reserve_b) = pool.reserves();
+
+        assert_eq(pool.cpmm_k(), 500_000 * 500_000);
+        assert_eq(pool.lp_supply_val(), 500_000);
+        assert_eq(reserve_a, 500_000);
+        assert_eq(reserve_b, 500_000);
+        assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
+        assert_eq(pool.pool_fees().acc_fees_a(), 0);
+        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+
+        let (fractional_reserve_a, fractional_reserve_b) = pool.fractional_reserves();
+        assert_eq(fractional_reserve_a, 0);
+        assert_eq(fractional_reserve_b, 0);
+
+        assert_eq(bank_usdc.lent(), 400_000); // 500_000 * 80%
+        assert_eq(bank_usdc.reserve().value(), 100_000); // 500_000 * 20%
+        assert_eq(bank_sui.lent(), 400_000); // 500_000 * 80%
+        assert_eq(bank_sui.reserve().value(), 100_000); // 500_000 * 20%
+
+        destroy(coin_a);
+        destroy(coin_b);
+        destroy(lp_coins);
+        destroy(registry);
+        destroy(pool);
+        destroy(pool_cap);
+        destroy(global_admin);
+        destroy(lending_market);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(bag);
+        destroy(bank_usdc);
+        destroy(bank_sui);
+        destroy(clock);
+        test_scenario::end(scenario);
+    }
+    
+    #[test]
+    fun test_lend_amm_deposit_and_redeem_both() {
+        let mut scenario = test_scenario::begin(ADMIN);
+
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup_external(&mut scenario);
+        // Create amm bank
+        let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
+
+        let mut bank_usdc = lend::init_bank<LENDING_MARKET, TEST_USDC>(
+            &global_admin,
+            &lending_market,
+            2_000, // liquidity_ratio_bps
+            1_000, // liquidity_buffer_bps
+            0, // reserve_array_index
+            ctx(&mut scenario),
+        );
+        
+        let mut bank_sui = lend::init_bank<LENDING_MARKET, TEST_SUI>(
+            &global_admin,
+            &lending_market,
+            2_000, // liquidity_ratio_bps
+            1_000, // liquidity_buffer_bps
+            1, // reserve_array_index
+            ctx(&mut scenario),
+        );
+
+        // Init Pool
+        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+        let ctx = ctx(&mut scenario);
+
+        let mut registry = registry::init_for_testing(ctx);
+
+        let (mut pool, pool_cap) = cpmm::new<TEST_USDC, TEST_SUI, Wit>(
+            Wit {},
+            &mut registry,
+            100, // admin fees BPS
+            ctx,
+        );
+
+        pool.init_lending_a<TEST_USDC, TEST_SUI, cpmm::Hook<Wit>, cpmm::State, LENDING_MARKET>(&pool_cap, &bank_usdc);
+        pool.init_lending_b<TEST_USDC, TEST_SUI, cpmm::Hook<Wit>, cpmm::State, LENDING_MARKET>(&pool_cap, &bank_sui);
+
+        // Deposit funds in AMM Pool
+        let mut coin_a = coin::mint_for_testing<TEST_USDC>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<TEST_SUI>(500_000, ctx);
+
+        let mut intent = pool.intent_deposit(
+            500_000,
+            500_000,
+            0,
+            0,
+        );
+
+        let (lp_coins, _) = pool.execute_deposit(&mut coin_a, &mut coin_b, &mut intent, ctx);
+
+        pool.push_bank_a_checked(
+            &mut bank_usdc,
+            &mut lending_market,
+            &mut intent,
+            &clock,
+            ctx
+        );
+        
+        pool.push_bank_b_checked(
+            &mut bank_sui,
+            &mut lending_market,
+            &mut intent,
+            &clock,
+            ctx
+        );
+
+        pool.consume(intent);
+
+        let (reserve_a, reserve_b) = pool.reserves();
+
+        assert_eq(pool.cpmm_k(), 500_000 * 500_000);
+        assert_eq(pool.lp_supply_val(), 500_000);
+        assert_eq(reserve_a, 500_000);
+        assert_eq(reserve_b, 500_000);
+        assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
+        assert_eq(pool.pool_fees().acc_fees_a(), 0);
+        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+
+        let (fractional_reserve_a, fractional_reserve_b) = pool.fractional_reserves();
+        assert_eq(fractional_reserve_a, 0);
+        assert_eq(fractional_reserve_b, 0);
+
+        assert_eq(bank_usdc.lent(), 400_000); // 500_000 * 80%
+        assert_eq(bank_usdc.reserve().value(), 100_000); // 500_000 * 20%
+        assert_eq(bank_sui.lent(), 400_000); // 500_000 * 80%
+        assert_eq(bank_sui.reserve().value(), 100_000); // 500_000 * 20%
+
+        destroy(coin_a);
+        destroy(coin_b);
+
+        // Redeem
+        let mut intent = pool.intent_redeem(&lp_coins, 499_990, 499_990);
+
+        pool.pull_bank_a_checked(
+            &mut bank_usdc,
+            &mut lending_market,
+            &mut intent,
+            &clock,
+            ctx
+        );
+        
+        pool.pull_bank_b_checked(
+            &mut bank_sui,
+            &mut lending_market,
+            &mut intent,
+            &clock,
+            ctx
+        );
+
+        let (coin_a, coin_b, _) = pool.execute_redeem(
+            lp_coins,
+            &mut intent,
+            ctx,
+        );
+
+        pool.consume(intent);
+
+        let (reserve_a, reserve_b) = pool.reserves();
+
+        assert_eq(pool.cpmm_k(), 10 * 10);
+        assert_eq(pool.lp_supply_val(), 10);
+        assert_eq(reserve_a, 10);
+        assert_eq(reserve_b, 10);
+        assert_eq(pool.pool_fees().acc_fees_a(), 0);
+        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+
+        destroy(coin_a);
+        destroy(coin_b);
+        destroy(registry);
+        destroy(pool);
+        destroy(pool_cap);
+        destroy(global_admin);
+        destroy(lending_market);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(bag);
+        destroy(bank_usdc);
+        destroy(bank_sui);
+        destroy(clock);
+        test_scenario::end(scenario);
+    }
+
+    #[test]
+    fun test_lend_amm_deposit_and_swap_both() {
+        let mut scenario = test_scenario::begin(ADMIN);
+
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup_external(&mut scenario);
+        // Create amm bank
+        let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
+
+        let mut bank_usdc = lend::init_bank<LENDING_MARKET, TEST_USDC>(
+            &global_admin,
+            &lending_market,
+            2_000, // liquidity_ratio_bps
+            1_000, // liquidity_buffer_bps
+            0, // reserve_array_index
+            ctx(&mut scenario),
+        );
+        
+        let mut bank_sui = lend::init_bank<LENDING_MARKET, TEST_SUI>(
+            &global_admin,
+            &lending_market,
+            2_000, // liquidity_ratio_bps
+            1_000, // liquidity_buffer_bps
+            1, // reserve_array_index
+            ctx(&mut scenario),
+        );
+
+        // Init Pool
+        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+        let ctx = ctx(&mut scenario);
+
+        let mut registry = registry::init_for_testing(ctx);
+
+        let (mut pool, pool_cap) = cpmm::new<TEST_USDC, TEST_SUI, Wit>(
+            Wit {},
+            &mut registry,
+            100, // admin fees BPS
+            ctx,
+        );
+
+        pool.init_lending_a<TEST_USDC, TEST_SUI, cpmm::Hook<Wit>, cpmm::State, LENDING_MARKET>(&pool_cap, &bank_usdc);
+        pool.init_lending_b<TEST_USDC, TEST_SUI, cpmm::Hook<Wit>, cpmm::State, LENDING_MARKET>(&pool_cap, &bank_sui);
+
+        // Deposit funds in AMM Pool
+        let mut coin_a = coin::mint_for_testing<TEST_USDC>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<TEST_SUI>(500_000, ctx);
+
+        let mut intent = pool.intent_deposit(
+            500_000,
+            500_000,
+            0,
+            0,
+        );
+
+        let (lp_coins, _) = pool.execute_deposit(&mut coin_a, &mut coin_b, &mut intent, ctx);
+
+        pool.push_bank_a_checked(
+            &mut bank_usdc,
+            &mut lending_market,
+            &mut intent,
+            &clock,
+            ctx
+        );
+        
+        pool.push_bank_b_checked(
+            &mut bank_sui,
+            &mut lending_market,
+            &mut intent,
+            &clock,
+            ctx
+        );
+
+        pool.consume(intent);
+
+        let (reserve_a, reserve_b) = pool.reserves();
+
+        assert_eq(pool.cpmm_k(), 500_000 * 500_000);
+        assert_eq(pool.lp_supply_val(), 500_000);
+        assert_eq(reserve_a, 500_000);
+        assert_eq(reserve_b, 500_000);
+        assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
+        assert_eq(pool.pool_fees().acc_fees_a(), 0);
+        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+
+        let (fractional_reserve_a, fractional_reserve_b) = pool.fractional_reserves();
+        assert_eq(fractional_reserve_a, 0);
+        assert_eq(fractional_reserve_b, 0);
+
+        assert_eq(bank_usdc.lent(), 400_000); // 500_000 * 80%
+        assert_eq(bank_usdc.reserve().value(), 100_000); // 500_000 * 20%
+        assert_eq(bank_sui.lent(), 400_000); // 500_000 * 80%
+        assert_eq(bank_sui.reserve().value(), 100_000); // 500_000 * 20%
+
+        destroy(coin_a);
+        destroy(coin_b);
+
+        // Swap
+        let mut coin_a = coin::mint_for_testing<TEST_USDC>(50_000, ctx);
+        let mut coin_b = coin::mint_for_testing<TEST_SUI>(0, ctx);
+
+        let mut swap_intent = pool.cpmm_intent_swap(
+            50_000,
+            true, // a2b
+        );
+
+        pool.pull_bank_b_checked(
+            &mut bank_sui,
+            &mut lending_market,
+            &mut swap_intent,
+            &clock,
+            ctx
+        );
+
+        pool.cpmm_execute_swap(
+            &mut swap_intent,
+            &mut coin_a,
+            &mut coin_b,
+            0,
+            ctx,
+        );
+
+        pool.push_bank_a_checked(
+            &mut bank_usdc,
+            &mut lending_market,
+            &mut swap_intent,
+            &clock,
+            ctx
+        );
+
+        pool.consume(swap_intent);
+
+        let (fractional_reserve_a, fractional_reserve_b) = pool.fractional_reserves();
+        assert_eq(fractional_reserve_a, 0);
+        assert_eq(fractional_reserve_b, 0);
+
+        assert_eq(bank_usdc.lent(), 400_000);
+        assert_eq(bank_usdc.reserve().value(), 149_900);
+        
+        assert_eq(bank_sui.lent(), 400_000);
+        assert_eq(bank_sui.reserve().value(), 54_960);
+
+        let (reserve_a, reserve_b) = pool.reserves();
+        assert_eq(reserve_a, 549_900);
+        assert_eq(reserve_b, 454_960);
+
+        destroy(coin_a);
+        destroy(coin_b);
+        destroy(lp_coins);
+        destroy(registry);
+        destroy(pool);
+        destroy(pool_cap);
+        destroy(global_admin);
+        destroy(lending_market);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(bag);
+        destroy(bank_usdc);
+        destroy(bank_sui);
+        destroy(clock);
+        test_scenario::end(scenario);
+    }
     
     #[test]
     fun test_lend_full_amm_cycle() {
@@ -413,7 +823,7 @@ module slamm::lend_tests {
             0,
         );
 
-        let (lp_coin, deposit_result) = pool.execute_deposit(&mut coin_a, &mut coin_b, &mut intent, ctx);
+        let (lp_coin, _) = pool.execute_deposit(&mut coin_a, &mut coin_b, &mut intent, ctx);
 
         pool.push_bank_a_checked(
             &mut bank,
