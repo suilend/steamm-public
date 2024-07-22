@@ -1,9 +1,5 @@
 /// Module for informative structs which provide the input/outputs of a given quotation.
 module slamm::quote {
-    public use fun slamm::pool::as_intent_swap as SwapQuote.as_intent;
-    public use fun slamm::pool::as_intent_deposit as DepositQuote.as_intent;
-    public use fun slamm::pool::as_intent_redeem as RedeemQuote.as_intent;
-    
     public use fun slamm::quote::swap_input_amount_in_net as SwapInputs.amount_in_net;
     public use fun slamm::quote::swap_input_protocol_fees as SwapInputs.protocol_fees;
     public use fun slamm::quote::swap_input_pool_fees as SwapInputs.pool_fees;
