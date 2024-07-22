@@ -6,6 +6,7 @@ module slamm::bank {
     use sui::balance::{Self, Balance};
     use sui::clock::Clock;
     use sui::coin::{Self, Coin};
+    use slamm::quote::SwapQuote;
     use slamm::global_admin::GlobalAdmin;
     use slamm::registry::{Self, Registry};
     use suilend::lending_market::{LendingMarket};
@@ -102,6 +103,28 @@ module slamm::bank {
         ((liquid_reserve * 10_000) / (liquid_reserve + iliquid_reserve)) as u16
     }
     
+    public(package) fun check_sync<A, B>(
+        quote: &SwapQuote,
+        bank_a: &Bank<A>,
+        bank_b: &Bank<B>,
+        a2b: bool,
+    ): bool {
+        if (a2b) {
+            bank_b.check_sync_(quote.amount_out())
+        } else {
+            bank_a.check_sync_(quote.amount_out())
+        }
+    }
+    
+    fun check_sync_<T>(
+        bank: &Bank<T>,
+        output: u64,
+    ): bool {
+        assert!(bank.total_reserve() >= output, 0);
+
+        output > bank.reserve.value()
+    }
+    
     public fun assert_liquidity_requirements(
         self: &Lending,
         reserve: u64,
@@ -131,51 +154,46 @@ module slamm::bank {
 
     // ====== Package Functions =====
 
-    // todo: init lending_actions --> can push or pull --> consume lending action checks the liquidity ratio
+    // public struct BankGuard<phantom T> {
+    //     id: ID,
+    //     lending_market: ID,
+    // }
 
-    public struct BankGuard<phantom T> {
-        id: ID,
-        lending_market: ID,
-    }
+    // public fun guard<T>(bank: &mut Bank<T>): BankGuard<T> {
+    //     let bank_id = object::id(bank);
+    //     let lending = bank.lending.borrow_mut();
+    //     assert!(lending.guarded == false, 0);
 
-    public fun guard<T>(bank: &mut Bank<T>): BankGuard<T> {
-        let bank_id = object::id(bank);
-        let lending = bank.lending.borrow_mut();
-        assert!(lending.guarded == false, 0);
-
-        lending.guarded = true;
+    //     lending.guarded = true;
         
-        BankGuard {
-            id: bank_id,
-            lending_market: lending.lending_market,
-        }
-    }
+    //     BankGuard {
+    //         id: bank_id,
+    //         lending_market: lending.lending_market,
+    //     }
+    // }
     
-    public fun unguard<T>(bank: &mut Bank<T>, bank_guard: BankGuard<T>) {
-        assert!(bank_guard.id == object::id(bank), 0);
+    // public fun unguard<T>(bank: &mut Bank<T>, bank_guard: BankGuard<T>) {
+    //     assert!(bank_guard.id == object::id(bank), 0);
         
-        let lent = bank.lending.borrow().lent;
-        let effective_liquidity = compute_liquidity_ratio(bank.reserve.value(), lent);
+    //     let lent = bank.lending.borrow().lent;
+    //     let effective_liquidity = compute_liquidity_ratio(bank.reserve.value(), lent);
         
-        let lending = bank.lending.borrow_mut();
-        assert!(lending.guarded == true, 0);
-        assert!(effective_liquidity == lending.target_liquidity_ratio_bps as u64, 0);
+    //     let lending = bank.lending.borrow_mut();
+    //     assert!(lending.guarded == true, 0);
+    //     assert!(effective_liquidity == lending.target_liquidity_ratio_bps as u64, 0);
 
-        lending.guarded = false;
+    //     lending.guarded = false;
 
-        let BankGuard { id: _, lending_market: _} = bank_guard;
-    }
+    //     let BankGuard { id: _, lending_market: _} = bank_guard;
+    // }
 
-    public fun provision<T, P>(
+    public(package) fun provision<T, P>(
         bank: &mut Bank<T>,
-        bank_guard: &BankGuard<T>,
         lending_market: &mut LendingMarket<P>,
         required_output: u64,
         clock: &Clock,
         ctx: &mut TxContext,
     ) {
-        assert!(bank_guard.id == object::id(bank), 0);
-
         let amount = {
             let lending = bank.lending.borrow();
             
@@ -208,14 +226,13 @@ module slamm::bank {
         bank.reserve.join(coin.into_balance());
     }
     
-    public fun recall<T, P>(
+    public(package) fun recall<T, P>(
         bank: &mut Bank<T>,
-        bank_guard: &BankGuard<T>,
         lending_market: &mut LendingMarket<P>,
         clock: &Clock,
         ctx: &mut TxContext,
     ) {
-        assert!(bank_guard.id == object::id(bank), 0);
+        // assert!(bank_guard.id == object::id(bank), 0);
 
         let amount = {
             let lending = bank.lending.borrow();
@@ -252,12 +269,11 @@ module slamm::bank {
     
     public fun lend<T, P>(
         bank: &mut Bank<T>,
-        bank_guard: &BankGuard<T>,
         lending_market: &mut LendingMarket<P>,
         clock: &Clock,
         ctx: &mut TxContext,
     ) {
-        assert!(bank_guard.id == object::id(bank), 0);
+        // assert!(bank_guard.id == object::id(bank), 0);
         let lending = bank.lending.borrow();
 
         let amount = compute_lending_amount(
@@ -286,23 +302,119 @@ module slamm::bank {
         bank.deposit_c_tokens(c_tokens.into_balance());
     }
     
-    public(package) fun check_banks<A, B>(
-        bank_a: &Bank<A>,
-        bank_b: &Bank<B>,
+    fun lend_<T, P>(
+        bank: &mut Bank<T>,
+        lending_market: &mut LendingMarket<P>,
+        amount: u64,
+        clock: &Clock,
+        ctx: &mut TxContext,
     ) {
-        bank_a.check_bank();
-        bank_b.check_bank();
+        let lending = bank.lending.borrow();
+
+        if (amount == 0) {
+            return
+        };
+
+        let balance_to_lend = bank.reserve.split(amount);
+
+        let c_tokens = lending_market.deposit_liquidity_and_mint_ctokens<P, T>(
+            lending.reserve_array_index,
+            clock,
+            coin::from_balance(balance_to_lend, ctx),
+            ctx,
+        );
+
+        let lending = bank.lending.borrow_mut();
+
+        lending.lent = lending.lent + amount;
+        bank.deposit_c_tokens(c_tokens.into_balance());
+    }
+
+    public fun recall_<T, P>(
+        bank: &mut Bank<T>,
+        lending_market: &mut LendingMarket<P>,
+        amount: u64,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        if (amount == 0) {
+            return
+        };
+
+        let ctokens: Coin<CToken<P, T>> = coin::from_balance(bank.withdraw_c_tokens(amount), ctx);
+
+        let coin = lending_market.redeem_ctokens_and_withdraw_liquidity(
+            bank.lending.borrow().reserve_array_index,
+            clock,
+            ctokens,
+            none(), // rate_limiter_exemption
+            ctx,
+        );
+
+        let lending = bank.lending.borrow_mut();
+        lending.lent = lending.lent - amount;
+
+        bank.reserve.join(coin.into_balance());
     }
     
-    fun check_bank<T>(
-        bank: &Bank<T>,
-        amount: u64,
-        is_input: bool,
+    public fun rebalance<T, P>(
+        bank: &mut Bank<T>,
+        lending_market: &mut LendingMarket<P>,
+        clock: &Clock,
+        ctx: &mut TxContext,
     ) {
-        if (bank.lending.is_some()) {
-            assert!(bank.lending.borrow().guarded == true, 0)
-        }
+        let effective_liquidity = bank.effective_liquidity_ratio_bps();
+        let target_liquidity = bank.liquidity_ratio_bps() as u64;
+        let liquidity_buffer = bank.liquidity_buffer_bps() as u64;
+
+        if (effective_liquidity > target_liquidity + liquidity_buffer) {
+            let amount = compute_lend_(
+                bank.reserve.value(),
+                bank.lent(),
+                bank.liquidity_ratio_bps() as u64,
+            );
+
+            bank.lend_(
+                lending_market,
+                amount,
+                clock,
+                ctx,
+            );
+        };
+
+        if (effective_liquidity < target_liquidity - liquidity_buffer) {
+            let amount = compute_recall_(
+                bank.reserve.value(),
+                bank.lent(),
+                bank.liquidity_ratio_bps() as u64,
+            );
+
+            bank.recall_(
+                lending_market,
+                amount,
+                clock,
+                ctx,
+            );
+        };
     }
+    
+    // public(package) fun check_banks<A, B>(
+    //     bank_a: &Bank<A>,
+    //     bank_b: &Bank<B>,
+    // ) {
+    //     bank_a.check_bank();
+    //     bank_b.check_bank();
+    // }
+    
+    // fun check_bank<T>(
+    //     bank: &Bank<T>,
+    //     amount: u64,
+    //     is_input: bool,
+    // ) {
+    //     if (bank.lending.is_some()) {
+    //         assert!(bank.lending.borrow().guarded == true, 0)
+    //     }
+    // }
     
     public(package) fun rebalance_lending<T, P>(
         bank: &mut Bank<T>,
@@ -499,22 +611,69 @@ module slamm::bank {
     ): u64 {
         (reserve + input) - (liquidity_ratio_bps * (reserve + input + lent) / 10_000) 
     }
+
+    // 15% < 20%
+    // 5% * total_reserves =
+    // (target_liquidity - effective_liquidity) * total_reserves
+    // [target - liquid / (liquid + iliquid)] * (liquid + iliquid)
+    // target * (liquid + iliquid) - liquid
+    fun compute_recall_(
+        reserve_t1: u64,
+        lent: u64,
+        liquidity_ratio_bps: u64,
+    ): u64 {
+        (liquidity_ratio_bps * (reserve_t1 + lent) / 10_000) - reserve_t1
+    }
     
+    // effective_liquidity > target_liquidity + liquidity_buffer
+    // 25% > 20%
+    // 5% * total_reserves =
+    // (effective_liquidity - target_liquidity) * total_reserves
+    // [liquid / (liquid + iliquid) - target] * (liquid + iliquid)
+    // liquid - target * (liquid + iliquid)
     fun compute_lend_(
         reserve_t1: u64,
         lent: u64,
         liquidity_ratio_bps: u64,
     ): u64 {
-        reserve_t1 - (liquidity_ratio_bps * (reserve_t1 + lent) / 10_000) 
+        reserve_t1 - (liquidity_ratio_bps * (reserve_t1 + lent) / 10_000)
     }
 
     // ====== Getters Functions =====
 
+    public fun lending<T>(self: &Bank<T>): &Option<Lending> { &self.lending }
+    
+    public fun total_reserve<T>(self: &Bank<T>): u64 {
+        self.reserve.value() + self.lent()
+    }
+    
+    public fun effective_liquidity_ratio_bps<T>(self: &Bank<T>): u64 { 
+        compute_liquidity_ratio(self.reserve.value(), self.lent())
+    }
+    
+    public fun lent<T>(self: &Bank<T>): u64 {
+        if (self.lending.is_some()) {
+            self.lent_unchecked()
+        } else { 0 }
+    }
+    
+    public fun liquidity_ratio_bps<T>(self: &Bank<T>): u16 {
+        if (self.lending.is_some()) {
+            self.liquidity_ratio_bps_unchecked()
+        } else { 0 }
+    }
+    
+    public fun liquidity_buffer_bps<T>(self: &Bank<T>): u16 {
+        if (self.lending.is_some()) {
+            self.liquidity_buffer_bps_unchecked()
+        } else { 0 }
+    }
+    
     public fun lending_market<T>(self: &Bank<T>): ID { self.lending.borrow().lending_market }
     public fun p_type<T>(self: &Bank<T>): TypeName { self.lending.borrow().p_type }
     public fun reserve<T>(self: &Bank<T>): &Balance<T> { &self.reserve }
-    public fun lent<T>(self: &Bank<T>): u64 { self.lending.borrow().lent }
-    public fun liquidity_ratio_bps<T>(self: &Bank<T>): u16 { self.lending.borrow().target_liquidity_ratio_bps }
-    public fun liquidity_buffer_bps<T>(self: &Bank<T>): u16 { self.lending.borrow().liquidity_buffer_bps }
+    public fun lent_unchecked<T>(self: &Bank<T>): u64 { self.lending.borrow().lent }
+    public fun liquidity_ratio_bps_unchecked<T>(self: &Bank<T>): u16 { self.lending.borrow().target_liquidity_ratio_bps }
+    public fun liquidity_buffer_bps_unchecked<T>(self: &Bank<T>): u16 { self.lending.borrow().liquidity_buffer_bps }
     public fun reserve_array_index<T>(self: &Bank<T>): u64 { self.lending.borrow().reserve_array_index }
 }

@@ -6,7 +6,7 @@ module slamm::cpmm {
     use slamm::math::{safe_mul_div_u64};
     use slamm::quote::{Self, SwapQuote};
     use slamm::bank::Bank;
-    use slamm::pool::{Self, Pool, PoolCap, SwapResult};
+    use slamm::pool::{Self, Pool, PoolCap, SwapResult, Intent};
 
     // ===== Constants =====
 
@@ -68,9 +68,57 @@ module slamm::cpmm {
         ctx: &mut TxContext,
     ): SwapResult {
         assert_version_and_upgrade(self);
-        let k0 = k(self);
 
+        let mut intent = intent_swap(
+            self,
+            bank_a,
+            bank_b,
+            amount_in,
+            a2b,
+        );
+
+        let result = execute_swap(
+            self,
+            bank_a,
+            bank_b,
+            intent,
+            coin_a,
+            coin_b,
+            min_amount_out,
+            ctx
+        );
+
+        result
+    }
+
+    public fun intent_swap<A, B, W: drop>(
+        self: &mut Pool<A, B, Hook<W>, State>,
+        bank_a: &mut Bank<A>,
+        bank_b: &mut Bank<B>,
+        amount_in: u64,
+        a2b: bool,
+    ): Intent<A, B, Hook<W>> {
         let quote = quote_swap(self, amount_in, a2b);
+
+        let needs_sync = quote.check_sync(bank_a, bank_b, a2b);
+
+        quote.as_intent(
+            self,
+            needs_sync,
+        )
+    }
+
+    public fun execute_swap<A, B, W: drop>(
+        self: &mut Pool<A, B, Hook<W>, State>,
+        bank_a: &mut Bank<A>,
+        bank_b: &mut Bank<B>,
+        intent: Intent<A, B, Hook<W>>,
+        coin_a: &mut Coin<A>,
+        coin_b: &mut Coin<B>,
+        min_amount_out: u64,
+        ctx: &mut TxContext,
+    ): SwapResult {
+        let k0 = k(self);
 
         let response = self.swap(
             Hook<W> {},
@@ -78,7 +126,7 @@ module slamm::cpmm {
             bank_b,
             coin_a,
             coin_b,
-            quote,
+            intent,
             min_amount_out,
             ctx,
         );

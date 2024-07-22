@@ -4,7 +4,6 @@
 /// called by the hook modules.
 module slamm::pool {
     use sui::clock::Clock;
-    use std::option::{none, some};
     use sui::transfer::public_transfer;
     use sui::tx_context::sender;
     use sui::math::{sqrt_u128, min};
@@ -16,7 +15,7 @@ module slamm::pool {
     use slamm::global_admin::GlobalAdmin;
     use slamm::fees::{Self, Fees, FeeData};
     use slamm::quote::{Self, SwapQuote, DepositQuote, RedeemQuote, SwapInputs, swap_inputs};
-    use slamm::bank::{Self, LendingAction, Bank};
+    use slamm::bank::{Bank};
 
     use suilend::lending_market::{LendingMarket};
     
@@ -145,6 +144,14 @@ module slamm::pool {
         swap_a_out_amount: u128,
         swap_b_in_amount: u128,
     }
+
+    public struct Intent<phantom A, phantom B, phantom Hook> {
+        quote: SwapQuote,
+        needs_sync: bool,
+        // executed: bool,
+        // a: Amount<A>,
+        // b: Amount<B>,
+    }
     
     // ===== Hook Methods =====
 
@@ -251,11 +258,13 @@ module slamm::pool {
         bank_b: &mut Bank<B>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
-        quote: SwapQuote,
+        intent: Intent<A, B, Hook>,
         min_amount_out: u64,
         ctx: &mut TxContext,
     ): SwapResult {
         self.assert_version_and_upgrade();
+
+        let quote = self.consume(intent);
 
         assert!(quote.amount_out() > 0, ESwapOutputAmountIsZero);
         assert!(quote.amount_out() >= min_amount_out, ESwapExceedsSlippage);
@@ -343,8 +352,9 @@ module slamm::pool {
     /// - If `max` params lead to an invalid ratio
     /// - If resulting deposit amounts violate slippage defined by `min` params
     /// - If results in an inconsisten reserve-to-LP supply ratio
-    public fun deposit_liquidity<A, B, Hook: drop, State: store>(
+    public fun deposit_liquidity<A, B, Hook: drop, State: store, P>(
         self: &mut Pool<A, B, Hook, State>,
+        lending_market: &mut LendingMarket<P>,
         bank_a: &mut Bank<A>,
         bank_b: &mut Bank<B>,
         coin_a: &mut Coin<A>,
@@ -353,6 +363,7 @@ module slamm::pool {
         max_b: u64,
         min_a: u64,
         min_b: u64,
+        clock: &Clock,
         ctx:  &mut TxContext,
     ): (Coin<LP<A, B, Hook>>, DepositResult) {
         self.assert_version_and_upgrade();
@@ -405,6 +416,22 @@ module slamm::pool {
             self.lp_supply.supply_value(),
         );
 
+        if (bank_a.lending().is_some()) {
+            bank_a.lend(
+                lending_market,
+                clock,
+                ctx
+            );
+        };
+        
+        if (bank_b.lending().is_some()) {
+            bank_b.lend(
+                lending_market,
+                clock,
+                ctx
+            );
+        };
+        
         (lp_coins, result)
     }
     
@@ -427,13 +454,15 @@ module slamm::pool {
     ///
     /// - If it results in an inconsistent reserve-to-LP supply ratio
     /// - If it results in withdraw amounts that violate the slippage `min` params
-    public fun redeem_liquidity<A, B, Hook: drop, State: store>(
+    public fun redeem_liquidity<A, B, Hook: drop, State: store, P>(
         self: &mut Pool<A, B, Hook, State>,
+        lending_market: &mut LendingMarket<P>,
         bank_a: &mut Bank<A>,
         bank_b: &mut Bank<B>,
         lp_tokens: Coin<LP<A, B, Hook>>,
         min_a: u64,
         min_b: u64,
+        clock: &Clock,
         ctx:  &mut TxContext,
     ): (Coin<A>, Coin<B>, RedeemResult) {
         self.assert_version_and_upgrade();
@@ -445,6 +474,24 @@ module slamm::pool {
             min_a,
             min_b,
         );
+
+        if (bank_a.lending().is_some()) {
+            bank_a.provision(
+                lending_market,
+                quote.withdraw_a(),
+                clock,
+                ctx
+            );
+        };
+        
+        if (bank_b.lending().is_some()) {
+            bank_b.provision(
+                lending_market,
+                quote.withdraw_b(),
+                clock,
+                ctx
+            );
+        };
 
         let initial_lp_supply = self.lp_supply.supply_value();
         let initial_reserve_a = self.reserve_a();
@@ -515,180 +562,35 @@ module slamm::pool {
     }
 
     // ===== Public Lending functions =====
-
-    // public fun init_lending_a<A, B, Hook: drop, State: store, P>(
-    //     self: &mut Pool<A, B, Hook, State>,
-    //     _: &PoolCap<A, B, Hook>,
-    //     bank: &Bank<A>,
-    // ) {
-    //     bank.assert_p_type<P, A>();
-    //     assert!(self.reserve_a.lending_on == false, ELendingAlreadyOnForA);
-    //     assert!(self.lp_supply_val() == 0, EAmmAlreadyInitialized);
-
-    //     self.reserve_a.lending_on = true;
-    // }
     
-    // public fun init_lending_b<A, B, Hook: drop, State: store, P>(
-    //     self: &mut Pool<A, B, Hook, State>,
-    //     _: &PoolCap<A, B, Hook>,
-    //     bank: &Bank<B>,
-    // ) {
-    //     bank.assert_p_type<P, B>();
-    //     assert!(self.reserve_b.lending_on == false, ELendingAlreadyOnForB);
-    //     assert!(self.lp_supply_val() == 0, EAmmAlreadyInitialized);
+    public fun sync_bank_<A, B, Hook: drop, State: store, P>(
+        _self: &mut Pool<A, B, Hook, State>,
+        bank_a: &mut Bank<A>,
+        bank_b: &mut Bank<B>,
+        lending_market: &mut LendingMarket<P>,
+        intent: &mut Intent<A, B, Hook>,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        assert!(intent.needs_sync, 0);
+        intent.needs_sync = false;
 
-    //     self.reserve_b.lending_on = true;
-    // }
-
-    // public fun pull_bank_a<A, B, Hook: drop, State: store, Quote>(
-    //     self: &mut Pool<A, B, Hook, State>,
-    //     bank: &mut Bank<A>,
-    //     intent: &mut Intent<Quote, A, B, Hook>
-    // ) {
-    //     let amount = self.sync_bank(
-    //         bank,
-    //         intent,
-    //         false,
-    //         true,
-    //         true,
-    //     );
-
-    //     self.reserve_a.balance.join(bank.reserve_mut().split(amount));
-
-    // }
-    
-    // public fun pull_bank_a_checked<A, B, Hook: drop, State: store, Quote, P>(
-    //     self: &mut Pool<A, B, Hook, State>,
-    //     bank: &mut Bank<A>,
-    //     lending_market: &mut LendingMarket<P>,
-    //     intent: &mut Intent<Quote, A, B, Hook>,
-    //     clock: &Clock,
-    //     ctx: &mut TxContext,
-    // ) {
-    //     let amount = self.sync_bank(
-    //         bank,
-    //         intent,
-    //         false, // is_push
-    //         true, // is_a
-    //         false, // no_lending
-    //     );
-
-    //     bank.rebalance_lending(lending_market, intent.a.lending_action.borrow_mut(), clock, ctx);
-    //     self.reserve_a.balance.join(bank.reserve_mut().split(amount));
-        
-    // }
-    
-    // public fun pull_bank_b<A, B, Hook: drop, State: store, Quote>(
-    //     self: &mut Pool<A, B, Hook, State>,
-    //     bank: &mut Bank<B>,
-    //     intent: &mut Intent<Quote, A, B, Hook>
-    // ) {
-    //     let amount = self.sync_bank(
-    //         bank,
-    //         intent,
-    //         false, // is_push
-    //         false, // is_a
-    //         true, // no_lending
-    //     );
-
-    //     self.reserve_b.balance.join(bank.reserve_mut().split(amount));
-    // }
-    
-    // public fun pull_bank_b_checked<A, B, Hook: drop, State: store, Quote, P>(
-    //     self: &mut Pool<A, B, Hook, State>,
-    //     bank: &mut Bank<B>,
-    //     lending_market: &mut LendingMarket<P>,
-    //     intent: &mut Intent<Quote, A, B, Hook>,
-    //     clock: &Clock,
-    //     ctx: &mut TxContext,
-    // ) {
-    //     let amount = self.sync_bank(
-    //         bank,
-    //         intent,
-    //         false, // is_push
-    //         false, // is_a
-    //         false, // no_lending
-    //     );
-        
-    //     bank.rebalance_lending(lending_market, intent.b.lending_action.borrow_mut(), clock, ctx);
-    //     self.reserve_b.balance.join(bank.reserve_mut().split(amount));
-
-    // }
-
-    // public fun push_bank_a<A, B, Hook: drop, State: store, Quote>(
-    //     self: &mut Pool<A, B, Hook, State>,
-    //     bank: &mut Bank<A>,
-    //     intent: &mut Intent<Quote, A, B, Hook>
-    // ) {
-    //     let amount = self.sync_bank(
-    //         bank,
-    //         intent,
-    //         true, // is_push
-    //         true, // is_a
-    //         true, // no_lending
-    //     );
-
-    //     bank.reserve_mut().join(self.reserve_a.balance.split(amount));
-
-    // }
-
-    // public fun push_bank_a_checked<A, B, Hook: drop, State: store, Quote, P>(
-    //     self: &mut Pool<A, B, Hook, State>,
-    //     bank: &mut Bank<A>,
-    //     lending_market: &mut LendingMarket<P>,
-    //     intent: &mut Intent<Quote, A, B, Hook>,
-    //     clock: &Clock,
-    //     ctx: &mut TxContext,
-    // ) {
-    //     let amount = self.sync_bank(
-    //         bank,
-    //         intent,
-    //         true, // is_push
-    //         true, // is_a
-    //         false, // no_lending
-    //     );
-        
-    //     bank.reserve_mut().join(self.reserve_a.balance.split(amount));
-    //     bank.rebalance_lending(lending_market, intent.a.lending_action.borrow_mut(), clock, ctx);
-    // }
-    
-    // public fun push_bank_b<A, B, Hook: drop, State: store, Quote>(
-    //     self: &mut Pool<A, B, Hook, State>,
-    //     bank: &mut Bank<B>,
-    //     intent: &mut Intent<Quote, A, B, Hook>
-    // ) {
-    //     let amount = self.sync_bank(
-    //         bank,
-    //         intent,
-    //         true, // is_push
-    //         false, // is_a
-    //         true, // no_lending
-    //     );
-
-    //     bank.reserve_mut().join(self.reserve_b.balance.split(amount));
-
-    // }
-
-    // public fun push_bank_b_checked<A, B, Hook: drop, State: store, Quote, P>(
-    //     self: &mut Pool<A, B, Hook, State>,
-    //     bank: &mut Bank<B>,
-    //     lending_market: &mut LendingMarket<P>,
-    //     intent: &mut Intent<Quote, A, B, Hook>,
-    //     clock: &Clock,
-    //     ctx: &mut TxContext,
-    // ) {
-    //     let amount = self.sync_bank(
-    //         bank,
-    //         intent,
-    //         true, // is_push
-    //         false, // is_a
-    //         false, // no_lending
-    //     );
-        
-    //     bank.reserve_mut().join(self.reserve_b.balance.split(amount));
-    //     bank.rebalance_lending(lending_market, intent.b.lending_action.borrow_mut(), clock, ctx);
-        
-    // }
+        if (intent.quote.a2b()) {
+            bank_b.provision(
+                lending_market,
+                intent.quote.amount_out(),
+                clock,
+                ctx
+            );
+        } else {
+            bank_a.provision(
+                lending_market,
+                intent.quote.amount_out(),
+                clock,
+                ctx
+            );
+        };
+    }
 
     // ===== View & Getters =====
     
@@ -736,204 +638,6 @@ module slamm::pool {
 
     public fun minimum_liquidity(): u64 { MINIMUM_LIQUIDITY }
 
-    // ===== Intent functions =====
-
-    // public fun intent_deposit<A, B, Hook: drop, State: store>(
-    //     self: &mut Pool<A, B, Hook, State>,
-    //     max_a: u64,
-    //     max_b: u64,
-    //     min_a: u64,
-    //     min_b: u64,
-    // ): Intent<DepositQuote, A, B, Hook> {
-    //     self.assert_version_and_upgrade();
-
-    //     // Compute token deposits and delta lp tokens
-    //     let quote = quote_deposit_impl(
-    //         self,
-    //         max_a,
-    //         max_b,
-    //         min_a,
-    //         min_b,
-    //     );
-
-    //     quote.as_intent(self)
-    // }
-    
-    // public fun execute_deposit<A, B, Hook: drop, State: store>(
-    //     self: &mut Pool<A, B, Hook, State>,
-    //     bank_a: &mut Bank<A>,
-    //     bank_b: &mut Bank<B>,
-    //     coin_a: &mut Coin<A>,
-    //     coin_b: &mut Coin<B>,
-    //     deposit_intent: &mut Intent<DepositQuote, A, B, Hook>,
-    //     ctx:  &mut TxContext,
-    // ): (Coin<LP<A, B, Hook>>, DepositResult) {
-    //     self.assert_version_and_upgrade();
-    //     deposit_intent.executed = true;
-
-    //     let quote = &deposit_intent.quote;
-
-    //     let initial_lp_supply = self.lp_supply.supply_value();
-    //     let initial_reserve_a = self.reserve_a();
-
-    //     let balance_a = coin_a.balance_mut().split(quote.deposit_a());
-    //     let balance_b = coin_b.balance_mut().split(quote.deposit_b());
-        
-    //     // Add liquidity to pool
-    //     self.reserve_a.deposit(bank_a, balance_a);
-    //     self.reserve_b.deposit(bank_b, balance_b);
-
-    //     // Mint LP Tokens
-    //     let mut lp_coins = coin::from_balance(
-    //         self.lp_supply.increase_supply(quote.mint_lp()),
-    //         ctx
-    //     );
-
-    //     // Emit event
-    //     let result = DepositResult {
-    //         user: sender(ctx),
-    //         pool_id: object::id(self),
-    //         deposit_a: quote.deposit_a(),
-    //         deposit_b: quote.deposit_b(),
-    //         mint_lp: quote.mint_lp(),
-    //     };
-        
-    //     emit_event(result);
-
-    //     // Lock minimum liquidity if initial seed liquidity - prevents inflation attack
-    //     if (quote.initial_deposit()) {
-    //         public_transfer(lp_coins.split(MINIMUM_LIQUIDITY, ctx), @0x0);
-    //     };
-
-    //     assert_lp_supply_reserve_ratio(
-    //         self.reserve_a(),
-    //         initial_reserve_a,
-    //         initial_lp_supply,
-    //         self.lp_supply.supply_value(),
-    //     );
-
-    //     (lp_coins, result)
-    // }
-
-    // public fun intent_redeem<A, B, Hook: drop, State: store>(
-    //     self: &mut Pool<A, B, Hook, State>,
-    //     lp_tokens: &Coin<LP<A, B, Hook>>,
-    //     min_a: u64,
-    //     min_b: u64,
-    // ): Intent<RedeemQuote, A, B, Hook> {
-    //     self.assert_version_and_upgrade();
-
-    //     // Compute amounts to withdraw
-    //     let quote = quote_redeem_impl(
-    //         self,
-    //         lp_tokens.value(),
-    //         min_a,
-    //         min_b,
-    //     );
-
-    //     quote.as_intent(self)
-    // }
-
-    // public fun execute_redeem<A, B, Hook: drop, State: store>(
-    //     self: &mut Pool<A, B, Hook, State>,
-    //     bank_a: &mut Bank<A>,
-    //     bank_b: &mut Bank<B>,
-    //     lp_tokens: Coin<LP<A, B, Hook>>,
-    //     redeem_intent: &mut Intent<RedeemQuote, A, B, Hook>,
-    //     ctx:  &mut TxContext,
-    // ): (Coin<A>, Coin<B>, RedeemResult) {
-    //     self.assert_version_and_upgrade();
-    //     redeem_intent.executed = true;
-
-    //     let initial_lp_supply = self.lp_supply.supply_value();
-    //     let initial_reserve_a = self.reserve_a();
-    //     let lp_burn = lp_tokens.value();
-
-    //     let quote = &redeem_intent.quote;
-    //     assert!(quote.burn_lp() == lp_burn, 0);
-
-    //     // Burn LP Tokens
-    //     self.lp_supply.decrease_supply(
-    //         lp_tokens.into_balance()
-    //     );
-
-    //     // Prepare tokens to send
-    //     let base_tokens = coin::from_balance(
-    //         self.reserve_a.withdraw(bank_a, quote.withdraw_a()),
-    //         ctx,
-    //     );
-    //     let quote_tokens = coin::from_balance(
-    //         self.reserve_b.withdraw(bank_b, quote.withdraw_b()),
-    //         ctx,
-    //     );
-
-    //     assert_lp_supply_reserve_ratio(
-    //         self.reserve_a(),
-    //         initial_reserve_a,
-    //         initial_lp_supply,
-    //         self.lp_supply.supply_value(),
-    //     );
-
-    //     // Emit events
-    //     let result = RedeemResult {
-    //         user: sender(ctx),
-    //         pool_id: object::id(self),
-    //         withdraw_a: quote.withdraw_a(),
-    //         withdraw_b: quote.withdraw_b(),
-    //         burn_lp: lp_burn,
-    //     };
-
-    //     emit_event(result);
-
-    //     (base_tokens, quote_tokens, result)
-    // }
-
-    // public fun consume<A, B, Hook: drop, State: store, Quote: drop>(
-    //     pool: &mut Pool<A, B, Hook, State>,
-    //     intent: Intent<Quote, A, B, Hook>,
-    // ) {
-    //     pool.unguard();
-    //     assert!(object::id(pool) == intent.pool_id, EPoolIdMistmatch);
-
-    //     let Intent { pool_id: _, executed, a, b, quote: _ } = intent;
-
-    //     assert!(executed == true, 0);
-
-    //     let Amount { amount: _, mut funds, mut lending_action, direction: _ } = a;
-    //     if (pool.reserve_a.lending_on) {
-    //         assert!(lending_action.is_some(), 0);
-    //     };
-
-    //     if (funds.is_some()) {
-    //         let bal = funds.extract();
-    //         bal.destroy_zero();
-    //     };
-    //     if (lending_action.is_some()) {
-    //         let lending_action = lending_action.extract();
-    //         assert!(lending_action.is_ok(), 0);
-    //     };
-
-    //     funds.destroy_none();
-    //     lending_action.destroy_none();
-
-    //     let Amount { amount: _, mut funds, mut lending_action, direction: _} = b;
-    //     if (pool.reserve_b.lending_on) {
-    //         assert!(lending_action.is_some(), 0);
-    //     };
-
-    //     if (funds.is_some()) {
-    //         let bal = funds.extract();
-    //         bal.destroy_zero();
-    //     };
-    //     if (lending_action.is_some()) {
-    //         let lending_action = lending_action.extract();
-    //         assert!(lending_action.is_ok(), 0);
-    //     };
-
-    //     funds.destroy_none();
-    //     lending_action.destroy_none();
-    // }
-
     // ===== Package functions =====
 
     public(package) fun compute_fees<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, amount_in: u64): SwapInputs {
@@ -953,23 +657,19 @@ module slamm::pool {
     ): &mut State {
         &mut self.inner
     }
-
-    // public(package) fun as_intent<A, B, Hook: drop, State: store, Quote>(
-    //     quote: Quote,
-    //     a: Amount<A>,
-    //     b: Amount<B>,
-    //     pool: &mut Pool<A, B, Hook, State>,
-    // ): Intent<Quote, A, B, Hook> {
-    //     pool.guard();
+    
+    public(package) fun as_intent<A, B, Hook: drop, State: store>(
+        quote: SwapQuote,
+        pool: &mut Pool<A, B, Hook, State>,
+        needs_sync: bool,
+    ): Intent<A, B, Hook> {
+        pool.guard();
         
-    //     Intent {
-    //         pool_id: object::id(pool),
-    //         quote: quote,
-    //         executed: false,
-    //         a,
-    //         b,
-    //     }
-    // }
+        Intent {
+            quote,
+            needs_sync,
+        }
+    }
     
     // public(package) fun as_intent_swap<A, B, Hook: drop, State: store>(
     //     quote: SwapQuote,
@@ -1003,49 +703,22 @@ module slamm::pool {
     //         pool,
     //     )
     // }
-    
-    // public(package) fun as_intent_deposit<A, B, Hook: drop, State: store>(
-    //     quote: DepositQuote,
-    //     pool: &mut Pool<A, B, Hook, State>,
-    // ): Intent<DepositQuote, A, B, Hook> {
-    //     let (funds_a, funds_b) = (
-    //         if (pool.reserve_a.lending_on) { some(balance::zero<A>()) } else { none() },
-    //         if (pool.reserve_b.lending_on) { some(balance::zero<B>()) } else { none() }
-    //     );
 
-    //     let lending_action = none();
-    //     let deposit_a = quote.deposit_a();
-    //     let deposit_b = quote.deposit_b();
-        
-    //     as_intent(
-    //         quote,
-    //         Amount { amount: deposit_a, funds: funds_a, lending_action, direction: Direction::Input },
-    //         Amount { amount: deposit_b, funds: funds_b, lending_action, direction: Direction::Input },
-    //         pool,
-    //     )
-    // }
-    
-    // public(package) fun as_intent_redeem<A, B, Hook: drop, State: store>(
-    //     quote: RedeemQuote,
-    //     pool: &mut Pool<A, B, Hook, State>,
-    // ): Intent<RedeemQuote, A, B, Hook> {
-    //     let (funds_a, funds_b) = (
-    //         if (pool.reserve_a.lending_on) { some(balance::zero<A>()) } else { none() },
-    //         if (pool.reserve_b.lending_on) { some(balance::zero<B>()) } else { none() }
-    //     );
+    fun consume<A, B, Hook: drop, State: store, >(
+        pool: &mut Pool<A, B, Hook, State>,
+        intent: Intent<A, B, Hook>,
+    ): SwapQuote {
+        pool.unguard();
 
-    //     let lending_action = none();
+        let Intent {
+            needs_sync,
+            quote,
+        } = intent;
 
-    //     let withdraw_a = quote.withdraw_a();
-    //     let withdraw_b = quote.withdraw_b();
+        assert!(needs_sync == false, 0);
 
-    //     as_intent(
-    //         quote,
-    //         Amount { amount: withdraw_a, funds: funds_a, lending_action, direction: Direction::Output },
-    //         Amount { amount: withdraw_b, funds: funds_b, lending_action, direction: Direction::Output },
-    //         pool,
-    //     )
-    // }
+        quote
+    }
 
     public(package) fun guard<A, B, Hook: drop, State: store>(
         pool: &mut Pool<A, B, Hook, State>,
@@ -1296,47 +969,6 @@ module slamm::pool {
             ELpSupplyToReserveRatioViolation
         );
     }
-
-    // fun sync_bank<A, B, Hook: drop, State: store, Quote, T>(
-    //     self: &mut Pool<A, B, Hook, State>,
-    //     bank: &Bank<T>,
-    //     intent: &mut Intent<Quote, A, B, Hook>,
-    //     is_push: bool,
-    //     is_a: bool,
-    //     no_lending: bool,
-    // ): u64 {
-    //     let (amount, is_input) = if (is_a) {(intent.a.amount, &intent.a.direction == Direction::Input)} else {(intent.b.amount, &intent.b.direction == Direction::Input)};
-
-    //     if (is_push) {
-    //         assert!(is_input, 0);
-    //         if (is_a) {
-    //             self.reserve_a.lent = self.reserve_a.lent + amount;
-    //         } else {
-    //             self.reserve_b.lent = self.reserve_b.lent + amount;
-    //         }
-    //     } else {
-    //         assert!(!is_input, 0);
-    //         if (is_a) {
-    //             self.reserve_a.lent = self.reserve_a.lent - amount;
-    //         } else {
-    //             self.reserve_b.lent = self.reserve_b.lent - amount;
-    //         }
-    //     };
-
-    //     let lending_action = bank.compute_lending_action(amount, is_input);
-
-    //     if (no_lending) {
-    //         assert!(lending_action.is_ok(), 0);
-    //     };
-
-    //     if (is_a) {
-    //         intent.a.lending_action.fill(lending_action);
-    //     } else {
-    //         intent.b.lending_action.fill(lending_action);
-    //     };
-
-    //     amount
-    // }
 
     // ===== Results/Events =====
 

@@ -10,6 +10,7 @@ module slamm::slamm_tests {
     use sui::sui::SUI;
     use sui::coin::{Self};
     use sui::test_utils::{destroy, assert_eq};
+    use suilend::lending_market::{Self, LENDING_MARKET};
 
     const ADMIN: address = @0x10;
     const POOL_CREATOR: address = @0x11;
@@ -29,9 +30,11 @@ module slamm::slamm_tests {
 
         // Init Pool
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-        let ctx = ctx(&mut scenario);
 
-        let mut registry = registry::init_for_testing(ctx);
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup_external(&mut scenario);
+        
+        let ctx = ctx(&mut scenario);
 
         let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
             Wit {},
@@ -47,6 +50,7 @@ module slamm::slamm_tests {
         let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -55,6 +59,7 @@ module slamm::slamm_tests {
             500_000,
             0,
             0,
+            &clock,
             ctx,
         );
 
@@ -80,6 +85,7 @@ module slamm::slamm_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
 
         let (lp_coins_2, _) = pool.deposit_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -88,6 +94,7 @@ module slamm::slamm_tests {
             500_000, // max_b
             0,
             0,
+            &clock,
             ctx,
         );
 
@@ -108,11 +115,13 @@ module slamm::slamm_tests {
         let ctx = ctx(&mut scenario);
 
         let (coin_a, coin_b, _) = pool.redeem_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             lp_coins_2,
             0,
             0,
+            &clock,
             ctx,
         );
 
@@ -158,11 +167,13 @@ module slamm::slamm_tests {
         let ctx = ctx(&mut scenario);
 
         let (coin_a, coin_b, _) = pool.redeem_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             lp_coins,
             0,
             0,
+            &clock,
             ctx,
         );
 
@@ -202,6 +213,11 @@ module slamm::slamm_tests {
         destroy(pool);
         destroy(pool_cap);
         destroy(global_admin);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(clock);
+        destroy(bag);
+        destroy(lending_market);
         test_scenario::end(scenario);
     }
     
@@ -212,9 +228,11 @@ module slamm::slamm_tests {
 
         // Init Pool
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-        let ctx = ctx(&mut scenario);
 
-        let mut registry = registry::init_for_testing(ctx);
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup_external(&mut scenario);
+        
+        let ctx = ctx(&mut scenario);
 
         let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
             Wit {},
@@ -230,6 +248,7 @@ module slamm::slamm_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -238,6 +257,7 @@ module slamm::slamm_tests {
             e9(500_000),
             0,
             0,
+            &clock,
             ctx,
         );
 
@@ -263,6 +283,7 @@ module slamm::slamm_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(e9(10), ctx);
 
         let (lp_coins_2, _) = pool.deposit_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -271,6 +292,7 @@ module slamm::slamm_tests {
             e9(10), // max_b
             0,
             0,
+            &clock,
             ctx,
         );
 
@@ -290,11 +312,13 @@ module slamm::slamm_tests {
         let ctx = ctx(&mut scenario);
 
         let (coin_a, coin_b, _) = pool.redeem_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             lp_coins_2,
             0,
             0,
+            &clock,
             ctx,
         );
 
@@ -340,6 +364,11 @@ module slamm::slamm_tests {
         destroy(pool);
         destroy(lp_coins);
         destroy(pool_cap);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(clock);
+        destroy(bag);
+        destroy(lending_market);
         test_scenario::end(scenario);
     }
 
@@ -350,9 +379,11 @@ module slamm::slamm_tests {
 
         // Init Pool
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-        let ctx = ctx(&mut scenario);
 
-        let mut registry = registry::init_for_testing(ctx);
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup_external(&mut scenario);
+        
+        let ctx = ctx(&mut scenario);
 
         let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
             Wit {},
@@ -368,6 +399,7 @@ module slamm::slamm_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(1, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -376,6 +408,7 @@ module slamm::slamm_tests {
             1,
             0,
             0,
+            &clock,
             ctx,
         );
 
@@ -408,6 +441,11 @@ module slamm::slamm_tests {
         destroy(lp_coins);
         destroy(pool);
         destroy(pool_cap);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(clock);
+        destroy(bag);
+        destroy(lending_market);
         test_scenario::end(scenario);
     }
     
@@ -417,9 +455,11 @@ module slamm::slamm_tests {
 
         // Init Pool
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-        let ctx = ctx(&mut scenario);
 
-        let mut registry = registry::init_for_testing(ctx);
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup_external(&mut scenario);
+        
+        let ctx = ctx(&mut scenario);
 
         let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
             Wit {},
@@ -435,6 +475,7 @@ module slamm::slamm_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(1, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -443,6 +484,7 @@ module slamm::slamm_tests {
             1,
             0,
             0,
+            &clock,
             ctx,
         );
 
@@ -481,6 +523,11 @@ module slamm::slamm_tests {
         destroy(lp_coins);
         destroy(pool);
         destroy(pool_cap);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(clock);
+        destroy(bag);
+        destroy(lending_market);
         test_scenario::end(scenario);
     }
     
@@ -491,9 +538,11 @@ module slamm::slamm_tests {
 
         // Init Pool
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-        let ctx = ctx(&mut scenario);
 
-        let mut registry = registry::init_for_testing(ctx);
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup_external(&mut scenario);
+        
+        let ctx = ctx(&mut scenario);
 
         let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
             Wit {},
@@ -510,6 +559,7 @@ module slamm::slamm_tests {
 
         // Initial deposit
         let (lp_coins, _) = pool.deposit_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -518,6 +568,7 @@ module slamm::slamm_tests {
             e9(500_000),
             0,
             0,
+            &clock,
             ctx,
         );
 
@@ -548,6 +599,7 @@ module slamm::slamm_tests {
         );
         
         let (lp_coins_2, _) = pool.deposit_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -556,6 +608,7 @@ module slamm::slamm_tests {
             e9(10), // max_b
             deposit_result.deposit_a() + 1, // min_a
             deposit_result.deposit_b() + 1, // min_b
+            &clock,
             ctx,
         );
 
@@ -576,6 +629,11 @@ module slamm::slamm_tests {
         destroy(pool);
         destroy(lp_coins);
         destroy(pool_cap);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(clock);
+        destroy(bag);
+        destroy(lending_market);
         test_scenario::end(scenario);
     }
     
@@ -586,9 +644,11 @@ module slamm::slamm_tests {
 
         // Init Pool
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-        let ctx = ctx(&mut scenario);
 
-        let mut registry = registry::init_for_testing(ctx);
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup_external(&mut scenario);
+        
+        let ctx = ctx(&mut scenario);
 
         let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
             Wit {},
@@ -605,6 +665,7 @@ module slamm::slamm_tests {
 
         // Initial deposit
         let (lp_coins, _) = pool.deposit_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -613,6 +674,7 @@ module slamm::slamm_tests {
             e9(1_000),
             0,
             0,
+            &clock,
             ctx,
         );
 
@@ -643,6 +705,7 @@ module slamm::slamm_tests {
         );
         
         let (lp_coins_2, _) = pool.deposit_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -651,6 +714,7 @@ module slamm::slamm_tests {
             e9(10), // max_b
             deposit_result.deposit_a(), // min_a
             deposit_result.deposit_b() + 1, // min_b
+            &clock,
             ctx,
         );
 
@@ -671,6 +735,11 @@ module slamm::slamm_tests {
         destroy(pool);
         destroy(lp_coins);
         destroy(pool_cap);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(clock);
+        destroy(bag);
+        destroy(lending_market);
         test_scenario::end(scenario);
     }
     
@@ -681,9 +750,11 @@ module slamm::slamm_tests {
 
         // Init Pool
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-        let ctx = ctx(&mut scenario);
 
-        let mut registry = registry::init_for_testing(ctx);
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup_external(&mut scenario);
+        
+        let ctx = ctx(&mut scenario);
 
         let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
             Wit {},
@@ -699,6 +770,7 @@ module slamm::slamm_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -707,6 +779,7 @@ module slamm::slamm_tests {
             e9(500_000),
             0,
             0,
+            &clock,
             ctx,
         );
 
@@ -754,6 +827,11 @@ module slamm::slamm_tests {
         destroy(bank_b);
         destroy(lp_coins);
         destroy(pool_cap);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(clock);
+        destroy(bag);
+        destroy(lending_market);
         test_scenario::end(scenario);
     }
 
@@ -764,9 +842,11 @@ module slamm::slamm_tests {
 
         // Init Pool
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-        let ctx = ctx(&mut scenario);
 
-        let mut registry = registry::init_for_testing(ctx);
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup_external(&mut scenario);
+        
+        let ctx = ctx(&mut scenario);
 
         let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
             Wit {},
@@ -782,6 +862,7 @@ module slamm::slamm_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -790,6 +871,7 @@ module slamm::slamm_tests {
             e9(500_000),
             0,
             0,
+            &clock,
             ctx,
         );
 
@@ -815,6 +897,7 @@ module slamm::slamm_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(e9(10), ctx);
 
         let (lp_coins_2, _) = pool.deposit_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -823,6 +906,7 @@ module slamm::slamm_tests {
             e9(10), // max_b
             0,
             0,
+            &clock,
             ctx,
         );
 
@@ -846,11 +930,13 @@ module slamm::slamm_tests {
         );
         
         let (coin_a, coin_b, _) = pool.redeem_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             lp_coins_2,
             redeem_result.withdraw_a() + 1,
             redeem_result.withdraw_b() + 1,
+            &clock,
             ctx,
         );
 
@@ -862,6 +948,11 @@ module slamm::slamm_tests {
         destroy(bank_b);
         destroy(lp_coins);
         destroy(pool_cap);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(clock);
+        destroy(bag);
+        destroy(lending_market);
         test_scenario::end(scenario);
     }
     
@@ -872,9 +963,11 @@ module slamm::slamm_tests {
 
         // Init Pool
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-        let ctx = ctx(&mut scenario);
 
-        let mut registry = registry::init_for_testing(ctx);
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup_external(&mut scenario);
+        
+        let ctx = ctx(&mut scenario);
 
         let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
             Wit {},
@@ -890,6 +983,7 @@ module slamm::slamm_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -898,6 +992,7 @@ module slamm::slamm_tests {
             e9(1_000),
             0,
             0,
+            &clock,
             ctx,
         );
 
@@ -923,6 +1018,7 @@ module slamm::slamm_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(e9(10), ctx);
 
         let (lp_coins_2, _) = pool.deposit_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -931,6 +1027,7 @@ module slamm::slamm_tests {
             e9(10), // max_b
             0,
             0,
+            &clock,
             ctx,
         );
 
@@ -954,11 +1051,13 @@ module slamm::slamm_tests {
         );
         
         let (coin_a, coin_b, _) = pool.redeem_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             lp_coins_2,
             redeem_result.withdraw_a(),
             redeem_result.withdraw_b() + 1,
+            &clock,
             ctx,
         );
 
@@ -970,6 +1069,11 @@ module slamm::slamm_tests {
         destroy(bank_b);
         destroy(lp_coins);
         destroy(pool_cap);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(clock);
+        destroy(bag);
+        destroy(lending_market);
         test_scenario::end(scenario);
     }
 
@@ -980,9 +1084,11 @@ module slamm::slamm_tests {
 
         // Init Pool
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-        let ctx = ctx(&mut scenario);
 
-        let mut registry = registry::init_for_testing(ctx);
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup_external(&mut scenario);
+        
+        let ctx = ctx(&mut scenario);
 
         let (pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
             Wit {},
@@ -994,6 +1100,11 @@ module slamm::slamm_tests {
         destroy(registry);
         destroy(pool);
         destroy(pool_cap);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(clock);
+        destroy(bag);
+        destroy(lending_market);
         test_scenario::end(scenario);
     }
 
@@ -1004,9 +1115,11 @@ module slamm::slamm_tests {
 
         // Init Pool
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-        let ctx = ctx(&mut scenario);
 
-        let mut registry = registry::init_for_testing(ctx);
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup_external(&mut scenario);
+        
+        let ctx = ctx(&mut scenario);
 
         let (pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
             Wit {},
@@ -1027,6 +1140,11 @@ module slamm::slamm_tests {
         destroy(pool_2);
         destroy(pool_cap);
         destroy(pool_cap_2);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(clock);
+        destroy(bag);
+        destroy(lending_market);
         test_scenario::end(scenario);
     }
     
@@ -1036,9 +1154,11 @@ module slamm::slamm_tests {
 
         // Init Pool
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-        let ctx = ctx(&mut scenario);
 
-        let mut registry = registry::init_for_testing(ctx);
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup_external(&mut scenario);
+        
+        let ctx = ctx(&mut scenario);
 
         let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
             Wit {},
@@ -1061,6 +1181,7 @@ module slamm::slamm_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(e9(200_000_000), ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -1069,10 +1190,12 @@ module slamm::slamm_tests {
             e9(100_000_000),
             0,
             0,
+            &clock,
             ctx,
         );
         
         let (lp_coins_2, _) = pool_2.deposit_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -1081,6 +1204,7 @@ module slamm::slamm_tests {
             e9(100_000_000),
             0,
             0,
+            &clock,
             ctx,
         );
 
@@ -1156,20 +1280,24 @@ module slamm::slamm_tests {
         let ctx = ctx(&mut scenario);
 
         let (coin_a, coin_b, _) = pool.redeem_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             lp_coins,
             0,
             0,
+            &clock,
             ctx,
         );
         
         let (coin_a_2, coin_b_2, _) = pool_2.redeem_liquidity(
+            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             lp_coins_2,
             0,
             0,
+            &clock,
             ctx,
         );
 
@@ -1184,6 +1312,11 @@ module slamm::slamm_tests {
         destroy(bank_b);
         destroy(pool_cap);
         destroy(pool_cap_2);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(clock);
+        destroy(bag);
+        destroy(lending_market);
         test_scenario::end(scenario);
     }
 }
