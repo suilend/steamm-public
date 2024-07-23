@@ -5,12 +5,36 @@ module slamm::test_utils {
     use slamm::bank::{Self, Bank};
     use slamm::pool::{Pool};
     use sui::test_utils::destroy;
-    use sui::test_scenario::{Self, ctx};
+    use sui::test_scenario::{Self, ctx, Scenario};
     use sui::sui::SUI;
+    use sui::bag::{Self, Bag};
+    use std::type_name;
+    use suilend::test_usdc::{TEST_USDC};
+    use suilend::test_sui::{TEST_SUI};
+    use suilend::lending_market;
 
     public struct PoolWit has drop {}
     public struct COIN has drop {}
 
+    #[test_only]
+    public fun reserve_args(scenario: &mut Scenario): Bag {
+        let mut bag = bag::new(test_scenario::ctx(scenario));
+        bag::add(
+            &mut bag, 
+            type_name::get<TEST_USDC>(), 
+            lending_market::new_args(100 * 1_000_000),
+        );
+            
+        bag::add(
+            &mut bag, 
+            type_name::get<TEST_SUI>(), 
+            lending_market::new_args(100 * 1_000_000),
+        );
+
+        bag
+    }
+    
+    
     #[test_only]
     public fun new_for_testing(
         reserve_a: u64,

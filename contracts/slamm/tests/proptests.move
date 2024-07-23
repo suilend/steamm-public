@@ -3,13 +3,14 @@ module slamm::proptests {
     use slamm::registry;
     use slamm::cpmm::{Self};
     use slamm::bank;
+    use slamm::test_utils::reserve_args;
     use slamm::test_utils::COIN;
     use sui::test_scenario::{Self, ctx};
     use sui::sui::SUI;
     use sui::random;
     use sui::coin::{Self};
     use sui::test_utils::{destroy};
-    use suilend::lending_market::{Self, LENDING_MARKET};
+    use suilend::lending_market;
 
     const ADMIN: address = @0x10;
     const POOL_CREATOR: address = @0x11;
@@ -30,7 +31,7 @@ module slamm::proptests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup_external(&mut scenario);
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
@@ -118,7 +119,7 @@ module slamm::proptests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup_external(&mut scenario);
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
@@ -209,7 +210,7 @@ module slamm::proptests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup_external(&mut scenario);
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 

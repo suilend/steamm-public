@@ -6,7 +6,7 @@ edition = "2024.alpha" # edition = "legacy" to use legacy (pre-2024) Move
 
 [dependencies]
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet" }
-suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts", rev = "devel" }
+suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts", rev = "expose-test-only-fns" }
 
 # For remote import, use the `{ git = "...", subdir = "...", rev = "..." }`.
 # Revision can be a branch, a tag, and a commit hash.
@@ -28,7 +28,6 @@ suilend = "0xf95b06141ed4a174f239417323bde3f209b972f5930d8521ea38a52aff3a6ddf"
 # alice = "0xA11CE"
 
 [dev-dependencies]
-suilend = { local = "../../local/suilend" }
 # The dev-dependencies section allows overriding dependencies for `--test` and
 # `--dev` modes. You can introduce test-only dependencies here.
 # Local = { local = "../path/to/dev-build" }
