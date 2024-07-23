@@ -1,7 +1,7 @@
 #[test_only]
 module slamm::lend_tests {
     // use std::debug::print;
-    use slamm::pool::minimum_liquidity;
+    use slamm::pool::{Self, minimum_liquidity};
     use slamm::registry;
     use slamm::global_admin;
     use slamm::cpmm::{Self};
@@ -78,8 +78,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().acc_fees_a(), 0);
-        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
+        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 500_000);
@@ -162,8 +162,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().acc_fees_a(), 0);
-        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
+        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 500_000);
@@ -194,8 +194,8 @@ module slamm::lend_tests {
         assert_eq(pool.lp_supply_val(), 10);
         assert_eq(reserve_a, 10);
         assert_eq(reserve_b, 10);
-        assert_eq(pool.pool_fees().acc_fees_a(), 0);
-        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
+        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 10);
@@ -277,8 +277,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().acc_fees_a(), 0);
-        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
+        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 500_000);
@@ -394,8 +394,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().acc_fees_a(), 0);
-        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
+        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 500_000);
@@ -487,8 +487,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().acc_fees_a(), 0);
-        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
+        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 500_000);
@@ -520,8 +520,8 @@ module slamm::lend_tests {
         assert_eq(pool.lp_supply_val(), 10);
         assert_eq(reserve_a, 10);
         assert_eq(reserve_b, 10);
-        assert_eq(pool.pool_fees().acc_fees_a(), 0);
-        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
+        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -604,8 +604,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().acc_fees_a(), 0);
-        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
+        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 500_000);
@@ -624,13 +624,11 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<TEST_SUI>(0, ctx);
 
         let swap_intent = pool.cpmm_intent_swap(
-            &mut bank_a,
-            &mut bank_b,
             50_000,
             true, // a2b
         );
 
-        assert!(swap_intent.needs_sync() == false, 0);
+        assert!(!swap_intent.quote().needs_sync(&bank_a,&bank_b));
 
         pool.cpmm_execute_swap(
             &mut bank_a,
@@ -734,8 +732,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().acc_fees_a(), 0);
-        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
+        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 500_000);
@@ -754,13 +752,11 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<TEST_SUI>(0, ctx);
 
         let mut swap_intent = pool.cpmm_intent_swap(
-            &mut bank_a,
-            &mut bank_b,
             200_000,
             true, // a2b
         );
 
-        pool.sync_bank(
+        pool::sync_bank(
             &mut bank_a,
             &mut bank_b,
             &mut lending_market,

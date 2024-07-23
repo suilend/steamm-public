@@ -71,8 +71,6 @@ module slamm::cpmm {
 
         let intent = intent_swap(
             self,
-            bank_a,
-            bank_b,
             amount_in,
             a2b,
         );
@@ -93,19 +91,12 @@ module slamm::cpmm {
 
     public fun intent_swap<A, B, W: drop>(
         self: &mut Pool<A, B, Hook<W>, State>,
-        bank_a: &mut Bank<A>,
-        bank_b: &mut Bank<B>,
         amount_in: u64,
         a2b: bool,
     ): Intent<A, B, Hook<W>> {
         let quote = quote_swap(self, amount_in, a2b);
 
-        let needs_sync = quote.check_sync(bank_a, bank_b, a2b);
-
-        quote.as_intent(
-            self,
-            needs_sync,
-        )
+        quote.as_intent(self)
     }
 
     public fun execute_swap<A, B, W: drop>(

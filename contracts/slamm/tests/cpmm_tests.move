@@ -71,8 +71,8 @@ module slamm::slamm_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().acc_fees_a(), 0);
-        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
+        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -195,10 +195,10 @@ module slamm::slamm_tests {
 
         assert_eq(coin_a.value(), 100);
         assert_eq(coin_b.value(), 0);
-        assert_eq(pool.protocol_fees().fee_data().acc_fees_a(), 100);
-        assert_eq(pool.protocol_fees().fee_data().acc_fees_b(), 0);
-        assert_eq(pool.pool_fees().acc_fees_a(), 400);
-        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+        assert_eq(pool.protocol_fees().fee_a().acc_fees(), 100);
+        assert_eq(pool.protocol_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.pool_fees().fee_a().acc_fees(), 400);
+        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
         
         assert_eq(pool.trading_data().total_swap_a_in_amount(), 50_000);
         assert_eq(pool.trading_data().total_swap_b_out_amount(), 45040);
@@ -269,8 +269,8 @@ module slamm::slamm_tests {
         assert_eq(reserve_a, e9(1_000));
         assert_eq(reserve_b, e9(500_000));
         assert_eq(lp_coins.value(), 22360679774997 - minimum_liquidity());
-        assert_eq(pool.pool_fees().acc_fees_a(), 0);
-        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
+        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -580,8 +580,8 @@ module slamm::slamm_tests {
         assert_eq(reserve_a, e9(1_000));
         assert_eq(reserve_b, e9(500_000));
         assert_eq(lp_coins.value(), 22360679774997 - minimum_liquidity());
-        assert_eq(pool.pool_fees().acc_fees_a(), 0);
-        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
+        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -686,8 +686,8 @@ module slamm::slamm_tests {
         assert_eq(reserve_a, e9(1_000));
         assert_eq(reserve_b, e9(1_000));
         assert_eq(lp_coins.value(), 1000000000000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().acc_fees_a(), 0);
-        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
+        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -790,8 +790,8 @@ module slamm::slamm_tests {
         assert_eq(reserve_a, e9(1_000));
         assert_eq(reserve_b, e9(500_000));
         assert_eq(lp_coins.value(), 22360679774997 - minimum_liquidity());
-        assert_eq(pool.pool_fees().acc_fees_a(), 0);
-        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
+        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -883,8 +883,8 @@ module slamm::slamm_tests {
         assert_eq(reserve_a, e9(1_000));
         assert_eq(reserve_b, e9(500_000));
         assert_eq(lp_coins.value(), 22360679774997 - minimum_liquidity());
-        assert_eq(pool.pool_fees().acc_fees_a(), 0);
-        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
+        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -1004,8 +1004,8 @@ module slamm::slamm_tests {
         assert_eq(reserve_a, e9(1_000));
         assert_eq(reserve_b, e9(1_000));
         assert_eq(lp_coins.value(), 1000000000000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().acc_fees_a(), 0);
-        assert_eq(pool.pool_fees().acc_fees_b(), 0);
+        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
+        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
 
         destroy(coin_a);
         destroy(coin_b);

@@ -74,79 +74,6 @@ module slamm::bank {
         })
     }
 
-    public fun lend<T, P>(
-        bank: &mut Bank<T>,
-        lending_market: &mut LendingMarket<P>,
-        clock: &Clock,
-        ctx: &mut TxContext,
-    ) {
-        let lending = bank.lending.borrow();
-
-        let amount = compute_lending_amount(
-            bank.reserve.value(),
-            lending.lent,
-            lending.target_liquidity_ratio_bps as u64,
-            lending.liquidity_buffer_bps as u64,
-        );
-
-        if (amount == 0) {
-            return
-        };
-
-        let balance_to_lend = bank.reserve.split(amount);
-
-        let c_tokens = lending_market.deposit_liquidity_and_mint_ctokens<P, T>(
-            lending.reserve_array_index,
-            clock,
-            coin::from_balance(balance_to_lend, ctx),
-            ctx,
-        );
-
-        let lending = bank.lending.borrow_mut();
-
-        lending.lent = lending.lent + amount;
-        bank.deposit_c_tokens(c_tokens.into_balance());
-    }
-
-    public fun recall<T, P>(
-        bank: &mut Bank<T>,
-        lending_market: &mut LendingMarket<P>,
-        clock: &Clock,
-        ctx: &mut TxContext,
-    ) {
-        let amount = {
-            let lending = bank.lending.borrow();
-
-            compute_recall_amount(
-                bank.reserve.value(),
-                0,
-                lending.lent,
-                lending.target_liquidity_ratio_bps as u64,
-                lending.liquidity_buffer_bps as u64,
-            )
-        };
-            
-
-        if (amount == 0) {
-            return
-        };
-
-        let ctokens: Coin<CToken<P, T>> = coin::from_balance(bank.withdraw_c_tokens(amount), ctx);
-
-        let coin = lending_market.redeem_ctokens_and_withdraw_liquidity(
-            bank.lending.borrow().reserve_array_index,
-            clock,
-            ctokens,
-            none(), // rate_limiter_exemption
-            ctx,
-        );
-
-        let lending = bank.lending.borrow_mut();
-        lending.lent = lending.lent - amount;
-
-        bank.reserve.join(coin.into_balance());
-    }
-
     public fun rebalance<T, P>(
         bank: &mut Bank<T>,
         lending_market: &mut LendingMarket<P>,
@@ -273,13 +200,12 @@ module slamm::bank {
         bank.reserve.join(coin.into_balance());
     }
     
-    public(package) fun check_sync<A, B>(
+    public(package) fun needs_sync<A, B>(
         quote: &SwapQuote,
         bank_a: &Bank<A>,
         bank_b: &Bank<B>,
-        a2b: bool,
     ): bool {
-        if (a2b) {
+        if (quote.a2b()) {
             bank_b.check_sync_(quote.amount_out())
         } else {
             bank_a.check_sync_(quote.amount_out())
@@ -382,27 +308,6 @@ module slamm::bank {
         c_balance.split(c_tokens)
     }
 
-    fun compute_lending_amount(
-        reserve: u64,
-        lent: u64,
-        liquidity_ratio_bps: u64,
-        liquidity_buffer_bps: u64,
-    ): u64 {
-        let liquidity_ratio = liquidity_ratio(reserve, lent) as u64;
-
-        assert!(liquidity_ratio >= liquidity_ratio_bps, 0);
-
-        if (liquidity_ratio > liquidity_ratio_bps + liquidity_buffer_bps) {
-            compute_lend(
-                reserve,
-                lent,
-                liquidity_ratio_bps,
-            )
-        } else {
-            0
-        }
-    }
-    
     fun compute_lending_action_(
         reserve: u64,
         amount: u64,

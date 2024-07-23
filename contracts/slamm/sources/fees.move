@@ -1,19 +1,23 @@
 module slamm::fees {
+    use std::option::{some, none};
     use sui::balance::{Self, Balance};
 
-    public use fun slamm::fees::fee_ratio_ as FeeData.fee_ratio;
+    public use fun slamm::fees::fee_ratio_ as FeeConfig.fee_ratio;
 
     public struct Fees<phantom A, phantom B> has store {
-        data: FeeData,
-        balance_a: Balance<A>,
-        balance_b: Balance<B>,
+        config: FeeConfig,
+        fee_a: FeeReserve<A>,
+        fee_b: FeeReserve<B>,
     }
-    
-    public struct FeeData has store {
+
+    public struct FeeReserve<phantom T> has store {
+        balance: Option<Balance<T>>,
+        acc_fees: u64,
+    }
+
+    public struct FeeConfig has store {
         swap_fee_numerator: u64,
         swap_fee_denominator: u64,
-        acc_fees_a: u64,
-        acc_fees_b: u64,
     }
 
     // ===== Package Functions =====
@@ -21,83 +25,74 @@ module slamm::fees {
     public(package) fun new<A, B>(
         swap_fee_numerator: u64,
         swap_fee_denominator: u64,
+        with_reserve: bool,
     ): Fees<A, B> {
+        let (balance_a, balance_b) = if (with_reserve) {
+            (some(balance::zero()), some(balance::zero()))
+        } else {
+            (none(), none())
+        };
+
         Fees {
-            data: FeeData {
+            config: FeeConfig {
                 swap_fee_numerator,
                 swap_fee_denominator,
-                acc_fees_a: 0,
-                acc_fees_b: 0,
             },
-            balance_a: balance::zero(),
-            balance_b: balance::zero(),
+            fee_a: FeeReserve { balance: balance_a, acc_fees: 0 },
+            fee_b: FeeReserve { balance: balance_b, acc_fees: 0 },
         }
     }
     
-    public(package) fun new_(
-        swap_fee_numerator: u64,
-        swap_fee_denominator: u64,
-    ): FeeData {
-        FeeData {
-            swap_fee_numerator,
-            swap_fee_denominator,
-            acc_fees_a: 0,
-            acc_fees_b: 0,
-        }
-    }
+    // public(package) fun new_(
+    //     swap_fee_numerator: u64,
+    //     swap_fee_denominator: u64,
+    // ): FeeConfig {
+    //     FeeConfig {
+    //         swap_fee_numerator,
+    //         swap_fee_denominator,
+    //     }
+    // }
     
     public fun fee_ratio<A, B>(
         self: &Fees<A, B>,
     ): (u64, u64) {
-        (self.data.swap_fee_numerator, self.data.swap_fee_denominator)
+        (self.config.swap_fee_numerator, self.config.swap_fee_denominator)
     }
     
     public fun fee_ratio_(
-        self: &FeeData,
+        self: &FeeConfig,
     ): (u64, u64) {
         (self.swap_fee_numerator, self.swap_fee_denominator)
     }
     
-    public(package) fun deposit_a<A, B>(
-        self: &mut Fees<A, B>,
-        balance: Balance<A>,
+    public(package) fun deposit<T>(
+        self: &mut FeeReserve<T>,
+        balance: Balance<T>,
     ) {
-        self.data.acc_fees_a = self.data.acc_fees_a + balance.value();
-        self.balance_a.join(balance);
+        self.acc_fees = self.acc_fees + balance.value();
+        self.balance.borrow_mut().join(balance);
     }
     
-    public(package) fun deposit_b<A, B>(
-        self: &mut Fees<A, B>,
-        balance: Balance<B>,
-    ) {
-        self.data.acc_fees_b = self.data.acc_fees_b + balance.value();
-        self.balance_b.join(balance);
-    }
-    
-    public(package) fun increment_fee_a(
-        self: &mut FeeData,
+    public(package) fun register_fee<T>(
+        self: &mut FeeReserve<T>,
         amount: u64,
     ) {
-        self.acc_fees_a = self.acc_fees_a + amount;
-    }
-    
-    public(package) fun increment_fee_b(
-        self: &mut FeeData,
-        amount: u64,
-    ) {
-        self.acc_fees_b = self.acc_fees_b + amount;
+        self.acc_fees = self.acc_fees + amount;
     }
     
     public(package) fun withdraw<A, B>(
         self: &mut Fees<A, B>,
     ): (Balance<A>, Balance<B>) {
 
-        let (bal_a, bal_b) = (self.balance_a.value(), self.balance_b.value());
+        let (bal_a, bal_b) = (self.fee_a.balance.borrow().value(), self.fee_b.balance.borrow().value());
         (
-            self.balance_a.split(bal_a),
-            self.balance_b.split(bal_b)
+            self.fee_a.balance.borrow_mut().split(bal_a),
+            self.fee_b.balance.borrow_mut().split(bal_b)
         )
     }
+
+    public(package) fun fee_b_mut<A, B>(self: &mut Fees<A, B>,): &mut FeeReserve<B> { &mut self.fee_b }
+    public(package) fun fee_a_mut<A, B>(self: &mut Fees<A, B>,): &mut FeeReserve<A> { &mut self.fee_a }
 
     // ===== View Functions =====
 
@@ -105,21 +100,17 @@ module slamm::fees {
         self: &Fees<A, B>,
     ): (&Balance<A>, &Balance<B>) {
         (
-            &self.balance_a,
-            &self.balance_b,
+            self.fee_a.balance.borrow(),
+            self.fee_b.balance.borrow(),
         )
     }
     
-    public fun fee_data<A, B>(
-        self: &Fees<A, B>,
-    ): &FeeData {
-        &self.data
-    }
-    
-    public fun swap_fee_numerator(self: &FeeData): u64 { self.swap_fee_numerator }
-    public fun swap_fee_denominator(self: &FeeData): u64 { self.swap_fee_denominator }
-    public fun acc_fees_a(self: &FeeData): u64 { self.acc_fees_a }
-    public fun acc_fees_b(self: &FeeData): u64 { self.acc_fees_b }
+    public fun config<A, B>(self: &Fees<A, B>): &FeeConfig { &self.config }
+    public fun swap_fee_numerator(self: &FeeConfig): u64 { self.swap_fee_numerator }
+    public fun swap_fee_denominator(self: &FeeConfig): u64 { self.swap_fee_denominator }
+    public fun acc_fees<T>(self: &FeeReserve<T>): u64 { self.acc_fees }
+    public fun fee_a<A, B>(self: &Fees<A, B>,): &FeeReserve<A> { &self.fee_a }
+    public fun fee_b<A, B>(self: &Fees<A, B>,): &FeeReserve<B> { &self.fee_b }
 
     // ===== Test-Only =====
 
@@ -128,8 +119,8 @@ module slamm::fees {
         self: &mut Fees<A, B>,
     ): (&mut Balance<A>, &mut Balance<B>) {
         (
-            &mut self.balance_a,
-            &mut self.balance_b,
+            self.fee_a.balance.borrow_mut(),
+            self.fee_b.balance.borrow_mut(),
         )
     }
 }
