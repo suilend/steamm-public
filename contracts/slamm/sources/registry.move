@@ -5,11 +5,6 @@ module slamm::registry {
     use std::type_name::{Self, TypeName};
     use slamm::global_admin::GlobalAdmin;
 
-
-    // TODO: create bank when initing pool if needed
-    // having bank for each type so you always include the bank
-    // rebalance lending, splt the logic, remove the enum
-
     // ===== Constants =====
 
     const CURRENT_VERSION: u16 = 1;

@@ -69,7 +69,7 @@ module slamm::cpmm {
     ): SwapResult {
         assert_version_and_upgrade(self);
 
-        let mut intent = intent_swap(
+        let intent = intent_swap(
             self,
             bank_a,
             bank_b,

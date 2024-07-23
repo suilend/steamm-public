@@ -77,14 +77,6 @@ module slamm::pool {
     const EPoolGuarded: u64 = 15;
     // Attempting to unguard pool that is already unguarded
     const EPoolUnguarded: u64 = 16;
-    // Attempting to turn lending on for A when already on
-    const ELendingAlreadyOnForA: u64 = 17;
-    // Attempting to turn lending on for B when already on
-    const ELendingAlreadyOnForB: u64 = 18;
-    // Mismatch between inteet and pool
-    const EPoolIdMistmatch: u64 = 19;
-    // Can only turn lending on before the pool having any deposits
-    const EAmmAlreadyInitialized: u64 = 20;
 
     /// Marker type for the LP coins of a pool. There can only be one
     /// pool per type, albeit given the permissionless aspect of the pool
@@ -148,9 +140,6 @@ module slamm::pool {
     public struct Intent<phantom A, phantom B, phantom Hook> {
         quote: SwapQuote,
         needs_sync: bool,
-        // executed: bool,
-        // a: Amount<A>,
-        // b: Amount<B>,
     }
     
     // ===== Hook Methods =====
@@ -563,7 +552,7 @@ module slamm::pool {
 
     // ===== Public Lending functions =====
     
-    public fun sync_bank_<A, B, Hook: drop, State: store, P>(
+    public fun sync_bank<A, B, Hook: drop, State: store, P>(
         _self: &mut Pool<A, B, Hook, State>,
         bank_a: &mut Bank<A>,
         bank_b: &mut Bank<B>,
@@ -670,39 +659,6 @@ module slamm::pool {
             needs_sync,
         }
     }
-    
-    // public(package) fun as_intent_swap<A, B, Hook: drop, State: store>(
-    //     quote: SwapQuote,
-    //     pool: &mut Pool<A, B, Hook, State>,
-    //     _: Hook,
-    // ): Intent<SwapQuote, A, B, Hook> {
-    //     let (funds_a, funds_b) = (
-    //         if (pool.reserve_a.lending_on) { some(balance::zero<A>()) } else { none() },
-    //         if (pool.reserve_b.lending_on) { some(balance::zero<B>()) } else { none() }
-    //     );
-
-    //     let lending_action = none();
-
-
-    //     let (a, b) = if (quote.a2b()) {
-    //         (
-    //             Amount { amount: quote.amount_in() - quote.protocol_fees(), funds: funds_a, lending_action, direction: Direction::Input },
-    //             Amount { amount: quote.amount_out(), funds: funds_b, lending_action, direction: Direction::Output },
-    //         )
-    //     } else {
-    //         (
-    //             Amount { amount: quote.amount_out(), funds: funds_a, lending_action, direction: Direction::Output },
-    //             Amount { amount: quote.amount_in() - quote.protocol_fees(), funds: funds_b, lending_action, direction: Direction::Input },
-    //         )
-    //     };
-
-    //     as_intent(
-    //         quote,
-    //         a,
-    //         b,
-    //         pool,
-    //     )
-    // }
 
     fun consume<A, B, Hook: drop, State: store, >(
         pool: &mut Pool<A, B, Hook, State>,
