@@ -1,21 +1,34 @@
+#[allow(lint(share_owned))]
 module slamm::bank {
     use std::option::{none, some};
     use std::type_name::{Self, TypeName};
     use sui::bag::{Self, Bag};
     use sui::balance::{Self, Balance};
+    use sui::transfer::share_object;
     use sui::clock::Clock;
     use sui::coin::{Self, Coin};
     use slamm::quote::SwapQuote;
     use slamm::global_admin::GlobalAdmin;
+    use slamm::version::{Self, Version};
     use slamm::registry::Registry;
     use suilend::lending_market::{LendingMarket};
     use suilend::reserve::{CToken};
+
+    // ===== Constants =====
+
+    const CURRENT_VERSION: u16 = 1;
+
+    // ===== Errors =====
+
+    const ELendingMarketTypeMismatch: u64 = 1;
+    const EOutputExceedsTotalBankReserves: u64 = 2;
 
     public struct Bank<phantom T> has key {
         id: UID,
         reserve: Balance<T>,
         lending: Option<Lending>,
         fields: Bag,
+        version: Version,
     }
 
     public struct Lending has store {
@@ -34,6 +47,16 @@ module slamm::bank {
 
     public struct LendingReserveKey<phantom T> has copy, store, drop {}
 
+    // ====== Entry Functions =====
+
+    public entry fun create_bank_and_share<T>(
+        registry: &mut Registry,
+        ctx: &mut TxContext,
+    ) {
+        let bank = create_bank<T>(registry, ctx);
+        share_object(bank);
+    }
+    
     // ====== Public Functions =====
 
     public fun create_bank<T>(
@@ -47,6 +70,7 @@ module slamm::bank {
             reserve: balance::zero(),
             lending: none(),
             fields,
+            version: version::new(CURRENT_VERSION),
         };
 
         registry.add_bank(&bank);
@@ -62,6 +86,8 @@ module slamm::bank {
         liquidity_buffer_bps: u16,
         reserve_array_index: u64,
     ) {
+        self.version.assert_version_and_upgrade(CURRENT_VERSION);
+
         self.fields.add(LendingReserveKey<T> {}, balance::zero<CToken<P, T>>());
 
         self.lending.fill(Lending {
@@ -80,6 +106,9 @@ module slamm::bank {
         clock: &Clock,
         ctx: &mut TxContext,
     ) {
+        bank.version.assert_version_and_upgrade(CURRENT_VERSION);
+        bank.assert_p_type<T, P>();
+
         let effective_liquidity = bank.effective_liquidity_ratio_bps();
         let target_liquidity = bank.liquidity_ratio_bps() as u64;
         let liquidity_buffer = bank.liquidity_buffer_bps() as u64;
@@ -139,26 +168,35 @@ module slamm::bank {
         ((liquid_reserve * 10_000) / (liquid_reserve + iliquid_reserve)) as u16
     }
 
-    public fun assert_liquidity_requirements(
-        self: &Lending,
-        reserve: u64,
-        amount: u64,
-        is_input: bool,
-        lent: u64,
+    // public fun assert_liquidity_requirements(
+    //     self: &Lending,
+    //     reserve: u64,
+    //     amount: u64,
+    //     is_input: bool,
+    //     lent: u64,
+    // ) {
+    //     if (is_input) {
+    //         let liquidity_ratio = liquidity_ratio(reserve + amount, lent) as u64;
+    //         assert!(liquidity_ratio <= (self.target_liquidity_ratio_bps + self.liquidity_buffer_bps) as u64, 0);
+    //     } else {
+    //         assert!(reserve + lent > amount, 0);
+    //         assert!(reserve > amount, 0);
+
+    //         let liquidity_ratio = liquidity_ratio(reserve - amount, lent) as u64;
+
+    //         assert!(liquidity_ratio >= (self.target_liquidity_ratio_bps - self.liquidity_buffer_bps) as u64, 0);
+    //     }
+    // }
+
+    // ====== Admin Functions =====
+    
+    entry fun migrate_as_global_admin<T>(
+        self: &mut Bank<T>,
+        _admin: &GlobalAdmin,
     ) {
-        if (is_input) {
-            let liquidity_ratio = liquidity_ratio(reserve + amount, lent) as u64;
-            assert!(liquidity_ratio <= (self.target_liquidity_ratio_bps + self.liquidity_buffer_bps) as u64, 0);
-        } else {
-            assert!(reserve + lent > amount, 0);
-            assert!(reserve > amount, 0);
-
-            let liquidity_ratio = liquidity_ratio(reserve - amount, lent) as u64;
-
-            assert!(liquidity_ratio >= (self.target_liquidity_ratio_bps - self.liquidity_buffer_bps) as u64, 0);
-        }
+        self.version.migrate_(CURRENT_VERSION);
     }
-
+    
     // ====== Package Functions =====
 
     public(package) fun provision<T, P>(
@@ -168,6 +206,9 @@ module slamm::bank {
         clock: &Clock,
         ctx: &mut TxContext,
     ) {
+        bank.version.assert_version_and_upgrade(CURRENT_VERSION);
+        bank.assert_p_type<T, P>();
+
         let amount = {
             let lending = bank.lending.borrow();
             
@@ -212,12 +253,12 @@ module slamm::bank {
         }
     }
 
-    public(package) fun assert_p_type<P, T>(
+    public(package) fun assert_p_type<T, P>(
         bank: &Bank<T>,
     ) {
         let lending = bank.lending.borrow();
 
-        assert!(type_name::get<P>() == lending.p_type, 0);
+        assert!(type_name::get<P>() == lending.p_type, ELendingMarketTypeMismatch);
     }
 
     public(package) fun reserve_mut<T>(
@@ -232,7 +273,7 @@ module slamm::bank {
         bank: &Bank<T>,
         output: u64,
     ): bool {
-        assert!(bank.total_reserve() >= output, 0);
+        bank.assert_output(output);
 
         output > bank.reserve.value()
     }
@@ -293,19 +334,34 @@ module slamm::bank {
     }
 
     fun deposit_c_tokens<P, T>(
-        reserve: &mut Bank<T>,
+        bank: &mut Bank<T>,
         c_tokens: Balance<CToken<P, T>>
     ) {
-        let c_balance: &mut Balance<CToken<P, T>> = reserve.fields.borrow_mut(LendingReserveKey<T> {});
+        let c_balance: &mut Balance<CToken<P, T>> = bank.fields.borrow_mut(LendingReserveKey<T> {});
         c_balance.join(c_tokens);
     }
     
     fun withdraw_c_tokens<P, T>(
-        reserve: &mut Bank<T>,
+        bank: &mut Bank<T>,
         c_tokens: u64,
     ): Balance<CToken<P, T>> {
-        let c_balance: &mut Balance<CToken<P, T>> = reserve.fields.borrow_mut(LendingReserveKey<T> {});
+        let c_balance: &mut Balance<CToken<P, T>> = bank.fields.borrow_mut(LendingReserveKey<T> {});
         c_balance.split(c_tokens)
+    }
+    
+    fun assert_output<T>(
+        bank: &Bank<T>,
+        output: u64,
+    ) {
+        assert!(bank.total_reserve() >= output, EOutputExceedsTotalBankReserves);
+    }
+    
+    fun assert_output_(
+        liquid_reserve: u64,
+        lent: u64,
+        output: u64,
+    ) {
+        assert!(liquid_reserve + lent >= output, EOutputExceedsTotalBankReserves);
     }
 
     fun compute_lending_action_(
@@ -334,7 +390,7 @@ module slamm::bank {
 
 
         } else {
-            assert!(reserve + lent > amount, 0);
+            assert_output_(reserve, lent, amount);
 
             if (amount > reserve) {
                 return some(LendingAction {
@@ -373,7 +429,7 @@ module slamm::bank {
         liquidity_ratio_bps: u64,
         liquidity_buffer_bps: u64,
     ): u64 {
-        assert!(reserve + lent > amount, 0);
+        assert_output_(reserve, lent, amount);
         let post_liquidity_ratio = liquidity_ratio(reserve + lent - amount, lent) as u64;
 
         if (amount > reserve || post_liquidity_ratio < liquidity_ratio_bps - liquidity_buffer_bps) {

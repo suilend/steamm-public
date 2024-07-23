@@ -10,6 +10,7 @@ module slamm::pool {
     use sui::coin::{Self, Coin};
     use sui::balance::{Self, Balance, Supply};
     use slamm::events::emit_event;
+    use slamm::version::{Self, Version};
     use slamm::registry::{Registry};
     use slamm::math::{safe_mul_div_u64};
     use slamm::global_admin::GlobalAdmin;
@@ -39,8 +40,6 @@ module slamm::pool {
 
     // ===== Errors =====
 
-    // When the package called has an outdated version
-    const EIncorrectVersion: u64 = 0;
     // The pool swap fee is a percentage and therefore
     // can't surpass 100%
     const EFeeAbove100Percent: u64 = 1;
@@ -123,7 +122,7 @@ module slamm::pool {
         pool_fees: Fees<A, B>,
         trading_data: TradingData,
         lock_guard: bool,
-        version: u16,
+        version: Version,
     }
 
     public struct Reserve<phantom T> has store (u64)
@@ -189,7 +188,7 @@ module slamm::pool {
                 swap_b_in_amount: 0,
             },
             lock_guard: false,
-            version: CURRENT_VERSION,
+            version: version::new(CURRENT_VERSION),
         };
 
         registry.add_amm(&pool);
@@ -252,7 +251,7 @@ module slamm::pool {
         min_amount_out: u64,
         ctx: &mut TxContext,
     ): SwapResult {
-        self.assert_version_and_upgrade();
+        self.version.assert_version_and_upgrade(CURRENT_VERSION);
 
         let quote = self.consume(intent);
 
@@ -342,7 +341,7 @@ module slamm::pool {
         clock: &Clock,
         ctx:  &mut TxContext,
     ): (Coin<LP<A, B, Hook>>, DepositResult) {
-        self.assert_version_and_upgrade();
+        self.version.assert_version_and_upgrade(CURRENT_VERSION);
 
         // Compute token deposits and delta lp tokens
         let quote = quote_deposit_impl(
@@ -441,7 +440,7 @@ module slamm::pool {
         clock: &Clock,
         ctx:  &mut TxContext,
     ): (Coin<A>, Coin<B>, RedeemResult) {
-        self.assert_version_and_upgrade();
+        self.version.assert_version_and_upgrade(CURRENT_VERSION);
 
         // Compute amounts to withdraw
         let quote = quote_redeem_impl(
@@ -705,7 +704,7 @@ module slamm::pool {
         _global_admin: &GlobalAdmin,
         ctx: &mut TxContext,
     ): (Coin<A>, Coin<B>) {
-        self.assert_version_and_upgrade();
+        self.version.assert_version_and_upgrade(CURRENT_VERSION);
 
         let (fees_a, fees_b) = self.protocol_fees.withdraw();
 
@@ -719,36 +718,14 @@ module slamm::pool {
         self: &mut Pool<A, B, Hook, State>,
         _cap: &PoolCap<A, B, Hook>,
     ) {
-        self.migrate_();
+        self.version.migrate_(CURRENT_VERSION);
     }
     
     entry fun migrate_as_global_admin<A, B, Hook: drop, State: store>(
         self: &mut Pool<A, B, Hook, State>,
         _admin: &GlobalAdmin,
     ) {
-        self.migrate_();
-    }
-
-    fun migrate_<A, B, Hook: drop, State: store>(
-        self: &mut Pool<A, B, Hook, State>,
-    ) {
-        assert!(self.version < CURRENT_VERSION, EIncorrectVersion);
-        self.version = CURRENT_VERSION;
-    }
-
-    fun assert_version<A, B, Hook: drop, State: store>(
-        self: &Pool<A, B, Hook, State>,
-    ) {
-        assert!(self.version == CURRENT_VERSION, EIncorrectVersion);
-    }
-
-    fun assert_version_and_upgrade<A, B, Hook: drop, State: store>(
-        self: &mut Pool<A, B, Hook, State>,
-    ) {
-        if (self.version < CURRENT_VERSION) {
-            self.version = CURRENT_VERSION;
-        };
-        assert_version(self);
+        self.version.migrate_(CURRENT_VERSION);
     }
     
     // ===== Private functions =====
