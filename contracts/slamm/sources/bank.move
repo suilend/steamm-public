@@ -434,8 +434,9 @@ module slamm::bank {
             if (amount > reserve) {
                 return some(LendingAction {
                     is_lend: false,
-                    amount: compute_recall(
-                        reserve - amount,
+                    amount: compute_recall_(
+                        reserve,
+                        amount,
                         lent,
                         liquidity_ratio_bps,
                     )
@@ -447,8 +448,9 @@ module slamm::bank {
             if (liquidity_ratio < liquidity_ratio_bps - liquidity_buffer_bps) {
                 return some(LendingAction {
                     is_lend: false,
-                    amount: compute_recall(
-                        reserve - amount,
+                    amount: compute_recall_(
+                        reserve,
+                        amount,
                         lent,
                         liquidity_ratio_bps,
                     )
@@ -470,8 +472,9 @@ module slamm::bank {
         let post_liquidity_ratio = liquidity_ratio(reserve + lent - amount, lent) as u64;
 
         if (amount > reserve || post_liquidity_ratio < liquidity_ratio_bps - liquidity_buffer_bps) {
-            return compute_recall(
-                reserve - amount,
+            return compute_recall_(
+                reserve,
+                amount,
                 lent,
                 liquidity_ratio_bps,
             )
@@ -496,6 +499,17 @@ module slamm::bank {
         liquidity_ratio_bps: u64,
     ): u64 {
         (liquidity_ratio_bps * (reserve_t1 + lent) / 10_000) - reserve_t1
+    }
+
+    fun compute_recall_(
+        reserve: u64,
+        output: u64,
+        lent: u64,
+        liquidity_ratio_bps: u64,
+    ): u64 {
+        (
+            liquidity_ratio_bps * (reserve + lent - output) + (output * 10_000) - (reserve * 10_000)
+        ) / 10_000
     }
     
     // effective_liquidity > target_liquidity + liquidity_buffer

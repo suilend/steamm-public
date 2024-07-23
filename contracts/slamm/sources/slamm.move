@@ -19,6 +19,8 @@ module slamm::pool {
 
     use suilend::lending_market::{LendingMarket};
     
+    public use fun slamm::cpmm::intent_swap as Pool.cpmm_intent_swap;
+    public use fun slamm::cpmm::execute_swap as Pool.cpmm_execute_swap;
     public use fun slamm::cpmm::swap as Pool.cpmm_swap;
     public use fun slamm::cpmm::quote_swap as Pool.cpmm_quote_swap;
     public use fun slamm::cpmm::k as Pool.cpmm_k;
@@ -141,6 +143,9 @@ module slamm::pool {
         quote: SwapQuote,
         needs_sync: bool,
     }
+
+    public fun intent_quote<A, B, Hook>(self: &Intent<A, B, Hook>): &SwapQuote { &self.quote }
+    public fun needs_sync<A, B, Hook>(self: &Intent<A, B, Hook>): bool { self.needs_sync }
     
     // ===== Hook Methods =====
 
