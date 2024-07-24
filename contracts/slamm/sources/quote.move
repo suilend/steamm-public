@@ -1,8 +1,10 @@
 /// Module for informative structs which provide the input/outputs of a given quotation.
 module slamm::quote {
+    public use fun slamm::pool::as_intent as SwapQuote.as_intent;
     public use fun slamm::quote::swap_input_amount_in_net as SwapInputs.amount_in_net;
     public use fun slamm::quote::swap_input_protocol_fees as SwapInputs.protocol_fees;
     public use fun slamm::quote::swap_input_pool_fees as SwapInputs.pool_fees;
+    public use fun slamm::pool::swap_inner as SwapQuote.swap_inner;
 
     public struct SwapInputs has drop {
         amount_in_net: u64,
@@ -32,6 +34,16 @@ module slamm::quote {
     }
 
     // ===== Package Methods =====
+
+    public(package) fun flatten(quote: &SwapQuote): (u64, bool, u64, bool) {
+        let (amount_a, a_in, amount_b, b_in) = if (quote.a2b() == true) {
+            (quote.amount_in() - quote.protocol_fees(), true, quote.amount_out(), false)
+        } else {
+            (quote.amount_out(), false, quote.amount_in() - quote.protocol_fees(), true)
+        };
+
+        (amount_a, a_in, amount_b, b_in)
+    }
 
     public(package) fun swap_inputs(
         amount_in_net: u64,
@@ -92,6 +104,7 @@ module slamm::quote {
     public fun swap_input_pool_fees(self: &SwapInputs): u64 { self.pool_fees }
     
     public fun amount_in(self: &SwapQuote): u64 { self.amount_in }
+    public fun amount_in_net(self: &SwapQuote): u64 { self.amount_in - self.protocol_fees - self.pool_fees }
     public fun amount_out(self: &SwapQuote): u64 { self.amount_out }
     public fun protocol_fees(self: &SwapQuote): u64 { self.protocol_fees }
     public fun pool_fees(self: &SwapQuote): u64 { self.pool_fees }

@@ -13,18 +13,21 @@ module slamm::registry {
 
     const EIncorrectVersion: u64 = 1;
     const EDuplicatedPoolType: u64 = 2;
+    const EDuplicatedBankType: u64 = 3;
 
     public struct Registry has key {
         id: UID,
         version: u16,
-        amms: Table<TypeName, ID>
+        amms: Table<TypeName, ID>,
+        banks: Table<TypeName, ID>,
     }
 
     fun init(ctx: &mut TxContext) {
         let registry = Registry {
             id: object::new(ctx),
             version: CURRENT_VERSION,
-            amms: table::new(ctx)
+            amms: table::new(ctx),
+            banks: table::new(ctx),
         };
 
         transfer::share_object(registry);
@@ -37,6 +40,15 @@ module slamm::registry {
         assert!(!table::contains(&registry.amms, amm_type), EDuplicatedPoolType);
 
         table::add(&mut registry.amms, amm_type, object::id(pool));
+    }
+    
+    public(package) fun add_bank<BANK: key>(registry: &mut Registry, bank: &BANK) {
+        registry.assert_version_and_upgrade();
+        
+        let bank_type = type_name::get<BANK>();
+        assert!(!table::contains(&registry.amms, bank_type), EDuplicatedBankType);
+
+        table::add(&mut registry.banks, bank_type, object::id(bank));
     }
 
     // ===== Versioning =====
@@ -73,7 +85,8 @@ module slamm::registry {
         let registry = Registry {
             id: object::new(ctx),
             version: CURRENT_VERSION,
-            amms: table::new(ctx)
+            amms: table::new(ctx),
+            banks: table::new(ctx),
         };
 
         registry

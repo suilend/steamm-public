@@ -2,25 +2,52 @@
 
 [move]
 version = 2
-manifest_digest = "03EEC675748EE90DD7FCA064246AC438AB487B9540436CF159D5DC83A6C11FDD"
-deps_digest = "F8BBB0CCB2491CA29A3DF03D6F92277A4F3574266507ACD77214D37ECA3F3082"
+manifest_digest = "90DDCB29BB824C8B404C2C39A61C3A818A14BF5C6F186CDA88B77A079C9EEFF0"
+deps_digest = "3C4103934B1E040BB6B23F1D610B4EF9F2F1166A50A104EADCF77467C004C600"
 dependencies = [
   { name = "Sui" },
+  { name = "suilend" },
 ]
 
 [[move.package]]
 name = "MoveStdlib"
-source = { git = "https://github.com/MystenLabs/sui.git", rev = "framework/testnet", subdir = "crates/sui-framework/packages/move-stdlib" }
+source = { git = "https://github.com/MystenLabs/sui.git", rev = "framework/mainnet", subdir = "crates/sui-framework/packages/move-stdlib" }
+
+[[move.package]]
+name = "Pyth"
+source = { git = "https://github.com/solendprotocol/pyth-crosschain.git", rev = "98e218c64bb75cf1350eb7b021e1ffcc3aedfd62", subdir = "target_chains/sui/contracts" }
+
+dependencies = [
+  { name = "Sui" },
+  { name = "Wormhole" },
+]
 
 [[move.package]]
 name = "Sui"
-source = { git = "https://github.com/MystenLabs/sui.git", rev = "framework/testnet", subdir = "crates/sui-framework/packages/sui-framework" }
+source = { git = "https://github.com/MystenLabs/sui.git", rev = "framework/mainnet", subdir = "crates/sui-framework/packages/sui-framework" }
 
 dependencies = [
   { name = "MoveStdlib" },
 ]
 
+[[move.package]]
+name = "Wormhole"
+source = { git = "https://github.com/solendprotocol/wormhole.git", rev = "e1698d3c72b15cdddd7da98ad43e151f83b72a0a", subdir = "sui/wormhole" }
+
+dependencies = [
+  { name = "Sui" },
+]
+
+[[move.package]]
+name = "suilend"
+source = { git = "https://github.com/solendprotocol/suilend.git", rev = "expose-test-only-fns", subdir = "contracts" }
+
+dependencies = [
+  { name = "Pyth" },
+  { name = "Sui" },
+]
+
 [move.toolchain-version]
 compiler-version = "1.27.2"
-edition = "2024.beta"
+edition = "2024.alpha"
 flavor = "sui"

@@ -3,18 +3,26 @@
 /// called directly. Is also exports an intializer and swap method to be
 /// called by the hook modules.
 module slamm::pool {
+    use sui::clock::Clock;
     use sui::transfer::public_transfer;
     use sui::tx_context::sender;
     use sui::math::{sqrt_u128, min};
     use sui::coin::{Self, Coin};
     use sui::balance::{Self, Balance, Supply};
     use slamm::events::emit_event;
+    use slamm::version::{Self, Version};
     use slamm::registry::{Registry};
     use slamm::math::{safe_mul_div_u64};
     use slamm::global_admin::GlobalAdmin;
-    use slamm::fees::{Self, Fees, FeeData};
+    use slamm::fees::{Self, Fees, FeeReserve};
     use slamm::quote::{Self, SwapQuote, DepositQuote, RedeemQuote, SwapInputs, swap_inputs};
+    use slamm::bank::{Bank};
+
+    use suilend::lending_market::{LendingMarket};
     
+    public use fun slamm::pool::intent_quote as Intent.quote;
+    public use fun slamm::cpmm::intent_swap as Pool.cpmm_intent_swap;
+    public use fun slamm::cpmm::execute_swap as Pool.cpmm_execute_swap;
     public use fun slamm::cpmm::swap as Pool.cpmm_swap;
     public use fun slamm::cpmm::quote_swap as Pool.cpmm_quote_swap;
     public use fun slamm::cpmm::k as Pool.cpmm_k;
@@ -32,43 +40,44 @@ module slamm::pool {
 
     // ===== Errors =====
 
-    // When the package called has an outdated version
-    const EIncorrectVersion: u64 = 0;
     // The pool swap fee is a percentage and therefore
     // can't surpass 100%
     const EFeeAbove100Percent: u64 = 1;
     // Occurs when the swap amount_out is below the
     // minimum amount out declared
     const ESwapExceedsSlippage: u64 = 2;
-    // When the coin A output exceeds the amount of reserves
+    // When the coin output exceeds the amount of reserves
     // available
-    const EOutputAExceedsLiquidity: u64 = 3;
-    // When the coin B output exceeds the amount of reserves
-    // available
-    const EOutputBExceedsLiquidity: u64 = 4;
+    const EOutputExceedsLiquidity: u64 = 3;
     // When depositing leads to a coin B deposit amount lower
     // than the min_b parameter
-    const EInsufficientDepositB: u64 = 5;
+    const EInsufficientDepositB: u64 = 4;
     // When depositing leads to a coin A deposit amount lower
     // than the min_a parameter
-    const EInsufficientDepositA: u64 = 6;
+    const EInsufficientDepositA: u64 = 5;
     // When the deposit max parameter ratio is invalid
-    const EDepositRatioInvalid: u64 = 7;
+    const EDepositRatioInvalid: u64 = 6;
     // The amount of coin A reedemed is below the minimum set
-    const ERedeemSlippageAExceeded: u64 = 8;
+    const ERedeemSlippageAExceeded: u64 = 7;
     // The amount of coin B reedemed is below the minimum set
-    const ERedeemSlippageBExceeded: u64 = 9;
+    const ERedeemSlippageBExceeded: u64 = 8;
     // Assert that the reserve to lp supply ratio updates
     // in favor of of the pool. This error should not occur
-    const ELpSupplyToReserveRatioViolation: u64 = 10;
+    const ELpSupplyToReserveRatioViolation: u64 = 9;
     // The swap leads to zero output amount
-    const ESwapOutputAmountIsZero: u64 = 11;
+    const ESwapOutputAmountIsZero: u64 = 10;
     // When depositing the max deposit params cannot be zero
-    const EDepositMaxParamsCantBeZero: u64 = 12;
+    const EDepositMaxParamsCantBeZero: u64 = 11;
     // The deposit ratio computed leads to a coin B deposit of zero
-    const EDepositRatioLeadsToZeroB: u64 = 13;
+    const EDepositRatioLeadsToZeroB: u64 = 12;
     // The deposit ratio computed leads to a coin A deposit of zero
-    const EDepositRatioLeadsToZeroA: u64 = 14;
+    const EDepositRatioLeadsToZeroA: u64 = 13;
+    // There cannot be two intents concurrently
+    const EPoolGuarded: u64 = 14;
+    // Attempting to unguard pool that is already unguarded
+    const EPoolUnguarded: u64 = 15;
+    const EInsufficientFunds: u64 = 16;
+    const EInsufficientFundsInBank: u64 = 17;
 
     /// Marker type for the LP coins of a pool. There can only be one
     /// pool per type, albeit given the permissionless aspect of the pool
@@ -108,14 +117,17 @@ module slamm::pool {
     public struct Pool<phantom A, phantom B, phantom Hook: drop, State: store> has key, store {
         id: UID,
         inner: State,
-        reserve_a: Balance<A>,
-        reserve_b: Balance<B>,
+        reserve_a: Reserve<A>,
+        reserve_b: Reserve<B>,
         lp_supply: Supply<LP<A, B, Hook>>,
         protocol_fees: Fees<A, B>,
-        pool_fees: FeeData,
+        pool_fees: Fees<A, B>,
         trading_data: TradingData,
-        version: u16,
+        lock_guard: bool,
+        version: Version,
     }
+
+    public struct Reserve<phantom T> has store (u64)
 
     public struct TradingData has store {
         // swap a2b
@@ -125,6 +137,12 @@ module slamm::pool {
         swap_a_out_amount: u128,
         swap_b_in_amount: u128,
     }
+
+    public struct Intent<phantom A, phantom B, phantom Hook> {
+        quote: SwapQuote,
+    }
+
+    public fun intent_quote<A, B, Hook>(self: &Intent<A, B, Hook>): &SwapQuote { &self.quote }
     
     // ===== Hook Methods =====
 
@@ -160,10 +178,10 @@ module slamm::pool {
         let pool = Pool {
             id: object::new(ctx),
             inner,
-            reserve_a: balance::zero(),
-            reserve_b: balance::zero(),
-            protocol_fees: fees::new(SWAP_FEE_NUMERATOR, SWAP_FEE_DENOMINATOR),
-            pool_fees: fees::new_(swap_fee_bps, SWAP_FEE_DENOMINATOR),
+            reserve_a: Reserve(0),
+            reserve_b: Reserve(0),
+            protocol_fees: fees::new(SWAP_FEE_NUMERATOR, SWAP_FEE_DENOMINATOR, true),
+            pool_fees: fees::new(swap_fee_bps, SWAP_FEE_DENOMINATOR, false),
             lp_supply,
             trading_data: TradingData {
                 swap_a_in_amount: 0,
@@ -171,7 +189,8 @@ module slamm::pool {
                 swap_a_out_amount: 0,
                 swap_b_in_amount: 0,
             },
-            version: CURRENT_VERSION,
+            lock_guard: false,
+            version: version::new(CURRENT_VERSION),
         };
 
         registry.add_amm(&pool);
@@ -192,6 +211,19 @@ module slamm::pool {
         );
 
         (pool, pool_cap)
+    }
+
+    fun deposit<T>(reserve: &mut Reserve<T>, bank: &mut Bank<T>, balance: Balance<T>) {
+        reserve.0 = reserve.0 + balance.value();
+
+        bank.reserve_mut().join(balance);
+    }
+    
+    fun withdraw<T>(reserve: &mut Reserve<T>, bank: &mut Bank<T>, amount: u64): Balance<T> {
+        assert!(amount <= bank.reserve().value(), EInsufficientFundsInBank);
+
+        reserve.0 = reserve.0 - amount;
+        bank.reserve_mut().split(amount)
     }
 
     /// Executes inner swap logic that is generalised accross all hooks. It takes
@@ -216,61 +248,53 @@ module slamm::pool {
     public(package) fun swap<A, B, Hook: drop, State: store>(
         self: &mut Pool<A, B, Hook, State>,
         _witness: Hook,
+        bank_a: &mut Bank<A>,
+        bank_b: &mut Bank<B>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
-        quote: SwapQuote,
+        intent: Intent<A, B, Hook>,
         min_amount_out: u64,
         ctx: &mut TxContext,
     ): SwapResult {
-        self.assert_version_and_upgrade();
+        self.version.assert_version_and_upgrade(CURRENT_VERSION);
+
+        let quote = self.consume(intent);
 
         assert!(quote.amount_out() > 0, ESwapOutputAmountIsZero);
         assert!(quote.amount_out() >= min_amount_out, ESwapExceedsSlippage);
 
         if (quote.a2b()) {
-            assert!(quote.amount_out() < self.reserve_b.value(), EOutputBExceedsLiquidity);
-            let mut balance_in = coin_a.balance_mut().split(quote.amount_in());
+            quote.swap_inner(
+                // Inputs
+                bank_a, // bank_in
+                &mut self.reserve_a, // reserve_in
+                coin_a, // coin_in
+                &mut self.trading_data.swap_a_in_amount, // swap_in_amount
+                self.protocol_fees.fee_a_mut(), // protocol_fees
+                self.pool_fees.fee_a_mut(), // pool_fees
 
-            // Transfers protocol fees in
-            self.protocol_fees.deposit_a(balance_in.split(quote.protocol_fees()));
-            
-            // Account pool fees in
-            self.pool_fees.increment_fee_a(quote.pool_fees());
-
-            // Transfers amount in
-            self.reserve_a.join(balance_in);
-        
-            // Transfers amount out
-            coin_b.balance_mut().join(self.reserve_b.split(quote.amount_out()));
-            
-            // Update trading data
-            self.trading_data.swap_a_in_amount =
-                self.trading_data.swap_a_in_amount + (quote.amount_in() as u128);
-
-            self.trading_data.swap_b_out_amount =
-                self.trading_data.swap_b_out_amount + (quote.amount_out() as u128);
+                // Outputs
+                bank_b, // bank_out
+                &mut self.reserve_b, // reserve_out
+                coin_b, // coin_out
+                &mut self.trading_data.swap_b_out_amount, // swap_out_amount
+            );
         } else {
-            assert!(quote.amount_out() < self.reserve_a.value(), EOutputAExceedsLiquidity);
-            let mut balance_in = coin_b.balance_mut().split(quote.amount_in());
+            quote.swap_inner(
+                // Inputs
+                bank_b, // bank_in
+                &mut self.reserve_b, // reserve_in
+                coin_b, // coin_in
+                &mut self.trading_data.swap_b_in_amount, // swap_in_amount
+                self.protocol_fees.fee_b_mut(), // protocol_fees
+                self.pool_fees.fee_b_mut(), // pool_fees
 
-            // Transfers protocol fees in
-            self.protocol_fees.deposit_b(balance_in.split(quote.protocol_fees()));
-            
-            // Account pool fees in
-            self.pool_fees.increment_fee_b(quote.pool_fees());
-
-            // Transfers amount in
-            self.reserve_b.join(balance_in);
-        
-            // Transfers amount out
-            coin_a.balance_mut().join(self.reserve_a.split(quote.amount_out()));
-
-            // Update trading data
-            self.trading_data.swap_a_out_amount =
-                self.trading_data.swap_a_out_amount + (quote.amount_in() as u128);
-            
-            self.trading_data.swap_b_in_amount =
-                self.trading_data.swap_b_in_amount + (quote.amount_out() as u128);
+                // Outputs
+                bank_a, // bank_out
+                &mut self.reserve_a, // reserve_out
+                coin_a, // coin_out
+                &mut self.trading_data.swap_a_out_amount, // swap_out_amount
+            );
         };
 
         // Emit event
@@ -284,21 +308,12 @@ module slamm::pool {
             a2b: quote.a2b(),
         };
 
+        bank_a.assert_liquidity();
+        bank_b.assert_liquidity();
+
         emit_event(result);
 
         result
-    }
-
-    public(package) fun compute_fees<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, amount_in: u64): SwapInputs {
-        let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees.fee_ratio();
-        let (pool_fee_num, pool_fee_denom) = self.pool_fees.fee_ratio();
-        
-        let total_fees = safe_mul_div_u64(amount_in, pool_fee_num, pool_fee_denom);
-        let protocol_fees = safe_mul_div_u64(total_fees, protocol_fee_num, protocol_fee_denom);
-        let pool_fees = total_fees - protocol_fees;
-        let net_amount_in = amount_in - protocol_fees - pool_fees;
-
-        swap_inputs(net_amount_in, protocol_fees, pool_fees)
     }
     
     // ===== Public Methods =====
@@ -320,20 +335,22 @@ module slamm::pool {
     /// - If `max` params lead to an invalid ratio
     /// - If resulting deposit amounts violate slippage defined by `min` params
     /// - If results in an inconsisten reserve-to-LP supply ratio
-    public fun deposit_liquidity<A, B, Hook: drop, State: store>(
+    public fun deposit_liquidity<A, B, Hook: drop, State: store, P>(
         self: &mut Pool<A, B, Hook, State>,
+        lending_market: &mut LendingMarket<P>,
+        bank_a: &mut Bank<A>,
+        bank_b: &mut Bank<B>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
         max_a: u64,
         max_b: u64,
         min_a: u64,
         min_b: u64,
+        clock: &Clock,
         ctx:  &mut TxContext,
     ): (Coin<LP<A, B, Hook>>, DepositResult) {
-        self.assert_version_and_upgrade();
-
-        let initial_lp_supply = self.lp_supply.supply_value();
-        let initial_reserve_a = self.reserve_a.value();
+        self.version.assert_version_and_upgrade(CURRENT_VERSION);
+        self.assert_unguarded();
 
         // Compute token deposits and delta lp tokens
         let quote = quote_deposit_impl(
@@ -344,12 +361,15 @@ module slamm::pool {
             min_b,
         );
 
+        let initial_lp_supply = self.lp_supply.supply_value();
+        let initial_reserve_a = self.reserve_a();
+
         let balance_a = coin_a.balance_mut().split(quote.deposit_a());
         let balance_b = coin_b.balance_mut().split(quote.deposit_b());
         
         // Add liquidity to pool
-        self.reserve_a.join(balance_a);
-        self.reserve_b.join(balance_b);
+        self.reserve_a.deposit(bank_a, balance_a);
+        self.reserve_b.deposit(bank_b, balance_b);
 
         // Mint LP Tokens
         let mut lp_coins = coin::from_balance(
@@ -374,12 +394,28 @@ module slamm::pool {
         };
 
         assert_lp_supply_reserve_ratio(
-            self.reserve_a.value(),
+            self.reserve_a(),
             initial_reserve_a,
             initial_lp_supply,
             self.lp_supply.supply_value(),
         );
 
+        if (bank_a.lending().is_some()) {
+            bank_a.rebalance(
+                lending_market,
+                clock,
+                ctx
+            );
+        };
+        
+        if (bank_b.lending().is_some()) {
+            bank_b.rebalance(
+                lending_market,
+                clock,
+                ctx
+            );
+        };
+        
         (lp_coins, result)
     }
     
@@ -402,18 +438,19 @@ module slamm::pool {
     ///
     /// - If it results in an inconsistent reserve-to-LP supply ratio
     /// - If it results in withdraw amounts that violate the slippage `min` params
-    public fun redeem_liquidity<A, B, Hook: drop, State: store>(
+    public fun redeem_liquidity<A, B, Hook: drop, State: store, P>(
         self: &mut Pool<A, B, Hook, State>,
+        lending_market: &mut LendingMarket<P>,
+        bank_a: &mut Bank<A>,
+        bank_b: &mut Bank<B>,
         lp_tokens: Coin<LP<A, B, Hook>>,
         min_a: u64,
         min_b: u64,
+        clock: &Clock,
         ctx:  &mut TxContext,
     ): (Coin<A>, Coin<B>, RedeemResult) {
-        self.assert_version_and_upgrade();
-
-        let initial_lp_supply = self.lp_supply.supply_value();
-        let initial_reserve_a = self.reserve_a.value();
-        let lp_burn = lp_tokens.value();
+        self.version.assert_version_and_upgrade(CURRENT_VERSION);
+        self.assert_unguarded();
 
         // Compute amounts to withdraw
         let quote = quote_redeem_impl(
@@ -423,6 +460,26 @@ module slamm::pool {
             min_b,
         );
 
+        bank_a.provision(
+            lending_market,
+            quote.withdraw_a(),
+            clock,
+            ctx
+        );
+        
+        bank_b.provision(
+            lending_market,
+            quote.withdraw_b(),
+            clock,
+            ctx
+        );
+
+        let initial_lp_supply = self.lp_supply.supply_value();
+        let initial_reserve_a = self.reserve_a();
+        let lp_burn = lp_tokens.value();
+
+        assert!(quote.burn_lp() == lp_burn, 0);
+
         // Burn LP Tokens
         self.lp_supply.decrease_supply(
             lp_tokens.into_balance()
@@ -430,19 +487,31 @@ module slamm::pool {
 
         // Prepare tokens to send
         let base_tokens = coin::from_balance(
-            self.reserve_a.split(quote.withdraw_a()),
+            self.reserve_a.withdraw(bank_a, quote.withdraw_a()),
             ctx,
         );
         let quote_tokens = coin::from_balance(
-            self.reserve_b.split(quote.withdraw_b()),
+            self.reserve_b.withdraw(bank_b, quote.withdraw_b()),
             ctx,
         );
 
         assert_lp_supply_reserve_ratio(
-            self.reserve_a.value(),
+            self.reserve_a(),
             initial_reserve_a,
             initial_lp_supply,
             self.lp_supply.supply_value(),
+        );
+
+        bank_a.rebalance(
+            lending_market,
+            clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            lending_market,
+            clock,
+            ctx
         );
 
         // Emit events
@@ -485,17 +554,55 @@ module slamm::pool {
         )
     }
 
+    // ===== Public Lending functions =====
+    
+    public fun sync_bank<A, B, Hook: drop, P>(
+        bank_a: &mut Bank<A>,
+        bank_b: &mut Bank<B>,
+        lending_market: &mut LendingMarket<P>,
+        intent: &mut Intent<A, B, Hook>,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ) {
+        if (intent.quote.a2b()) {
+            bank_b.provision(
+                lending_market,
+                intent.quote.amount_out(),
+                clock,
+                ctx
+            );
+        } else {
+            bank_a.provision(
+                lending_market,
+                intent.quote.amount_out(),
+                clock,
+                ctx
+            );
+        };
+    }
+
     // ===== View & Getters =====
     
     public fun reserves<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>): (u64, u64) {
-        (self.reserve_a.value(), self.reserve_b.value())
+        (
+            self.reserve_a(),
+            self.reserve_b(),
+        )
+    }
+
+    public fun reserve_a<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>): u64 {
+        self.reserve_a.0
+    }
+    
+    public fun reserve_b<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>): u64 {
+        self.reserve_b.0
     }
     
     public fun protocol_fees<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>): &Fees<A, B> {
         &self.protocol_fees
     }
     
-    public fun pool_fees<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>): &FeeData {
+    public fun pool_fees<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>): &Fees<A, B> {
         &self.pool_fees
     }
     
@@ -521,11 +628,71 @@ module slamm::pool {
     public fun minimum_liquidity(): u64 { MINIMUM_LIQUIDITY }
 
     // ===== Package functions =====
+
+    public(package) fun compute_fees<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, amount_in: u64): SwapInputs {
+        let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees.fee_ratio();
+        let (pool_fee_num, pool_fee_denom) = self.pool_fees.fee_ratio();
+        
+        let total_fees = safe_mul_div_u64(amount_in, pool_fee_num, pool_fee_denom);
+        let protocol_fees = safe_mul_div_u64(total_fees, protocol_fee_num, protocol_fee_denom);
+        let pool_fees = total_fees - protocol_fees;
+        let net_amount_in = amount_in - protocol_fees - pool_fees;
+
+        swap_inputs(net_amount_in, protocol_fees, pool_fees)
+    }
     
     public(package) fun inner_mut<A, B, Hook: drop, State: store>(
         self: &mut Pool<A, B, Hook, State>,
     ): &mut State {
         &mut self.inner
+    }
+    
+    public(package) fun as_intent<A, B, Hook: drop, State: store>(
+        quote: SwapQuote,
+        pool: &mut Pool<A, B, Hook, State>,
+    ): Intent<A, B, Hook> {
+        pool.guard();
+        
+        Intent {
+            quote,
+        }
+    }
+
+    fun consume<A, B, Hook: drop, State: store, >(
+        pool: &mut Pool<A, B, Hook, State>,
+        intent: Intent<A, B, Hook>,
+    ): SwapQuote {
+        pool.unguard();
+
+        let Intent { quote } = intent;
+
+        quote
+    }
+
+    public(package) fun guard<A, B, Hook: drop, State: store>(
+        pool: &mut Pool<A, B, Hook, State>,
+    ) {
+        pool.assert_unguarded();
+        pool.lock_guard = true
+    }
+    
+    public(package) fun unguard<A, B, Hook: drop, State: store>(
+        pool: &mut Pool<A, B, Hook, State>,
+    ) {
+        pool.assert_guarded();
+        pool.lock_guard = false
+    }
+
+    fun assert_unguarded<A, B, Hook: drop, State: store>(
+        pool: &Pool<A, B, Hook, State>,
+    ) {
+        assert!(pool.lock_guard == false, EPoolGuarded);
+    }
+    
+    fun assert_guarded<A, B, Hook: drop, State: store>(
+        pool: &Pool<A, B, Hook, State>,
+    ) {
+        assert!(pool.lock_guard == true, EPoolUnguarded);
     }
 
     // ===== Admin endpoints =====
@@ -535,7 +702,7 @@ module slamm::pool {
         _global_admin: &GlobalAdmin,
         ctx: &mut TxContext,
     ): (Coin<A>, Coin<B>) {
-        self.assert_version_and_upgrade();
+        self.version.assert_version_and_upgrade(CURRENT_VERSION);
 
         let (fees_a, fees_b) = self.protocol_fees.withdraw();
 
@@ -549,39 +716,55 @@ module slamm::pool {
         self: &mut Pool<A, B, Hook, State>,
         _cap: &PoolCap<A, B, Hook>,
     ) {
-        self.migrate_();
+        self.version.migrate_(CURRENT_VERSION);
     }
     
     entry fun migrate_as_global_admin<A, B, Hook: drop, State: store>(
         self: &mut Pool<A, B, Hook, State>,
         _admin: &GlobalAdmin,
     ) {
-        self.migrate_();
-    }
-
-    fun migrate_<A, B, Hook: drop, State: store>(
-        self: &mut Pool<A, B, Hook, State>,
-    ) {
-        assert!(self.version < CURRENT_VERSION, EIncorrectVersion);
-        self.version = CURRENT_VERSION;
-    }
-
-    fun assert_version<A, B, Hook: drop, State: store>(
-        self: &Pool<A, B, Hook, State>,
-    ) {
-        assert!(self.version == CURRENT_VERSION, EIncorrectVersion);
-    }
-
-    fun assert_version_and_upgrade<A, B, Hook: drop, State: store>(
-        self: &mut Pool<A, B, Hook, State>,
-    ) {
-        if (self.version < CURRENT_VERSION) {
-            self.version = CURRENT_VERSION;
-        };
-        assert_version(self);
+        self.version.migrate_(CURRENT_VERSION);
     }
     
     // ===== Private functions =====
+
+    fun swap_inner<In, Out>(
+        quote: &SwapQuote,
+        bank_in: &mut Bank<In>,
+        reserve_in: &mut Reserve<In>,
+        coin_in: &mut Coin<In>,
+        swap_in_amount: &mut u128,
+        protocol_fees: &mut FeeReserve<In>,
+        pool_fees: &mut FeeReserve<In>,
+        bank_out: &mut Bank<Out>,
+        reserve_out: &mut Reserve<Out>,
+        coin_out: &mut Coin<Out>,
+        swap_out_amount: &mut u128,
+    ) {
+        assert!(quote.amount_out() < reserve_out.0, EOutputExceedsLiquidity);
+        assert!(coin_in.value() >= quote.amount_in(), EInsufficientFunds);
+
+        let mut balance_in = coin_in.balance_mut().split(quote.amount_in());
+
+        // Transfers protocol fees in
+        protocol_fees.deposit(balance_in.split(quote.protocol_fees()));
+            
+        // Account pool fees in
+        pool_fees.register_fee(quote.pool_fees());
+
+        // Transfers amount in
+        reserve_in.deposit(bank_in, balance_in);
+        
+        // Transfers amount out
+        coin_out.balance_mut().join(reserve_out.withdraw(bank_out, quote.amount_out()));
+            
+        // Update trading data
+        *swap_in_amount =
+            *swap_in_amount + (quote.amount_in() as u128);
+
+        *swap_out_amount =
+            *swap_out_amount + (quote.amount_out() as u128);
+    }
 
     fun quote_deposit_impl<A, B, Hook: drop, State: store>(
         self: &Pool<A, B, Hook, State>,
@@ -830,17 +1013,39 @@ module slamm::pool {
     // ===== Test-Only =====
     
     #[test_only]
-    public(package) fun reserve_a_mut_for_testing<A, B, Hook: drop, State: store>(
+    public(package) fun no_protocol_fees<A, B, Hook: drop, State: store>(
         self: &mut Pool<A, B, Hook, State>,
-    ): &mut Balance<A> {
-        &mut self.reserve_a
+    ) {
+        let fee_num = self.protocol_fees.config_mut().swap_fee_numerator_mut();
+        *fee_num = 0;
     }
     
     #[test_only]
-    public(package) fun reserve_b_mut_for_testing<A, B, Hook: drop, State: store>(
+    public(package) fun mut_reserve_a<A, B, Hook: drop, State: store>(
         self: &mut Pool<A, B, Hook, State>,
-    ): &mut Balance<B> {
-        &mut self.reserve_b
+        bank: &mut Bank<A>,
+        amount: u64,
+        increase: bool,
+    ) {
+        if (increase) {
+            self.reserve_a.deposit(bank, balance::create_for_testing(amount));
+        } else {
+            balance::destroy_for_testing(self.reserve_a.withdraw(bank, amount));
+        };
+    }
+    
+    #[test_only]
+    public(package) fun mut_reserve_b<A, B, Hook: drop, State: store>(
+        self: &mut Pool<A, B, Hook, State>,
+        bank: &mut Bank<B>,
+        amount: u64,
+        increase: bool,
+    ) {
+        if (increase) {
+            self.reserve_b.deposit(bank, balance::create_for_testing(amount));
+        } else {
+            balance::destroy_for_testing(self.reserve_b.withdraw(bank, amount));
+        };
     }
     
     #[test_only]
@@ -860,7 +1065,7 @@ module slamm::pool {
     #[test_only]
     public(package) fun pool_fees_mut_for_testing<A, B, Hook: drop, State: store>(
         self: &mut Pool<A, B, Hook, State>,
-    ): &mut FeeData {
+    ): &mut Fees<A, B> {
         &mut self.pool_fees
     }
 
