@@ -76,6 +76,8 @@ module slamm::pool {
     const EPoolGuarded: u64 = 14;
     // Attempting to unguard pool that is already unguarded
     const EPoolUnguarded: u64 = 15;
+    const EInsufficientFunds: u64 = 16;
+    const EInsufficientFundsInBank: u64 = 17;
 
     /// Marker type for the LP coins of a pool. There can only be one
     /// pool per type, albeit given the permissionless aspect of the pool
@@ -213,10 +215,13 @@ module slamm::pool {
 
     fun deposit<T>(reserve: &mut Reserve<T>, bank: &mut Bank<T>, balance: Balance<T>) {
         reserve.0 = reserve.0 + balance.value();
+
         bank.reserve_mut().join(balance);
     }
     
     fun withdraw<T>(reserve: &mut Reserve<T>, bank: &mut Bank<T>, amount: u64): Balance<T> {
+        assert!(amount <= bank.reserve().value(), EInsufficientFundsInBank);
+
         reserve.0 = reserve.0 - amount;
         bank.reserve_mut().split(amount)
     }
@@ -302,6 +307,9 @@ module slamm::pool {
             pool_fees: quote.pool_fees(),
             a2b: quote.a2b(),
         };
+
+        bank_a.assert_liquidity();
+        bank_b.assert_liquidity();
 
         emit_event(result);
 
@@ -732,6 +740,8 @@ module slamm::pool {
         swap_out_amount: &mut u128,
     ) {
         assert!(quote.amount_out() < reserve_out.0, EOutputExceedsLiquidity);
+        assert!(coin_in.value() >= quote.amount_in(), EInsufficientFunds);
+
         let mut balance_in = coin_in.balance_mut().split(quote.amount_in());
 
         // Transfers protocol fees in

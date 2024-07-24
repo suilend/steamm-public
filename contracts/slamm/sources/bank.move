@@ -21,6 +21,7 @@ module slamm::bank {
 
     const ELendingMarketTypeMismatch: u64 = 1;
     const EOutputExceedsTotalBankReserves: u64 = 2;
+    const ELiquidityRatioOffTarget: u64 = 3;
 
     public struct Bank<phantom T> has key {
         id: UID,
@@ -99,6 +100,24 @@ module slamm::bank {
         })
     }
 
+    // We only check lower bound
+    public fun assert_liquidity<T>(
+        bank: &mut Bank<T>,
+    ) {
+        if (bank.lending.is_none()) {
+            return
+        };
+
+        let effective_liquidity = bank.effective_liquidity_ratio_bps();
+        let target_liquidity = bank.target_liquidity_ratio_bps();
+        let liquidity_buffer = bank.liquidity_buffer_bps();
+
+        assert!(
+            effective_liquidity >= target_liquidity - liquidity_buffer,
+            ELiquidityRatioOffTarget
+        );
+    }
+    
     public fun rebalance<T, P>(
         bank: &mut Bank<T>,
         lending_market: &mut LendingMarket<P>,
@@ -192,26 +211,6 @@ module slamm::bank {
     ): u16 {
         ((liquid_reserve * 10_000) / (liquid_reserve + iliquid_reserve)) as u16
     }
-
-    // public fun assert_liquidity_requirements(
-    //     self: &Lending,
-    //     reserve: u64,
-    //     amount: u64,
-    //     is_input: bool,
-    //     lent: u64,
-    // ) {
-    //     if (is_input) {
-    //         let liquidity_ratio = liquidity_ratio(reserve + amount, lent) as u64;
-    //         assert!(liquidity_ratio <= (self.target_liquidity_ratio_bps + self.liquidity_buffer_bps) as u64, 0);
-    //     } else {
-    //         assert!(reserve + lent > amount, 0);
-    //         assert!(reserve > amount, 0);
-
-    //         let liquidity_ratio = liquidity_ratio(reserve - amount, lent) as u64;
-
-    //         assert!(liquidity_ratio >= (self.target_liquidity_ratio_bps - self.liquidity_buffer_bps) as u64, 0);
-    //     }
-    // }
 
     // ====== Admin Functions =====
     
@@ -446,9 +445,13 @@ module slamm::bank {
         liquidity_buffer_bps: u64,
     ): u64 {
         assert_output_(reserve, lent, amount);
-        let post_liquidity_ratio = liquidity_ratio(reserve + lent - amount, lent) as u64;
+        
+        let needs_recall = if (amount > reserve) { true } else {
+                let post_liquidity_ratio = liquidity_ratio(reserve - amount, lent) as u64;
+                post_liquidity_ratio < liquidity_ratio_bps - liquidity_buffer_bps
+            };
 
-        if (amount > reserve || post_liquidity_ratio < liquidity_ratio_bps - liquidity_buffer_bps) {
+        if (needs_recall) {
             return compute_recall_with_amount(
                 reserve,
                 amount,

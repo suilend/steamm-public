@@ -834,6 +834,93 @@ module slamm::slamm_tests {
         destroy(lending_market);
         test_scenario::end(scenario);
     }
+    
+    #[test]
+    #[expected_failure(abort_code = pool::EInsufficientFunds)]
+    fun test_fail_swap_insufficient_funds() {
+        let mut scenario = test_scenario::begin(ADMIN);
+
+        // Init Pool
+        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        
+        let ctx = ctx(&mut scenario);
+
+        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+            Wit {},
+            &mut registry,
+            100, // admin fees BPS
+            ctx,
+        );
+
+        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+
+        let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000), ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
+
+        let (lp_coins, _) = pool.deposit_liquidity(
+            &mut lending_market,
+            &mut bank_a,
+            &mut bank_b,
+            &mut coin_a,
+            &mut coin_b,
+            e9(1_000),
+            e9(500_000),
+            0,
+            0,
+            &clock,
+            ctx,
+        );
+
+        let (reserve_a, reserve_b) = pool.reserves();
+
+        assert_eq(pool.cpmm_k(), 500000000000000000000000000);
+        assert_eq(pool.lp_supply_val(), 22360679774997);
+        assert_eq(reserve_a, e9(1_000));
+        assert_eq(reserve_b, e9(500_000));
+        assert_eq(lp_coins.value(), 22360679774997 - minimum_liquidity());
+        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
+        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+
+        destroy(coin_a);
+        destroy(coin_b);
+
+        // Swap
+        test_scenario::next_tx(&mut scenario, TRADER);
+        let ctx = ctx(&mut scenario);
+
+        let mut coin_a = coin::mint_for_testing<SUI>(e9(199), ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
+
+        let _ = pool.cpmm_swap(
+            &mut bank_a,
+            &mut bank_b,
+            &mut coin_a,
+            &mut coin_b,
+            e9(200),
+            0,
+            true, // a2b
+            ctx,
+        );
+
+        destroy(registry);
+        destroy(coin_a);
+        destroy(coin_b);
+        destroy(pool);
+        destroy(bank_a);
+        destroy(bank_b);
+        destroy(lp_coins);
+        destroy(pool_cap);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(clock);
+        destroy(bag);
+        destroy(lending_market);
+        test_scenario::end(scenario);
+    }
 
     #[test]
     #[expected_failure(abort_code = pool::ERedeemSlippageAExceeded)]
