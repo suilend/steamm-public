@@ -144,17 +144,30 @@ module slamm::bank {
         };
     }
 
-    public fun compute_lending_action<T>(
+    public fun compute_lending_action_with_amount<T>(
         bank: &Bank<T>,
         amount: u64,
         is_input: bool,
     ): Option<LendingAction> {
         let lending = bank.lending.borrow();
 
-        compute_lending_action_(
+        compute_lending_action_with_amount_(
             bank.reserve.value(),
             amount,
             is_input,
+            lending.lent,
+            lending.target_liquidity_ratio_bps as u64,
+            lending.liquidity_buffer_bps as u64,
+        )
+    }
+    
+    public fun compute_lending_action<T>(
+        bank: &Bank<T>,
+    ): Option<LendingAction> {
+        let lending = bank.lending.borrow();
+
+        compute_lending_action_(
+            bank.reserve.value(),
             lending.lent,
             lending.target_liquidity_ratio_bps as u64,
             lending.liquidity_buffer_bps as u64,
@@ -364,7 +377,7 @@ module slamm::bank {
         assert!(liquid_reserve + lent >= output, EOutputExceedsTotalBankReserves);
     }
 
-    fun compute_lending_action_(
+    fun compute_lending_action_with_amount_(
         reserve: u64,
         amount: u64,
         is_input: bool,
@@ -372,24 +385,7 @@ module slamm::bank {
         liquidity_ratio_bps: u64,
         liquidity_buffer_bps: u64,
     ): Option<LendingAction> {
-        if (is_input) {
-            let liquidity_ratio = liquidity_ratio(reserve + amount, lent) as u64;
-
-            if (liquidity_ratio > liquidity_ratio_bps + liquidity_buffer_bps) {
-                return some(LendingAction {
-                    is_lend: true,
-                    amount: compute_lend(
-                        reserve + amount,
-                        lent,
-                        liquidity_ratio_bps,
-                    )
-                })
-            } else {
-                none()
-            }
-
-
-        } else {
+        if (!is_input) {
             assert_output_(reserve, lent, amount);
 
             if (amount > reserve) {
@@ -402,24 +398,52 @@ module slamm::bank {
                         liquidity_ratio_bps,
                     )
                 })
-            };
-
-            let liquidity_ratio = liquidity_ratio(reserve - amount, lent) as u64;
-
-            if (liquidity_ratio < liquidity_ratio_bps - liquidity_buffer_bps) {
-                return some(LendingAction {
-                    is_lend: false,
-                    amount: compute_recall_(
-                        reserve,
-                        amount,
-                        lent,
-                        liquidity_ratio_bps,
-                    )
-                })
-            } else {
-                none()
             }
-        }
+        };
+
+        let final_reserve = if (is_input) { reserve + amount } else { reserve - amount };
+
+        compute_lending_action_(
+            final_reserve,
+            lent,
+            liquidity_ratio_bps,
+            liquidity_buffer_bps
+        )
+    }
+    
+    fun compute_lending_action_(
+        reserve: u64,
+        lent: u64,
+        liquidity_ratio_bps: u64,
+        liquidity_buffer_bps: u64,
+    ): Option<LendingAction> {
+        let liquidity_ratio = liquidity_ratio(reserve, lent) as u64;
+
+        if (liquidity_ratio > liquidity_ratio_bps + liquidity_buffer_bps) {
+            return some(LendingAction {
+                is_lend: true,
+                amount: compute_lend(
+                    reserve,
+                    lent,
+                    liquidity_ratio_bps,
+                )
+            })
+        };
+
+        let liquidity_ratio = liquidity_ratio(reserve, lent) as u64;
+
+        if (liquidity_ratio < liquidity_ratio_bps - liquidity_buffer_bps) {
+            return some(LendingAction {
+                is_lend: false,
+                amount: compute_recall(
+                    reserve,
+                    lent,
+                    liquidity_ratio_bps,
+                )
+            })
+        };
+
+        none()   
     }
     
     fun compute_recall_amount(

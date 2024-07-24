@@ -1013,6 +1013,14 @@ module slamm::pool {
     // ===== Test-Only =====
     
     #[test_only]
+    public(package) fun no_protocol_fees<A, B, Hook: drop, State: store>(
+        self: &mut Pool<A, B, Hook, State>,
+    ) {
+        let fee_num = self.protocol_fees.config_mut().swap_fee_numerator_mut();
+        *fee_num = 0;
+    }
+    
+    #[test_only]
     public(package) fun mut_reserve_a<A, B, Hook: drop, State: store>(
         self: &mut Pool<A, B, Hook, State>,
         bank: &mut Bank<A>,

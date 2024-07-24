@@ -123,4 +123,9 @@ module slamm::fees {
             self.fee_b.balance.borrow_mut(),
         )
     }
+    
+    #[test_only]
+    public(package) fun config_mut<A, B>(self: &mut Fees<A, B>): &mut FeeConfig { &mut self.config }
+    #[test_only]
+    public(package) fun swap_fee_numerator_mut(self: &mut FeeConfig): &mut u64 { &mut self.swap_fee_numerator }
 }
