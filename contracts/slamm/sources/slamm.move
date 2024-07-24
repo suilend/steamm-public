@@ -350,6 +350,7 @@ module slamm::pool {
         ctx:  &mut TxContext,
     ): (Coin<LP<A, B, Hook>>, DepositResult) {
         self.version.assert_version_and_upgrade(CURRENT_VERSION);
+        self.assert_unguarded();
 
         // Compute token deposits and delta lp tokens
         let quote = quote_deposit_impl(
@@ -449,6 +450,7 @@ module slamm::pool {
         ctx:  &mut TxContext,
     ): (Coin<A>, Coin<B>, RedeemResult) {
         self.version.assert_version_and_upgrade(CURRENT_VERSION);
+        self.assert_unguarded();
 
         // Compute amounts to withdraw
         let quote = quote_redeem_impl(

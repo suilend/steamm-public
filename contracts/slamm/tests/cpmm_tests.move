@@ -1406,4 +1406,296 @@ module slamm::slamm_tests {
         destroy(lending_market);
         test_scenario::end(scenario);
     }
+
+    #[test]
+    #[expected_failure(abort_code = pool::EPoolGuarded)]
+    fun test_try_multiple_swap_intents() {
+        let mut scenario = test_scenario::begin(ADMIN);
+
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        // Create amm bank
+        let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
+
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+
+        // Init Pool
+        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+        let ctx = ctx(&mut scenario);
+
+        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+            Wit {},
+            &mut registry,
+            100, // admin fees BPS
+            ctx,
+        );
+
+        // Deposit funds in AMM Pool
+        let mut coin_a = coin::mint_for_testing<SUI>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
+
+        let (lp_coins, _) = pool.deposit_liquidity(
+            &mut lending_market,
+            &mut bank_a,
+            &mut bank_b,
+            &mut coin_a,
+            &mut coin_b,
+            500_000,
+            500_000,
+            0,
+            0,
+            &clock,
+            ctx,
+        );
+
+        destroy(coin_a);
+        destroy(coin_b);
+
+        // Swap
+        let mut coin_a = coin::mint_for_testing<SUI>(50_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
+
+        let swap_intent = pool.cpmm_intent_swap(
+            50_000,
+            true, // a2b
+        );
+        
+        let swap_intent_2 = pool.cpmm_intent_swap(
+            50_000,
+            true, // a2b
+        );
+
+        pool.cpmm_execute_swap(
+            &mut bank_a,
+            &mut bank_b,
+            swap_intent,
+            &mut coin_a,
+            &mut coin_b,
+            0,
+            ctx,
+        );
+        
+        pool.cpmm_execute_swap(
+            &mut bank_a,
+            &mut bank_b,
+            swap_intent_2,
+            &mut coin_a,
+            &mut coin_b,
+            0,
+            ctx,
+        );
+
+        destroy(coin_a);
+        destroy(coin_b);
+        destroy(lp_coins);
+        destroy(registry);
+        destroy(pool);
+        destroy(pool_cap);
+        destroy(global_admin);
+        destroy(lending_market);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(bag);
+        destroy(bank_a);
+        destroy(bank_b);
+        destroy(clock);
+        test_scenario::end(scenario);
+    }
+    
+    #[test]
+    #[expected_failure(abort_code = pool::EPoolGuarded)]
+    fun test_try_swap_intent_and_deposit_in_the_middle() {
+        let mut scenario = test_scenario::begin(ADMIN);
+
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        // Create amm bank
+        let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
+
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+
+        // Init Pool
+        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+        let ctx = ctx(&mut scenario);
+
+        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+            Wit {},
+            &mut registry,
+            100, // admin fees BPS
+            ctx,
+        );
+
+        // Deposit funds in AMM Pool
+        let mut coin_a = coin::mint_for_testing<SUI>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
+
+        let (lp_coins, _) = pool.deposit_liquidity(
+            &mut lending_market,
+            &mut bank_a,
+            &mut bank_b,
+            &mut coin_a,
+            &mut coin_b,
+            500_000,
+            500_000,
+            0,
+            0,
+            &clock,
+            ctx,
+        );
+
+        destroy(coin_a);
+        destroy(coin_b);
+        destroy(lp_coins);
+
+        // Swap
+        let swap_intent = pool.cpmm_intent_swap(
+            50_000,
+            true, // a2b
+        );
+
+        let mut coin_a = coin::mint_for_testing<SUI>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
+
+        let (lp_coins, _) = pool.deposit_liquidity(
+            &mut lending_market,
+            &mut bank_a,
+            &mut bank_b,
+            &mut coin_a,
+            &mut coin_b,
+            500_000,
+            500_000,
+            0,
+            0,
+            &clock,
+            ctx,
+        );
+
+        destroy(coin_a);
+        destroy(coin_b);
+
+        let mut coin_a = coin::mint_for_testing<SUI>(50_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
+
+        pool.cpmm_execute_swap(
+            &mut bank_a,
+            &mut bank_b,
+            swap_intent,
+            &mut coin_a,
+            &mut coin_b,
+            0,
+            ctx,
+        );
+        
+        destroy(coin_a);
+        destroy(coin_b);
+        destroy(lp_coins);
+        destroy(registry);
+        destroy(pool);
+        destroy(pool_cap);
+        destroy(global_admin);
+        destroy(lending_market);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(bag);
+        destroy(bank_a);
+        destroy(bank_b);
+        destroy(clock);
+        test_scenario::end(scenario);
+    }
+    
+    #[test]
+    #[expected_failure(abort_code = pool::EPoolGuarded)]
+    fun test_try_swap_intent_and_redeem_in_the_middle() {
+        let mut scenario = test_scenario::begin(ADMIN);
+
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        // Create amm bank
+        let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
+
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+
+        // Init Pool
+        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+        let ctx = ctx(&mut scenario);
+
+        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+            Wit {},
+            &mut registry,
+            100, // admin fees BPS
+            ctx,
+        );
+
+        // Deposit funds in AMM Pool
+        let mut coin_a = coin::mint_for_testing<SUI>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
+
+        let (lp_coins, _) = pool.deposit_liquidity(
+            &mut lending_market,
+            &mut bank_a,
+            &mut bank_b,
+            &mut coin_a,
+            &mut coin_b,
+            500_000,
+            500_000,
+            0,
+            0,
+            &clock,
+            ctx,
+        );
+
+        destroy(coin_a);
+        destroy(coin_b);
+
+        // Swap
+        let swap_intent = pool.cpmm_intent_swap(
+            50_000,
+            true, // a2b
+        );
+
+        let (coin_a_, coin_b_, _) = pool.redeem_liquidity(
+            &mut lending_market,
+            &mut bank_a,
+            &mut bank_b,
+            lp_coins,
+            0,
+            0,
+            &clock,
+            ctx,
+        );
+
+        destroy(coin_a_);
+        destroy(coin_b_);
+
+        let mut coin_a = coin::mint_for_testing<SUI>(50_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
+
+        pool.cpmm_execute_swap(
+            &mut bank_a,
+            &mut bank_b,
+            swap_intent,
+            &mut coin_a,
+            &mut coin_b,
+            0,
+            ctx,
+        );
+        
+        destroy(coin_a);
+        destroy(coin_b);
+        destroy(registry);
+        destroy(pool);
+        destroy(pool_cap);
+        destroy(global_admin);
+        destroy(lending_market);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(bag);
+        destroy(bank_a);
+        destroy(bank_b);
+        destroy(clock);
+        test_scenario::end(scenario);
+    }
 }
