@@ -7,6 +7,7 @@ module slamm::cpmm {
     use slamm::quote::{Self, SwapQuote};
     use slamm::bank::Bank;
     use slamm::pool::{Self, Pool, PoolCap, SwapResult, Intent};
+    use slamm::version::{Self, Version};
 
     // ===== Constants =====
 
@@ -14,7 +15,6 @@ module slamm::cpmm {
 
     // ===== Errors =====
 
-    const EIncorrectVersion: u64 = 0;
     const EInvariantViolation: u64 = 1;
 
     /// Hook type for the constant-product AMM implementation. Serves as both
@@ -32,7 +32,7 @@ module slamm::cpmm {
     /// Constant-Product AMM specific state. We do not store the invariant,
     /// instead we compute it at runtime.
     public struct State has store {
-        version: u16,
+        version: Version,
     }
 
     // ===== Public Methods =====
@@ -43,7 +43,7 @@ module slamm::cpmm {
         swap_fee_bps: u64,
         ctx: &mut TxContext,
     ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>>) {
-        let inner = State { version: CURRENT_VERSION };
+        let inner = State { version: version::new(CURRENT_VERSION) };
 
         let (pool, pool_cap) = pool::new<A, B, Hook<W>, State>(
             Hook<W> {},
@@ -67,7 +67,7 @@ module slamm::cpmm {
         a2b: bool,
         ctx: &mut TxContext,
     ): SwapResult {
-        assert_version_and_upgrade(self);
+        self.inner_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
 
         let intent = intent_swap(
             self,
@@ -94,6 +94,7 @@ module slamm::cpmm {
         amount_in: u64,
         a2b: bool,
     ): Intent<A, B, Hook<W>> {
+        self.inner_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
         let quote = quote_swap(self, amount_in, a2b);
 
         quote.as_intent(self)
@@ -109,6 +110,8 @@ module slamm::cpmm {
         min_amount_out: u64,
         ctx: &mut TxContext,
     ): SwapResult {
+        self.inner_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
+
         let k0 = k(self);
 
         let response = self.swap(
@@ -185,23 +188,7 @@ module slamm::cpmm {
     fun migrate_<A, B, W>(
         self: &mut Pool<A, B, Hook<W>, State>,
     ) {
-        assert!(self.inner().version < CURRENT_VERSION, EIncorrectVersion);
-        self.inner_mut().version = CURRENT_VERSION;
-    }
-
-    fun assert_version<A, B, W>(
-        self: &Pool<A, B, Hook<W>, State>,
-    ) {
-            assert!(self.inner().version == CURRENT_VERSION, EIncorrectVersion);
-    }
-
-    fun assert_version_and_upgrade<A, B, W>(
-        self: &mut Pool<A, B, Hook<W>, State>,
-    ) {
-        if (self.inner().version < CURRENT_VERSION) {
-            self.inner_mut().version = CURRENT_VERSION;
-        };
-        assert_version(self);
+        self.inner_mut().version.migrate_(CURRENT_VERSION);
     }
 
     // ===== Private Functions =====

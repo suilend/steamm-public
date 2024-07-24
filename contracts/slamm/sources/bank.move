@@ -88,10 +88,10 @@ module slamm::bank {
         liquidity_buffer_bps: u16,
         reserve_array_index: u64,
     ) {
+        self.version.assert_version_and_upgrade(CURRENT_VERSION);
         assert!(target_liquidity_ratio_bps + liquidity_buffer_bps < 10_000, ELiquidityRangeAboveHundredPercent);
         assert!(target_liquidity_ratio_bps > liquidity_buffer_bps, ELiquidityRangeBelowHundredPercent);
 
-        self.version.assert_version_and_upgrade(CURRENT_VERSION);
 
         self.fields.add(LendingReserveKey<T> {}, balance::zero<CToken<P, T>>());
 
