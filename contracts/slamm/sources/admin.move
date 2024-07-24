@@ -14,8 +14,8 @@ module slamm::global_admin {
     
     #[test_only]
     public(package) fun init_for_testing(ctx: &mut TxContext): GlobalAdmin {
-            GlobalAdmin{
-                id: object::new(ctx)
-            }
+        GlobalAdmin{
+            id: object::new(ctx)
+        }
     }
 }
