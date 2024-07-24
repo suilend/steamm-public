@@ -7,7 +7,6 @@ module slamm::bank {
     use sui::transfer::share_object;
     use sui::clock::Clock;
     use sui::coin::{Self, Coin};
-    use slamm::quote::SwapQuote;
     use slamm::global_admin::GlobalAdmin;
     use slamm::version::{Self, Version};
     use slamm::registry::Registry;
@@ -107,17 +106,22 @@ module slamm::bank {
         ctx: &mut TxContext,
     ) {
         bank.version.assert_version_and_upgrade(CURRENT_VERSION);
+
+        if (bank.lending.is_none()) {
+            return
+        };
+
         bank.assert_p_type<T, P>();
 
         let effective_liquidity = bank.effective_liquidity_ratio_bps();
-        let target_liquidity = bank.liquidity_ratio_bps() as u64;
-        let liquidity_buffer = bank.liquidity_buffer_bps() as u64;
+        let target_liquidity = bank.target_liquidity_ratio_bps();
+        let liquidity_buffer = bank.liquidity_buffer_bps();
 
         if (effective_liquidity > target_liquidity + liquidity_buffer) {
             let amount = compute_lend(
                 bank.reserve.value(),
                 bank.lent(),
-                bank.liquidity_ratio_bps() as u64,
+                bank.target_liquidity_ratio_bps(),
             );
 
             bank.lend_(
@@ -132,7 +136,7 @@ module slamm::bank {
             let amount = compute_recall(
                 bank.reserve.value(),
                 bank.lent(),
-                bank.liquidity_ratio_bps() as u64,
+                bank.target_liquidity_ratio_bps(),
             );
 
             bank.recall_(
@@ -149,6 +153,10 @@ module slamm::bank {
         amount: u64,
         is_input: bool,
     ): Option<LendingAction> {
+        if (bank.lending.is_none()) {
+            return none()
+        };
+
         let lending = bank.lending.borrow();
 
         compute_lending_action_with_amount_(
@@ -164,6 +172,10 @@ module slamm::bank {
     public fun compute_lending_action<T>(
         bank: &Bank<T>,
     ): Option<LendingAction> {
+        if (bank.lending.is_none()) {
+            return none()
+        };
+
         let lending = bank.lending.borrow();
 
         compute_lending_action_(
@@ -220,6 +232,11 @@ module slamm::bank {
         ctx: &mut TxContext,
     ) {
         bank.version.assert_version_and_upgrade(CURRENT_VERSION);
+
+        if (bank.lending.is_none()) {
+            return
+        };
+
         bank.assert_p_type<T, P>();
 
         let amount = {
@@ -253,18 +270,6 @@ module slamm::bank {
 
         bank.reserve.join(coin.into_balance());
     }
-    
-    public(package) fun needs_sync<A, B>(
-        quote: &SwapQuote,
-        bank_a: &Bank<A>,
-        bank_b: &Bank<B>,
-    ): bool {
-        if (quote.a2b()) {
-            bank_b.check_sync_(quote.amount_out())
-        } else {
-            bank_a.check_sync_(quote.amount_out())
-        }
-    }
 
     public(package) fun assert_p_type<T, P>(
         bank: &Bank<T>,
@@ -282,15 +287,6 @@ module slamm::bank {
 
     // ====== Private Functions =====
 
-    fun check_sync_<T>(
-        bank: &Bank<T>,
-        output: u64,
-    ): bool {
-        bank.assert_output(output);
-
-        output > bank.reserve.value()
-    }
-    
     fun lend_<T, P>(
         bank: &mut Bank<T>,
         lending_market: &mut LendingMarket<P>,
@@ -362,13 +358,6 @@ module slamm::bank {
         c_balance.split(c_tokens)
     }
     
-    fun assert_output<T>(
-        bank: &Bank<T>,
-        output: u64,
-    ) {
-        assert!(bank.total_reserve() >= output, EOutputExceedsTotalBankReserves);
-    }
-    
     fun assert_output_(
         liquid_reserve: u64,
         lent: u64,
@@ -388,10 +377,12 @@ module slamm::bank {
         if (!is_input) {
             assert_output_(reserve, lent, amount);
 
+            // If the amount is bigger than the reserve, then it's clear that
+            // we need to recall
             if (amount > reserve) {
                 return some(LendingAction {
                     is_lend: false,
-                    amount: compute_recall_(
+                    amount: compute_recall_with_amount(
                         reserve,
                         amount,
                         lent,
@@ -403,6 +394,7 @@ module slamm::bank {
 
         let final_reserve = if (is_input) { reserve + amount } else { reserve - amount };
 
+        // Else we compoute the lending action based on the liquidty ratio and buffer
         compute_lending_action_(
             final_reserve,
             lent,
@@ -457,7 +449,7 @@ module slamm::bank {
         let post_liquidity_ratio = liquidity_ratio(reserve + lent - amount, lent) as u64;
 
         if (amount > reserve || post_liquidity_ratio < liquidity_ratio_bps - liquidity_buffer_bps) {
-            return compute_recall_(
+            return compute_recall_with_amount(
                 reserve,
                 amount,
                 lent,
@@ -472,21 +464,16 @@ module slamm::bank {
     ): u64 {
         (reserve * 10_000) / (reserve + lent)
     }
-    
-    // 15% < 20%
-    // 5% * total_reserves =
-    // (target_liquidity - effective_liquidity) * total_reserves
-    // [target - liquid / (liquid + iliquid)] * (liquid + iliquid)
-    // target * (liquid + iliquid) - liquid
+
     fun compute_recall(
-        reserve_t1: u64,
+        reserve: u64,
         lent: u64,
         liquidity_ratio_bps: u64,
     ): u64 {
-        (liquidity_ratio_bps * (reserve_t1 + lent) / 10_000) - reserve_t1
+        compute_recall_with_amount(reserve, 0, lent, liquidity_ratio_bps)
     }
-
-    fun compute_recall_(
+    
+    fun compute_recall_with_amount(
         reserve: u64,
         output: u64,
         lent: u64,
@@ -529,13 +516,13 @@ module slamm::bank {
         } else { 0 }
     }
     
-    public fun liquidity_ratio_bps<T>(self: &Bank<T>): u16 {
+    public fun target_liquidity_ratio_bps<T>(self: &Bank<T>): u64 {
         if (self.lending.is_some()) {
             self.liquidity_ratio_bps_unchecked()
         } else { 0 }
     }
     
-    public fun liquidity_buffer_bps<T>(self: &Bank<T>): u16 {
+    public fun liquidity_buffer_bps<T>(self: &Bank<T>): u64 {
         if (self.lending.is_some()) {
             self.liquidity_buffer_bps_unchecked()
         } else { 0 }
@@ -545,7 +532,7 @@ module slamm::bank {
     public fun p_type<T>(self: &Bank<T>): TypeName { self.lending.borrow().p_type }
     public fun reserve<T>(self: &Bank<T>): &Balance<T> { &self.reserve }
     public fun lent_unchecked<T>(self: &Bank<T>): u64 { self.lending.borrow().lent }
-    public fun liquidity_ratio_bps_unchecked<T>(self: &Bank<T>): u16 { self.lending.borrow().target_liquidity_ratio_bps }
-    public fun liquidity_buffer_bps_unchecked<T>(self: &Bank<T>): u16 { self.lending.borrow().liquidity_buffer_bps }
+    public fun liquidity_ratio_bps_unchecked<T>(self: &Bank<T>): u64 { self.lending.borrow().target_liquidity_ratio_bps as u64}
+    public fun liquidity_buffer_bps_unchecked<T>(self: &Bank<T>): u64 { self.lending.borrow().liquidity_buffer_bps as u64 }
     public fun reserve_array_index<T>(self: &Bank<T>): u64 { self.lending.borrow().reserve_array_index }
 }

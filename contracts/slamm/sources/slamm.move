@@ -450,23 +450,19 @@ module slamm::pool {
             min_b,
         );
 
-        if (bank_a.lending().is_some()) {
-            bank_a.provision(
-                lending_market,
-                quote.withdraw_a(),
-                clock,
-                ctx
-            );
-        };
+        bank_a.provision(
+            lending_market,
+            quote.withdraw_a(),
+            clock,
+            ctx
+        );
         
-        if (bank_b.lending().is_some()) {
-            bank_b.provision(
-                lending_market,
-                quote.withdraw_b(),
-                clock,
-                ctx
-            );
-        };
+        bank_b.provision(
+            lending_market,
+            quote.withdraw_b(),
+            clock,
+            ctx
+        );
 
         let initial_lp_supply = self.lp_supply.supply_value();
         let initial_reserve_a = self.reserve_a();
@@ -496,21 +492,17 @@ module slamm::pool {
             self.lp_supply.supply_value(),
         );
 
-        if (bank_a.lending().is_some()) {
-            bank_a.rebalance(
-                lending_market,
-                clock,
-                ctx
-            );
-        };
+        bank_a.rebalance(
+            lending_market,
+            clock,
+            ctx
+        );
         
-        if (bank_b.lending().is_some()) {
-            bank_b.rebalance(
-                lending_market,
-                clock,
-                ctx
-            );
-        };
+        bank_b.rebalance(
+            lending_market,
+            clock,
+            ctx
+        );
 
         // Emit events
         let result = RedeemResult {
@@ -562,10 +554,7 @@ module slamm::pool {
         clock: &Clock,
         ctx: &mut TxContext,
     ) {
-        let needs_sync = intent.quote.needs_sync(bank_a, bank_b);
-
-        if (needs_sync) {
-            if (intent.quote.a2b()) {
+        if (intent.quote.a2b()) {
             bank_b.provision(
                 lending_market,
                 intent.quote.amount_out(),
@@ -580,7 +569,6 @@ module slamm::pool {
                 ctx
             );
         };
-        }
     }
 
     // ===== View & Getters =====
