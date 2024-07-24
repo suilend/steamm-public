@@ -2,7 +2,7 @@
 
 [move]
 version = 2
-manifest_digest = "595172CA4FBAE02AF8B7E820EF8987107D5D6588F8ADDE425105BAC3CBC46F82"
+manifest_digest = "90DDCB29BB824C8B404C2C39A61C3A818A14BF5C6F186CDA88B77A079C9EEFF0"
 deps_digest = "3C4103934B1E040BB6B23F1D610B4EF9F2F1166A50A104EADCF77467C004C600"
 dependencies = [
   { name = "Sui" },
@@ -40,7 +40,7 @@ dependencies = [
 
 [[move.package]]
 name = "suilend"
-source = { git = "https://github.com/solendprotocol/suilend.git", rev = "devel", subdir = "contracts" }
+source = { git = "https://github.com/solendprotocol/suilend.git", rev = "expose-test-only-fns", subdir = "contracts" }
 
 dependencies = [
   { name = "Pyth" },

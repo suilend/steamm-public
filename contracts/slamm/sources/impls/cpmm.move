@@ -5,6 +5,7 @@ module slamm::cpmm {
     use slamm::registry::{Registry};
     use slamm::math::{safe_mul_div_u64};
     use slamm::quote::{Self, SwapQuote};
+    use slamm::bank::Bank;
     use slamm::pool::{Self, Pool, PoolCap, SwapResult, Intent};
 
     // ===== Constants =====
@@ -57,6 +58,8 @@ module slamm::cpmm {
 
     public fun swap<A, B, W: drop>(
         self: &mut Pool<A, B, Hook<W>, State>,
+        bank_a: &mut Bank<A>,
+        bank_b: &mut Bank<B>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
         amount_in: u64,
@@ -66,15 +69,22 @@ module slamm::cpmm {
     ): SwapResult {
         assert_version_and_upgrade(self);
 
-        let mut intent = intent_swap(
+        let intent = intent_swap(
             self,
             amount_in,
             a2b,
         );
 
-        let result = execute_swap(self, &mut intent, coin_a, coin_b, min_amount_out, ctx);
-
-        self.consume(intent);
+        let result = execute_swap(
+            self,
+            bank_a,
+            bank_b,
+            intent,
+            coin_a,
+            coin_b,
+            min_amount_out,
+            ctx
+        );
 
         result
     }
@@ -83,18 +93,17 @@ module slamm::cpmm {
         self: &mut Pool<A, B, Hook<W>, State>,
         amount_in: u64,
         a2b: bool,
-    ): Intent<SwapQuote, A, B, Hook<W>> {
+    ): Intent<A, B, Hook<W>> {
         let quote = quote_swap(self, amount_in, a2b);
 
-        quote.as_intent(
-            self,
-            Hook<W> {},
-        )
+        quote.as_intent(self)
     }
 
     public fun execute_swap<A, B, W: drop>(
         self: &mut Pool<A, B, Hook<W>, State>,
-        intent: &mut Intent<SwapQuote, A, B, Hook<W>>,
+        bank_a: &mut Bank<A>,
+        bank_b: &mut Bank<B>,
+        intent: Intent<A, B, Hook<W>>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
         min_amount_out: u64,
@@ -104,6 +113,8 @@ module slamm::cpmm {
 
         let response = self.swap(
             Hook<W> {},
+            bank_a,
+            bank_b,
             coin_a,
             coin_b,
             intent,

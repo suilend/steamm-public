@@ -8,7 +8,7 @@ module slamm::deposit_redeem {
 
     #[test]
     fun test_initial_deposit() {
-        let pool = test_utils::new_for_testing(
+        let (pool, bank_a, bank_b) = test_utils::new_for_testing(
             0,
             0,
             0,
@@ -28,11 +28,13 @@ module slamm::deposit_redeem {
         assert_eq(quote.mint_lp(), 5);
 
         destroy(pool);
+        destroy(bank_a);
+        destroy(bank_b);
     }
 
     #[test]
     fun test_simple_deposit() {
-        let pool = test_utils::new_for_testing(
+        let (pool, bank_a, bank_b) = test_utils::new_for_testing(
             5,
             1,
             sqrt_u128(5 as u128) as u64,
@@ -52,11 +54,13 @@ module slamm::deposit_redeem {
         assert_eq(quote.mint_lp(), 2);
 
         destroy(pool);
+        destroy(bank_a);
+        destroy(bank_b);
     }
     
     #[test]
     fun test_simple_redeem() {
-        let pool = test_utils::new_for_testing(
+        let (pool, bank_a, bank_b) = test_utils::new_for_testing(
             6,
             6,
             6,
@@ -73,12 +77,14 @@ module slamm::deposit_redeem {
         assert_eq(quote.withdraw_b(), 2);
 
         destroy(pool);
+        destroy(bank_a);
+        destroy(bank_b);
     }
     
     #[test]
     #[expected_failure(abort_code = pool::ERedeemSlippageAExceeded)]
     fun test_fail_min_a_too_high() {
-        let pool = test_utils::new_for_testing(
+        let (pool, bank_a, bank_b) = test_utils::new_for_testing(
             6,
             6,
             6,
@@ -95,12 +101,14 @@ module slamm::deposit_redeem {
         assert_eq(quote.withdraw_b(), 2);
 
         destroy(pool);
+        destroy(bank_a);
+        destroy(bank_b);
     }
     
     #[test]
     #[expected_failure(abort_code = pool::ERedeemSlippageBExceeded)]
     fun test_fail_min_b_too_high() {
-        let pool = test_utils::new_for_testing(
+        let (pool, bank_a, bank_b) = test_utils::new_for_testing(
             6,
             6,
             6,
@@ -117,11 +125,13 @@ module slamm::deposit_redeem {
         assert_eq(quote.withdraw_b(), 2);
 
         destroy(pool);
+        destroy(bank_a);
+        destroy(bank_b);
     }
     
     #[test]
     fun test_last_redeem() {
-        let pool = test_utils::new_for_testing(
+        let (pool, bank_a, bank_b) = test_utils::new_for_testing(
             6,
             6,
             6,
@@ -138,6 +148,8 @@ module slamm::deposit_redeem {
         assert_eq(quote.withdraw_b(), 6);
 
         destroy(pool);
+        destroy(bank_a);
+        destroy(bank_b);
     }
 
     #[test]
@@ -248,7 +260,7 @@ module slamm::deposit_redeem {
     #[test]
     #[expected_failure(abort_code = pool::EDepositRatioLeadsToZeroB)]
     fun test_fail_deposit_ratio_leads_to_zero() {
-        let pool = test_utils::new_for_testing(
+        let (pool, bank_a, bank_b) = test_utils::new_for_testing(
             5,
             0,
             sqrt_u128(5 as u128) as u64,
@@ -263,12 +275,14 @@ module slamm::deposit_redeem {
         );
 
         destroy(pool);
+        destroy(bank_a);
+        destroy(bank_b);
     }
     
     #[test]
     #[expected_failure(abort_code = pool::EDepositMaxParamsCantBeZero)]
     fun test_fail_max_params_as_zero() {
-        let pool = test_utils::new_for_testing(
+        let (pool, bank_a, bank_b) = test_utils::new_for_testing(
             5,
             5,
             sqrt_u128(5 as u128) as u64,
@@ -283,12 +297,14 @@ module slamm::deposit_redeem {
         );
 
         destroy(pool);
+        destroy(bank_a);
+        destroy(bank_b);
     }
     
     #[test]
     #[expected_failure(abort_code = slamm_math::EMathOverflow)]
     fun test_fail_deposit_maximally_imbalanced_pool() {
-        let pool = test_utils::new_for_testing(
+        let (pool, bank_a, bank_b) = test_utils::new_for_testing(
             1,
             5_000_000_000_000_000,
             sqrt_u128(5_000_000_000_000_00 as u128) as u64,
@@ -303,6 +319,8 @@ module slamm::deposit_redeem {
         );
 
         destroy(pool);
+        destroy(bank_a);
+        destroy(bank_b);
     }
     
     #[test]
