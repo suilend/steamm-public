@@ -8,6 +8,7 @@ module slamm::omm {
     use slamm::math::{safe_mul_div_u64};
     use slamm::quote::{Self, SwapQuote};
     use slamm::bank::Bank;
+    use slamm::cpmm;
     use slamm::pool::{Self, Pool, PoolCap, SwapResult, Intent};
     use slamm::version::{Self, Version};
     use pyth::price_info::{PriceInfoObject};
@@ -49,17 +50,13 @@ module slamm::omm {
         price_info_b: PriceInfo,
         reference_vol: u64,
         vol_accumulated: u64,
-        reference_price_point: Option<PricePoint>,
-        last_checkpoint: u64,
+        reference_price_point: Option<Decimal>,
+        last_trade_ts: u64,
         filter_period: u64,
         decay_period: u64,
+        fee_control: u64,
         reduction_factor: u64,
         max_vol_accumulated: u64,
-    }
-
-    public struct PricePoint has store, copy, drop {
-        a: u64,
-        b: u64,
     }
 
     public struct PriceInfo has store {
@@ -79,6 +76,7 @@ module slamm::omm {
         price_feed_b: &PriceInfoObject,
         filter_period: u64,
         decay_period: u64,
+        fee_control: u64,
         reduction_factor: u64,
         max_vol_accumulated: u64,
         clock: &Clock,
@@ -91,9 +89,10 @@ module slamm::omm {
             reference_vol: 0,
             vol_accumulated: 0,
             reference_price_point: none(),
-            last_checkpoint: clock.timestamp_ms(),
+            last_trade_ts: clock.timestamp_ms(),
             filter_period,
             decay_period,
+            fee_control,
             reduction_factor,
             max_vol_accumulated,
         };
@@ -109,15 +108,29 @@ module slamm::omm {
         (pool, pool_cap)
     }
 
-    fun set_reference_point<A, B, W: drop>(
+    fun set_reference_price<A, B, W: drop>(
         self: &mut Pool<A, B, Hook<W>, State>,
     ) {
+        let instant_price = instant_price(self);
+
+        self.inner_mut().reference_price_point.fill(instant_price);
+    }
+    
+    fun set_reference_price_if_none<A, B, W: drop>(
+        self: &mut Pool<A, B, Hook<W>, State>,
+    ) {
+        if (self.inner().reference_price_point.is_none()) {
+            set_reference_price(self);
+        }
+    }
+
+    public fun instant_price<A, B, W: drop>(
+        self: &mut Pool<A, B, Hook<W>, State>,
+    ): Decimal {
         let a = self.reserve_a();
         let b = self.reserve_b();
-        
-        self.inner_mut().reference_price_point.fill(
-            PricePoint { a, b }
-        );
+
+        decimal::from(a).div(decimal::from(b))
     }
 
     /// Cache the price from pyth onto the state object. this needs to be done
@@ -175,55 +188,47 @@ module slamm::omm {
         clock: &Clock,
     ) {
         let state = self.inner();
-        let time_passed = clock.timestamp_ms() - state.last_checkpoint;
+        let time_elapsed = clock.timestamp_ms() - state.last_trade_ts;
 
         // Ths is kept here to make it more readable
-        if (time_passed < state.filter_period) {
+        if (time_elapsed < state.filter_period) {
             return
         };
 
-        if (time_passed >= state.filter_period && time_passed <= state.decay_period) {
+        if (time_elapsed >= state.filter_period && time_elapsed <= state.decay_period) {
             let reduction_factor = self.inner().reduction_factor;
             let vol_accumulated = self.inner().vol_accumulated;
 
             self.inner_mut().reference_vol = vol_accumulated * reduction_factor / BPS;
-            set_reference_point(self);
+            set_reference_price(self);
 
             return
         };
 
-        if (time_passed > state.decay_period) {
+        if (time_elapsed > state.decay_period) {
             self.inner_mut().reference_vol = 0;
-            set_reference_point(self);
+            set_reference_price(self);
         }
     }
     
     fun compute_price_diff(
         self: &State,
-        new_price_point: PricePoint,
+        new_price: Decimal,
     ): u64 {
-        let a2 = new_price_point.a;
-        let b2 = new_price_point.b;
+        let reference_price = *self.reference_price_point.borrow();
 
-        let a1 = self.reference_price_point.borrow().a;
-        let b1 = self.reference_price_point.borrow().b;
-
-        if (a2 * b1 >= a1 * b2) {
-            (a2 * b1 - a1 * b2) * b1 * BPS / (a1 * b2)
+        if (new_price.ge(reference_price)) {
+            new_price.sub(reference_price).div(reference_price).floor() * BPS
         } else {
-            (a1 * b2 - a2 * b1) * b1 * BPS / (a1 * b2)
+            reference_price.sub(new_price).div(reference_price).floor() * BPS
         }
     }
     
-    // to be computed post swap
-    fun update_volatility_accumulator<A, B, W: drop>(
-        self: &mut Pool<A, B, Hook<W>, State>,
-        new_price_point: PricePoint,
+    fun updated_volatility_accumulator(
+        self: &State,
+        new_price: Decimal,
     ): u64 {
-        let new_vol = self.inner().reference_vol + self.inner().compute_price_diff(new_price_point);
-        self.inner_mut().vol_accumulated = new_vol;
-
-        new_vol
+        self.reference_vol + self.compute_price_diff(new_price)
     }
     
     public fun intent_swap<A, B, W: drop>(
@@ -232,16 +237,44 @@ module slamm::omm {
         a2b: bool,
         clock: &Clock,
     ): Intent<A, B, Hook<W>> {
-        // TODO
         self.inner().assert_price_is_fresh(clock);
-        assert!(self.inner().reference_price_point.is_some(), 0);
         self.inner_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
+        
+        // When we init the pool the reference price is not set so
+        // in the first swap this option is filled
+        set_reference_price_if_none(self);
 
+        // Update price and vol reference depending on timespan ellapsed
         update_references(self, clock);
 
-        let quote = quote_swap(self, amount_in, a2b);
+        let (quote, vol_accumulator) = quote_swap_(self, amount_in, a2b);
+        
+        // Update the volatility accumulator - always
+        self.inner_mut().vol_accumulated = vol_accumulator;
+
+        // Update last_trade_ts
+        self.inner_mut().last_trade_ts = clock.timestamp_ms();
 
         quote.as_intent(self)
+    }
+
+    public fun new_instant_price_<A, B, W: drop>(
+        self: &Pool<A, B, Hook<W>, State>,
+        quote: &SwapQuote,
+    ): Decimal {
+        let (a, b) = if (quote.a2b()) {
+            (
+                self.reserve_a() + quote.amount_in_net(),
+                self.reserve_b() - quote.amount_out()
+            )
+        } else {
+            (
+                self.reserve_a() - quote.amount_out(),
+                self.reserve_b() + quote.amount_in_net(),
+            )
+        };
+
+        decimal::from(a).div(decimal::from(b))
     }
 
     public fun execute_swap<A, B, W: drop>(
@@ -254,7 +287,6 @@ module slamm::omm {
         min_amount_out: u64,
         ctx: &mut TxContext,
     ): SwapResult {
-        // TODO
         self.inner_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
 
         let k0 = k(self);
@@ -276,36 +308,39 @@ module slamm::omm {
         response
     }
 
+    public fun quote_swap_<A, B, W: drop>(
+        self: &Pool<A, B, Hook<W>, State>,
+        amount_in: u64,
+        a2b: bool,
+    ): (SwapQuote, u64) {
+        let quote = cpmm::quote_swap_impl(self, amount_in, a2b);
+        let new_instant_price = new_instant_price_(self, &quote);
+
+        let vol_accumulator = self.inner().updated_volatility_accumulator(new_instant_price);
+
+        let variable_fee = (vol_accumulator * vol_accumulator) * self.inner().fee_control / 100; // TODO: control for bps
+
+
+        let total_variable_fee = safe_mul_div_u64(quote.amount_out(), variable_fee, 10_000);
+
+        let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees().fee_ratio();
+
+        let protocol_fees = safe_mul_div_u64(total_variable_fee, protocol_fee_num, protocol_fee_denom);
+        let pool_fees = total_variable_fee - protocol_fees;
+
+        quote.set_output_fees(protocol_fees, pool_fees);
+
+        (quote, vol_accumulator)
+    }
+    
     public fun quote_swap<A, B, W: drop>(
         self: &Pool<A, B, Hook<W>, State>,
         amount_in: u64,
         a2b: bool,
     ): SwapQuote {
-        // TODO
-        let (reserve_a, reserve_b) = self.reserves();
-        let inputs = self.compute_fees(amount_in);
+        let (quote, _) = quote_swap_(self, amount_in, a2b);
 
-        let amount_out = if (a2b) {
-            // IN: A && OUT: B
-            quote_swap_(
-                reserve_b, // reserve_out
-                reserve_a, // reserve_in
-                inputs.amount_in_net(), // amount_in net of fees
-            )
-        } else {
-            // IN: B && OUT: A
-            quote_swap_(
-                reserve_a, // reserve_out
-                reserve_b, // reserve_in
-                inputs.amount_in_net(), // amount_in net of fees
-            )
-        };
-
-        quote::swap_quote(
-            inputs,
-            amount_out,
-            a2b,
-        )
+        quote
     }
 
     // ===== View Functions =====
@@ -359,14 +394,6 @@ module slamm::omm {
     
     // ===== Private Functions =====
 
-    fun quote_swap_(
-        reserve_out: u64,
-        reserve_in: u64,
-        amount_in: u64
-    ): u64 {
-        safe_mul_div_u64(reserve_out, amount_in, reserve_in + amount_in) // amount_out
-    }
-    
     fun assert_invariant_does_not_decrease<A, B, W: drop>(self: &Pool<A, B, Hook<W>, State>, k0: u128) {
         let k1 = k(self);
         assert!(k1 >= k0, EInvariantViolation);
@@ -406,98 +433,5 @@ module slamm::omm {
         output_price: Decimal
     ): Decimal {
         decimal::from(amount_in).mul(input_price).div(output_price)
-    }
-
-    // fun price(
-    //     input_price: &Price,
-    //     output_price: &Price
-    // ): Fraction {
-
-    //     let (input_price, input_expo, input_expo_is_negative) = unwrap_price(input_price);
-    //     let (output_price, output_expo, output_expo_is_negative) = unwrap_price(output_price);
-
-    //     // Combine exponent = Exponent A - Exponent B
-    //     let (combined_expo, combined_expo_is_negative) = if (!input_expo_is_negative) {
-    //         if (!output_expo_is_negative) {
-    //             if (input_expo >= output_expo) {
-    //                 (input_expo - output_expo, false)
-    //             } else {
-    //                 (output_expo- input_expo, true)
-    //             }
-    //         } else {
-    //             (input_expo + output_expo, false)
-    //         }
-    //     } else {
-    //         if (!output_expo_is_negative) {
-    //             (input_expo + output_expo, true)
-    //         } else {
-    //             if (output_expo>= input_expo) {
-    //                 (output_expo - input_expo, false)
-    //             } else {
-    //                 (input_expo - output_expo, true)
-    //             }
-    //         }
-    //     };
-
-    //     Fraction {
-    //         numerator: input_price,
-    //         denominator: output_price,
-    //         exponent: combined_expo,
-    //         is_exponent_negative: combined_expo_is_negative,
-    //     }
-    // }
-    
-    // fun unwrap_price(
-    //     price_obj: &Price,
-    // ): (u64, u64, bool) {
-
-    //     let price = price_obj.get_price().get_magnitude_if_positive();
-    //     let exponent = price_obj.get_expo();
-
-    //     let is_expo_negative = exponent.get_is_negative();
-
-    //     let expo = if (is_expo_negative) {
-    //         exponent.get_magnitude_if_negative()
-    //     } else {
-    //         exponent.get_magnitude_if_positive()
-    //     };
-            
-    //     (price, expo, is_expo_negative)
-
-    // }
-    
-    // ===== Tests =====
-
-    #[test_only]
-    use sui::test_utils::assert_eq;
-
-    #[test]
-    fun test_swap_base_for_quote() {
-        let delta_quote = quote_swap_(50000000000, 50000000000, 1000000000);
-        assert_eq(delta_quote, 980392156);
-
-        let delta_quote = quote_swap_(9999005960552740, 1095387779115020, 1000000000);
-        assert_eq(delta_quote, 9128271305);
-
-        let delta_quote = quote_swap_(1029168250865450, 7612534772798660, 1000000000);
-        assert_eq(delta_quote, 135193880);
-        	
-        let delta_quote = quote_swap_(2768608899383570, 5686051292328860, 1000000000);
-        assert_eq(delta_quote, 486912317);
-
-        let delta_quote = quote_swap_(440197283258732, 9283788821706570, 1000000000);
-        assert_eq(delta_quote, 47415688);
-
-        let delta_quote = quote_swap_(7199199355268960, 9313530357314980, 1000000000);
-        assert_eq(delta_quote, 772982779);
-
-        let delta_quote = quote_swap_(6273576615700410, 1630712284783210, 1000000000);
-        assert_eq(delta_quote, 3847136510);
-
-        let delta_quote = quote_swap_(5196638254543900, 9284728716079420, 1000000000);
-        assert_eq(delta_quote, 559697310);
-
-        let delta_quote = quote_swap_(1128134431179110, 4632243184772740, 1000000000);
-        assert_eq(delta_quote, 243539499);
     }
 }

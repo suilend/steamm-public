@@ -136,6 +136,18 @@ module slamm::cpmm {
         amount_in: u64,
         a2b: bool,
     ): SwapQuote {
+        quote_swap_impl(
+            self,
+            amount_in,
+            a2b,
+        )
+    }
+    
+    public(package) fun quote_swap_impl<A, B, Hook: drop, State: store>(
+        self: &Pool<A, B, Hook, State>,
+        amount_in: u64,
+        a2b: bool,
+    ): SwapQuote {
         let (reserve_a, reserve_b) = self.reserves();
         let inputs = self.compute_fees(amount_in);
 

@@ -1,5 +1,7 @@
 /// Module for informative structs which provide the input/outputs of a given quotation.
 module slamm::quote {
+    use std::option::none;
+
     public use fun slamm::pool::as_intent as SwapQuote.as_intent;
     public use fun slamm::quote::swap_input_amount_in_net as SwapInputs.amount_in_net;
     public use fun slamm::quote::swap_input_protocol_fees as SwapInputs.protocol_fees;
@@ -15,9 +17,14 @@ module slamm::quote {
     public struct SwapQuote has store, drop {
         amount_in: u64,
         amount_out: u64,
+        input_fees: SwapFee,
+        output_fees: Option<SwapFee>,
+        a2b: bool,
+    }
+
+    public struct SwapFee has store, drop, copy {
         protocol_fees: u64,
         pool_fees: u64,
-        a2b: bool,
     }
 
     public struct DepositQuote has store, drop {
@@ -34,16 +41,6 @@ module slamm::quote {
     }
 
     // ===== Package Methods =====
-
-    public(package) fun flatten(quote: &SwapQuote): (u64, bool, u64, bool) {
-        let (amount_a, a_in, amount_b, b_in) = if (quote.a2b() == true) {
-            (quote.amount_in() - quote.protocol_fees(), true, quote.amount_out(), false)
-        } else {
-            (quote.amount_out(), false, quote.amount_in() - quote.protocol_fees(), true)
-        };
-
-        (amount_a, a_in, amount_b, b_in)
-    }
 
     public(package) fun swap_inputs(
         amount_in_net: u64,
@@ -65,8 +62,11 @@ module slamm::quote {
         SwapQuote {
             amount_in: swap_inputs.amount_in_net + swap_inputs.protocol_fees + swap_inputs.pool_fees,
             amount_out,
-            protocol_fees: swap_inputs.protocol_fees,
-            pool_fees: swap_inputs.pool_fees,
+            input_fees: SwapFee {
+                protocol_fees: swap_inputs.protocol_fees,
+                pool_fees: swap_inputs.pool_fees,
+            },
+            output_fees: none(),
             a2b,
         }
     }
@@ -97,17 +97,35 @@ module slamm::quote {
         }
     }
 
+    public(package) fun input_fees_mut(self: &mut SwapQuote): &mut SwapFee { &mut self.input_fees }
+    public(package) fun set_output_fees(
+        self: &mut SwapQuote,
+        protocol_fees: u64,
+        pool_fees: u64
+    ) {
+        assert!(protocol_fees + pool_fees < self.amount_out(), 0);
+
+        self.output_fees.fill(SwapFee { protocol_fees, pool_fees });
+    }
+    
+    public(package) fun add_protocol_fees(self: &SwapFee): u64 { self.protocol_fees }
+    public(package) fun add_pool_fees(self: &SwapFee): u64 { self.pool_fees }
+    
+
     // ===== Public View Methods =====
+
+    public fun protocol_fees(self: &SwapFee): u64 { self.protocol_fees }
+    public fun pool_fees(self: &SwapFee): u64 { self.pool_fees }
 
     public fun swap_input_amount_in_net(self: &SwapInputs): u64 { self.amount_in_net }
     public fun swap_input_protocol_fees(self: &SwapInputs): u64 { self.protocol_fees }
     public fun swap_input_pool_fees(self: &SwapInputs): u64 { self.pool_fees }
     
     public fun amount_in(self: &SwapQuote): u64 { self.amount_in }
-    public fun amount_in_net(self: &SwapQuote): u64 { self.amount_in - self.protocol_fees - self.pool_fees }
+    public fun amount_in_net(self: &SwapQuote): u64 { self.amount_in - self.input_fees.protocol_fees - self.input_fees.pool_fees }
+    public fun input_fees(self: &SwapQuote): &SwapFee { &self.input_fees }
+    public fun output_fees(self: &SwapQuote): &Option<SwapFee> { &self.output_fees }
     public fun amount_out(self: &SwapQuote): u64 { self.amount_out }
-    public fun protocol_fees(self: &SwapQuote): u64 { self.protocol_fees }
-    public fun pool_fees(self: &SwapQuote): u64 { self.pool_fees }
     public fun a2b(self: &SwapQuote): bool { self.a2b }
     
     public fun initial_deposit(self: &DepositQuote): bool { self.initial_deposit }

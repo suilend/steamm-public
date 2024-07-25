@@ -15,7 +15,7 @@ module slamm::pool {
     use slamm::math::{safe_mul_div_u64};
     use slamm::global_admin::GlobalAdmin;
     use slamm::fees::{Self, Fees, FeeReserve};
-    use slamm::quote::{Self, SwapQuote, DepositQuote, RedeemQuote, SwapInputs, swap_inputs};
+    use slamm::quote::{Self, SwapQuote, SwapFee, DepositQuote, RedeemQuote, SwapInputs, swap_inputs};
     use slamm::bank::{Bank};
 
     use suilend::lending_market::{LendingMarket};
@@ -274,6 +274,8 @@ module slamm::pool {
                 self.pool_fees.fee_a_mut(), // pool_fees
 
                 // Outputs
+                self.protocol_fees.fee_b_mut(), // protocol_fees
+                self.pool_fees.fee_b_mut(), // pool_fees
                 bank_b, // bank_out
                 &mut self.reserve_b, // reserve_out
                 coin_b, // coin_out
@@ -290,6 +292,8 @@ module slamm::pool {
                 self.pool_fees.fee_b_mut(), // pool_fees
 
                 // Outputs
+                self.protocol_fees.fee_a_mut(), // protocol_fees
+                self.pool_fees.fee_a_mut(), // pool_fees
                 bank_a, // bank_out
                 &mut self.reserve_a, // reserve_out
                 coin_a, // coin_out
@@ -303,8 +307,8 @@ module slamm::pool {
             pool_id: object::id(self),
             amount_in: quote.amount_in(),
             amount_out: quote.amount_out(),
-            protocol_fees: quote.protocol_fees(),
-            pool_fees: quote.pool_fees(),
+            input_fees: *quote.input_fees(),
+            output_fees: *quote.output_fees(),
             a2b: quote.a2b(),
         };
 
@@ -734,8 +738,10 @@ module slamm::pool {
         reserve_in: &mut Reserve<In>,
         coin_in: &mut Coin<In>,
         swap_in_amount: &mut u128,
-        protocol_fees: &mut FeeReserve<In>,
-        pool_fees: &mut FeeReserve<In>,
+        input_protocol_fees: &mut FeeReserve<In>,
+        input_pool_fees: &mut FeeReserve<In>,
+        output_protocol_fees: &mut FeeReserve<Out>,
+        output_pool_fees: &mut FeeReserve<Out>,
         bank_out: &mut Bank<Out>,
         reserve_out: &mut Reserve<Out>,
         coin_out: &mut Coin<Out>,
@@ -746,17 +752,32 @@ module slamm::pool {
 
         let mut balance_in = coin_in.balance_mut().split(quote.amount_in());
 
-        // Transfers protocol fees in
-        protocol_fees.deposit(balance_in.split(quote.protocol_fees()));
+        // Transfers input protocol fees in
+        input_protocol_fees.deposit(balance_in.split(quote.input_fees().protocol_fees()));
             
-        // Account pool fees in
-        pool_fees.register_fee(quote.pool_fees());
+        // Account input pool fees in
+        input_pool_fees.register_fee(quote.input_fees().pool_fees());
 
         // Transfers amount in
         reserve_in.deposit(bank_in, balance_in);
         
-        // Transfers amount out
-        coin_out.balance_mut().join(reserve_out.withdraw(bank_out, quote.amount_out()));
+        // Transfers amount out - post fees if any
+        let out_fees = if (quote.output_fees().is_some()) {
+            let out_protocol_fees = quote.output_fees().borrow().protocol_fees();
+            let out_pool_fees = quote.output_fees().borrow().pool_fees();
+
+            output_protocol_fees.deposit(
+                coin_out.balance_mut().split(out_protocol_fees)
+            );
+
+            output_pool_fees.register_fee(out_pool_fees);
+            
+            out_protocol_fees + out_pool_fees
+        } else { 0 };
+
+        let net_output = quote.amount_out() - out_fees;
+
+        coin_out.balance_mut().join(reserve_out.withdraw(bank_out, net_output));
             
         // Update trading data
         *swap_in_amount =
@@ -947,8 +968,8 @@ module slamm::pool {
         pool_id: ID,
         amount_in: u64,
         amount_out: u64,
-        protocol_fees: u64,
-        pool_fees: u64,
+        input_fees: SwapFee,
+        output_fees: Option<SwapFee>,
         a2b: bool,
     }
     
@@ -973,8 +994,8 @@ module slamm::pool {
     public use fun swap_result_amount_in as SwapResult.amount_in;
     public use fun swap_result_amount_out as SwapResult.amount_out;
     public use fun swap_result_net_amount_in as SwapResult.net_amount_in;
-    public use fun swap_result_protocol_fees as SwapResult.protocol_fees;
-    public use fun swap_result_pool_fees as SwapResult.pool_fees;
+    public use fun swap_result_input_protocol_fees as SwapResult.input_protocol_fees;
+    public use fun swap_result_input_pool_fees as SwapResult.input_pool_fees;
     public use fun swap_result_a2b as SwapResult.a2b;
 
     public use fun deposit_result_user as DepositResult.user;
@@ -993,9 +1014,11 @@ module slamm::pool {
     public fun swap_result_pool_id(self: &SwapResult): ID { self.pool_id }
     public fun swap_result_amount_in(self: &SwapResult): u64 { self.amount_in }
     public fun swap_result_amount_out(self: &SwapResult): u64 { self.amount_out }
-    public fun swap_result_net_amount_in(self: &SwapResult): u64 { self.amount_in - self.protocol_fees - self.pool_fees}
-    public fun swap_result_protocol_fees(self: &SwapResult): u64 { self.protocol_fees }
-    public fun swap_result_pool_fees(self: &SwapResult): u64 { self.pool_fees }
+    public fun swap_result_net_amount_in(self: &SwapResult): u64 { self.amount_in - self.input_fees.protocol_fees() - self.input_fees.pool_fees() }
+    public fun swap_result_input_protocol_fees(self: &SwapResult): u64 { self.input_fees.protocol_fees() }
+    public fun swap_result_input_pool_fees(self: &SwapResult): u64 { self.input_fees.pool_fees() }
+    public fun swap_result_output_protocol_fees(self: &SwapResult): u64 { self.output_fees.borrow().protocol_fees() }
+    public fun swap_result_output_pool_fees(self: &SwapResult): u64 { self.output_fees.borrow().pool_fees() }
     public fun swap_result_a2b(self: &SwapResult): bool { self.a2b }
 
     public fun deposit_result_user(self: &DepositResult): address { self.user }
