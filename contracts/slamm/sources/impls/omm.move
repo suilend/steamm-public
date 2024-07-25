@@ -10,9 +10,10 @@ module slamm::omm {
     use slamm::pool::{Self, Pool, PoolCap, SwapResult, Intent};
     use slamm::version::{Self, Version};
     use pyth::price_info::{PriceInfoObject};
-    use suilend::decimal::{Decimal};
+    use suilend::decimal::{Self, Decimal};
     use suilend::oracles;
     use pyth::price_identifier::{PriceIdentifier};
+    // use pyth::price::Price;
 
     // ===== Constants =====
 
@@ -303,6 +304,72 @@ module slamm::omm {
         self.smoothed_price = smoothed_price;
         self.price_last_update_timestamp_s = clock::timestamp_ms(clock) / 1000;
     }
+
+    fun get_oracle_output_amount(
+        amount_in: u64,
+        input_price: Decimal,
+        output_price: Decimal
+    ): Decimal {
+        decimal::from(amount_in).mul(input_price).div(output_price)
+    }
+
+    // fun price(
+    //     input_price: &Price,
+    //     output_price: &Price
+    // ): Fraction {
+
+    //     let (input_price, input_expo, input_expo_is_negative) = unwrap_price(input_price);
+    //     let (output_price, output_expo, output_expo_is_negative) = unwrap_price(output_price);
+
+    //     // Combine exponent = Exponent A - Exponent B
+    //     let (combined_expo, combined_expo_is_negative) = if (!input_expo_is_negative) {
+    //         if (!output_expo_is_negative) {
+    //             if (input_expo >= output_expo) {
+    //                 (input_expo - output_expo, false)
+    //             } else {
+    //                 (output_expo- input_expo, true)
+    //             }
+    //         } else {
+    //             (input_expo + output_expo, false)
+    //         }
+    //     } else {
+    //         if (!output_expo_is_negative) {
+    //             (input_expo + output_expo, true)
+    //         } else {
+    //             if (output_expo>= input_expo) {
+    //                 (output_expo - input_expo, false)
+    //             } else {
+    //                 (input_expo - output_expo, true)
+    //             }
+    //         }
+    //     };
+
+    //     Fraction {
+    //         numerator: input_price,
+    //         denominator: output_price,
+    //         exponent: combined_expo,
+    //         is_exponent_negative: combined_expo_is_negative,
+    //     }
+    // }
+    
+    // fun unwrap_price(
+    //     price_obj: &Price,
+    // ): (u64, u64, bool) {
+
+    //     let price = price_obj.get_price().get_magnitude_if_positive();
+    //     let exponent = price_obj.get_expo();
+
+    //     let is_expo_negative = exponent.get_is_negative();
+
+    //     let expo = if (is_expo_negative) {
+    //         exponent.get_magnitude_if_negative()
+    //     } else {
+    //         exponent.get_magnitude_if_positive()
+    //     };
+            
+    //     (price, expo, is_expo_negative)
+
+    // }
     
     // ===== Tests =====
 
