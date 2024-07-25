@@ -1,5 +1,6 @@
 /// Oracle AMM Hook implementation
 module slamm::omm {
+    use std::option::none;
     use sui::coin::Coin;
     use sui::clock::{Self, Clock};
     use slamm::global_admin::GlobalAdmin;
@@ -19,6 +20,7 @@ module slamm::omm {
 
     const CURRENT_VERSION: u16 = 1;
     const PRICE_STALENESS_THRESHOLD_S: u64 = 0;
+    const BPS: u64 = 10_000;
 
     // ===== Errors =====
 
@@ -45,6 +47,19 @@ module slamm::omm {
         version: Version,
         price_info_a: PriceInfo,
         price_info_b: PriceInfo,
+        reference_vol: u64,
+        vol_accumulated: u64,
+        reference_price_point: Option<PricePoint>,
+        last_checkpoint: u64,
+        filter_period: u64,
+        decay_period: u64,
+        reduction_factor: u64,
+        max_vol_accumulated: u64,
+    }
+
+    public struct PricePoint has store, copy, drop {
+        a: u64,
+        b: u64,
     }
 
     public struct PriceInfo has store {
@@ -62,6 +77,10 @@ module slamm::omm {
         swap_fee_bps: u64,
         price_feed_a: &PriceInfoObject,
         price_feed_b: &PriceInfoObject,
+        filter_period: u64,
+        decay_period: u64,
+        reduction_factor: u64,
+        max_vol_accumulated: u64,
         clock: &Clock,
         ctx: &mut TxContext,
     ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>>) {
@@ -69,6 +88,14 @@ module slamm::omm {
             version: version::new(CURRENT_VERSION),
             price_info_a: from_price_feed(price_feed_a, clock),
             price_info_b: from_price_feed(price_feed_b, clock),
+            reference_vol: 0,
+            vol_accumulated: 0,
+            reference_price_point: none(),
+            last_checkpoint: clock.timestamp_ms(),
+            filter_period,
+            decay_period,
+            reduction_factor,
+            max_vol_accumulated,
         };
 
         let (pool, pool_cap) = pool::new<A, B, Hook<W>, State>(
@@ -80,6 +107,17 @@ module slamm::omm {
         );
 
         (pool, pool_cap)
+    }
+
+    fun set_reference_point<A, B, W: drop>(
+        self: &mut Pool<A, B, Hook<W>, State>,
+    ) {
+        let a = self.reserve_a();
+        let b = self.reserve_b();
+        
+        self.inner_mut().reference_price_point.fill(
+            PricePoint { a, b }
+        );
     }
 
     /// Cache the price from pyth onto the state object. this needs to be done
@@ -109,8 +147,6 @@ module slamm::omm {
         ctx: &mut TxContext,
     ): SwapResult {
         // TODO
-        self.inner().assert_price_is_fresh(clock);
-
         self.inner_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
 
         let intent = intent_swap(
@@ -134,6 +170,62 @@ module slamm::omm {
         result
     }
 
+    fun update_references<A, B, W: drop>(
+        self: &mut Pool<A, B, Hook<W>, State>,
+        clock: &Clock,
+    ) {
+        let state = self.inner();
+        let time_passed = clock.timestamp_ms() - state.last_checkpoint;
+
+        // Ths is kept here to make it more readable
+        if (time_passed < state.filter_period) {
+            return
+        };
+
+        if (time_passed >= state.filter_period && time_passed <= state.decay_period) {
+            let reduction_factor = self.inner().reduction_factor;
+            let vol_accumulated = self.inner().vol_accumulated;
+
+            self.inner_mut().reference_vol = vol_accumulated * reduction_factor / BPS;
+            set_reference_point(self);
+
+            return
+        };
+
+        if (time_passed > state.decay_period) {
+            self.inner_mut().reference_vol = 0;
+            set_reference_point(self);
+        }
+    }
+    
+    fun compute_price_diff(
+        self: &State,
+        new_price_point: PricePoint,
+    ): u64 {
+        let a2 = new_price_point.a;
+        let b2 = new_price_point.b;
+
+        let a1 = self.reference_price_point.borrow().a;
+        let b1 = self.reference_price_point.borrow().b;
+
+        if (a2 * b1 >= a1 * b2) {
+            (a2 * b1 - a1 * b2) * b1 * BPS / (a1 * b2)
+        } else {
+            (a1 * b2 - a2 * b1) * b1 * BPS / (a1 * b2)
+        }
+    }
+    
+    // to be computed post swap
+    fun update_volatility_accumulator<A, B, W: drop>(
+        self: &mut Pool<A, B, Hook<W>, State>,
+        new_price_point: PricePoint,
+    ): u64 {
+        let new_vol = self.inner().reference_vol + self.inner().compute_price_diff(new_price_point);
+        self.inner_mut().vol_accumulated = new_vol;
+
+        new_vol
+    }
+    
     public fun intent_swap<A, B, W: drop>(
         self: &mut Pool<A, B, Hook<W>, State>,
         amount_in: u64,
@@ -142,8 +234,11 @@ module slamm::omm {
     ): Intent<A, B, Hook<W>> {
         // TODO
         self.inner().assert_price_is_fresh(clock);
-
+        assert!(self.inner().reference_price_point.is_some(), 0);
         self.inner_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
+
+        update_references(self, clock);
+
         let quote = quote_swap(self, amount_in, a2b);
 
         quote.as_intent(self)
