@@ -2,7 +2,6 @@
 module slamm::omm {
     use std::option::none;
     use sui::coin::Coin;
-    use sui::math;
     use sui::clock::{Self, Clock};
     use slamm::global_admin::GlobalAdmin;
     use slamm::registry::{Registry};
@@ -49,15 +48,15 @@ module slamm::omm {
         version: Version,
         price_info_a: PriceInfo,
         price_info_b: PriceInfo,
-        reference_vol: u64,
-        vol_accumulated: u64,
-        reference_price_point: Option<Decimal>,
+        reference_vol: Decimal,
+        vol_accumulated: Decimal,
+        reference_price: Option<Decimal>,
         last_trade_ts: u64,
         filter_period: u64,
         decay_period: u64,
-        fee_control: u64,
-        reduction_factor: u64,
-        max_vol_accumulated: u64,
+        fee_control: Decimal,
+        reduction_factor: Decimal,
+        max_vol_accumulated: Decimal,
     }
 
     public struct PriceInfo has store {
@@ -77,9 +76,9 @@ module slamm::omm {
         price_feed_b: &PriceInfoObject,
         filter_period: u64,
         decay_period: u64,
-        fee_control: u64,
-        reduction_factor: u64,
-        max_vol_accumulated: u64,
+        fee_control_bps: u64,
+        reduction_factor_bps: u64,
+        max_vol_accumulated_bps: u64,
         clock: &Clock,
         ctx: &mut TxContext,
     ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>>) {
@@ -87,15 +86,15 @@ module slamm::omm {
             version: version::new(CURRENT_VERSION),
             price_info_a: from_price_feed(price_feed_a, clock),
             price_info_b: from_price_feed(price_feed_b, clock),
-            reference_vol: 0,
-            vol_accumulated: 0,
-            reference_price_point: none(),
+            reference_vol: decimal::from(0),
+            vol_accumulated: decimal::from(0),
+            reference_price: none(),
             last_trade_ts: clock.timestamp_ms(),
             filter_period,
             decay_period,
-            fee_control,
-            reduction_factor,
-            max_vol_accumulated,
+            fee_control: decimal::from(fee_control_bps).div(decimal::from(BPS)),
+            reduction_factor: decimal::from(reduction_factor_bps).div(decimal::from(BPS)),
+            max_vol_accumulated: decimal::from(max_vol_accumulated_bps).div(decimal::from(BPS)),
         };
 
         let (pool, pool_cap) = pool::new<A, B, Hook<W>, State>(
@@ -206,7 +205,7 @@ module slamm::omm {
         self: &Pool<A, B, Hook<W>, State>,
         amount_in: u64,
         a2b: bool,
-    ): (SwapQuote, u64) {
+    ): (SwapQuote, Decimal) {
         let (reserve_a, reserve_b) = self.reserves();
 
         let amount_out = cpmm::quote_swap_impl(
@@ -223,14 +222,14 @@ module slamm::omm {
         let new_instant_price_internal = new_instant_price_internal(self, &quote);
         let new_instant_price_oracle = new_instant_price_oracle(self);
 
-        let vol_accumulator = self.inner().updated_volatility_accumulator(
+        let vol_accumulator = self.inner().new_volatility_accumulator(
             new_instant_price_internal,
             new_instant_price_oracle
         );
 
-        let variable_fee = (vol_accumulator * vol_accumulator) * self.inner().fee_control / 100; // TODO: control for bps
+        let variable_fee = vol_accumulator.pow(2).mul(self.inner().fee_control).div(decimal::from(100)); // TODO: control for bps
 
-        let total_variable_fee = safe_mul_div_u64(quote.amount_out(), variable_fee, 10_000);
+        let total_variable_fee = decimal::from(quote.amount_out()).mul(variable_fee).floor();
         let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees().fee_ratio();
 
         let protocol_fees = safe_mul_div_u64(total_variable_fee, protocol_fee_num, protocol_fee_denom);
@@ -361,14 +360,14 @@ module slamm::omm {
             let reduction_factor = self.inner().reduction_factor;
             let vol_accumulated = self.inner().vol_accumulated;
 
-            self.inner_mut().reference_vol = vol_accumulated * reduction_factor / BPS;
+            self.inner_mut().reference_vol = vol_accumulated.mul(reduction_factor);
             set_reference_price(self);
 
             return
         };
 
         if (time_elapsed > state.decay_period) {
-            self.inner_mut().reference_vol = 0;
+            self.inner_mut().reference_vol = decimal::from(0);
             set_reference_price(self);
         }
     }
@@ -378,39 +377,53 @@ module slamm::omm {
     ) {
         let instant_price = new_instant_price_oracle(self);
 
-        self.inner_mut().reference_price_point.fill(instant_price);
+        self.inner_mut().reference_price.fill(instant_price);
     }
     
     fun set_reference_price_if_none<A, B, W: drop>(
         self: &mut Pool<A, B, Hook<W>, State>,
     ) {
-        if (self.inner().reference_price_point.is_none()) {
+        if (self.inner().reference_price.is_none()) {
             set_reference_price(self);
         }
     }
 
-    fun updated_volatility_accumulator(
+    fun new_volatility_accumulator(
         self: &State,
         new_price_internal: Decimal,
         new_price_oracle: Decimal,
-    ): u64 {
-        let price_diff_bps = math::max(
-            self.compute_price_diff_bps(new_price_internal),
-            self.compute_price_diff_bps(new_price_oracle)
-        );
-        self.reference_vol + price_diff_bps
+    ): Decimal {
+        new_volatility_accumulator_(
+            *self.reference_price.borrow(),
+            self.reference_vol,
+            new_price_internal,
+            new_price_oracle,
+        )
     }
     
-    fun compute_price_diff_bps(
-        self: &State,
+    fun new_volatility_accumulator_(
+        reference_price: Decimal,
+        reference_vol: Decimal,
+        new_price_internal: Decimal,
+        new_price_oracle: Decimal,
+    ): Decimal {
+        let price_diff_rate = decimal::max(
+            compute_price_diff_rate(reference_price, new_price_internal),
+            compute_price_diff_rate(reference_price, new_price_oracle)
+        );
+        reference_vol.add(price_diff_rate)
+    }
+    
+    fun compute_price_diff_rate(
+        reference_price: Decimal,
         new_price: Decimal,
-    ): u64 {
-        let reference_price = *self.reference_price_point.borrow();
+    ): Decimal {
+        // let reference_price = *self.reference_price_point.borrow();
 
         if (new_price.ge(reference_price)) {
-            new_price.sub(reference_price).div(reference_price).floor() * BPS
+            new_price.sub(reference_price).div(reference_price)
         } else {
-            reference_price.sub(new_price).div(reference_price).floor() * BPS
+            reference_price.sub(new_price).div(reference_price)
         }
     }
 
@@ -461,5 +474,29 @@ module slamm::omm {
         price_b: Decimal
     ): Decimal {
         price_a.div(price_b)
+    }
+
+    // decimal::from(1), 
+    // decimal::from_percent(90)
+
+    use std::debug::print;
+
+    #[test]
+    fun test_vol_accumulator() {
+        // fun new_volatility_accumulator_(
+        // reference_price: Decimal,
+        // reference_vol: u64,
+        // new_price_internal: Decimal,
+        // new_price_oracle: Decimal,
+
+        let a = new_volatility_accumulator_(
+            decimal::from(4),
+            decimal::from_percent(20), // reference_vol = 20%
+            decimal::from(2),
+            decimal::from(3),
+        );
+
+        print(&(a.mul(decimal::from(10_000)).floor()));
+        
     }
 }
