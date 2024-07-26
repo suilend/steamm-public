@@ -15,7 +15,7 @@ module slamm::pool {
     use slamm::math::{safe_mul_div_u64};
     use slamm::global_admin::GlobalAdmin;
     use slamm::fees::{Self, Fees, FeeReserve};
-    use slamm::quote::{Self, SwapQuote, SwapFee, DepositQuote, RedeemQuote, SwapInputs, swap_inputs};
+    use slamm::quote::{Self, SwapQuote, SwapFee, DepositQuote, RedeemQuote, SwapInputs, SwapOutputs, swap_inputs, swap_outputs};
     use slamm::bank::{Bank};
 
     use suilend::lending_market::{LendingMarket};
@@ -263,6 +263,9 @@ module slamm::pool {
         assert!(quote.amount_out() > 0, ESwapOutputAmountIsZero);
         assert!(quote.amount_out() >= min_amount_out, ESwapExceedsSlippage);
 
+        let (protocol_fee_a, protocol_fee_b) = self.protocol_fees.fee_muts();
+        let (pool_fee_a, pool_fee_b) = self.pool_fees.fee_muts();
+
         if (quote.a2b()) {
             quote.swap_inner(
                 // Inputs
@@ -270,12 +273,12 @@ module slamm::pool {
                 &mut self.reserve_a, // reserve_in
                 coin_a, // coin_in
                 &mut self.trading_data.swap_a_in_amount, // swap_in_amount
-                self.protocol_fees.fee_a_mut(), // protocol_fees
-                self.pool_fees.fee_a_mut(), // pool_fees
+                protocol_fee_a, // protocol_fees
+                pool_fee_a, // pool_fees
 
                 // Outputs
-                self.protocol_fees.fee_b_mut(), // protocol_fees
-                self.pool_fees.fee_b_mut(), // pool_fees
+                protocol_fee_b, // protocol_fees
+                pool_fee_b, // pool_fees
                 bank_b, // bank_out
                 &mut self.reserve_b, // reserve_out
                 coin_b, // coin_out
@@ -288,12 +291,12 @@ module slamm::pool {
                 &mut self.reserve_b, // reserve_in
                 coin_b, // coin_in
                 &mut self.trading_data.swap_b_in_amount, // swap_in_amount
-                self.protocol_fees.fee_b_mut(), // protocol_fees
-                self.pool_fees.fee_b_mut(), // pool_fees
+                protocol_fee_b, // protocol_fees
+                pool_fee_b, // pool_fees
 
                 // Outputs
-                self.protocol_fees.fee_a_mut(), // protocol_fees
-                self.pool_fees.fee_a_mut(), // pool_fees
+                protocol_fee_a, // protocol_fees
+                pool_fee_a, // pool_fees
                 bank_a, // bank_out
                 &mut self.reserve_a, // reserve_out
                 coin_a, // coin_out
@@ -633,16 +636,28 @@ module slamm::pool {
 
     // ===== Package functions =====
 
-    public(package) fun compute_fees<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, amount_in: u64): SwapInputs {
+    public(package) fun compute_fees_on_input<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, amount_in: u64): SwapInputs {
+        let (net_amount_in, protocol_fees, pool_fees) = self.compute_fees_(amount_in);
+
+        swap_inputs(net_amount_in, protocol_fees, pool_fees)
+    }
+
+    public(package) fun compute_fees_on_output<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, amount_out: u64): SwapOutputs {
+        let (net_amount_out, protocol_fees, pool_fees) = self.compute_fees_(amount_out);
+
+        swap_outputs(net_amount_out, protocol_fees, pool_fees)
+    }
+    
+    fun compute_fees_<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, amount: u64): (u64, u64, u64) {
         let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees.fee_ratio();
         let (pool_fee_num, pool_fee_denom) = self.pool_fees.fee_ratio();
         
-        let total_fees = safe_mul_div_u64(amount_in, pool_fee_num, pool_fee_denom);
+        let total_fees = safe_mul_div_u64(amount, pool_fee_num, pool_fee_denom);
         let protocol_fees = safe_mul_div_u64(total_fees, protocol_fee_num, protocol_fee_denom);
         let pool_fees = total_fees - protocol_fees;
-        let net_amount_in = amount_in - protocol_fees - pool_fees;
+        let net_amount = amount - protocol_fees - pool_fees;
 
-        swap_inputs(net_amount_in, protocol_fees, pool_fees)
+        (net_amount, protocol_fees, pool_fees)
     }
     
     public(package) fun inner_mut<A, B, Hook: drop, State: store>(
@@ -752,11 +767,14 @@ module slamm::pool {
 
         let mut balance_in = coin_in.balance_mut().split(quote.amount_in());
 
-        // Transfers input protocol fees in
-        input_protocol_fees.deposit(balance_in.split(quote.input_fees().protocol_fees()));
+        // Input fees
+        if (quote.input_fees().is_some()) {
+            // Transfers input protocol fees in
+            input_protocol_fees.deposit(balance_in.split(quote.input_fees().borrow().protocol_fees()));
             
-        // Account input pool fees in
-        input_pool_fees.register_fee(quote.input_fees().pool_fees());
+            // Account input pool fees in
+            input_pool_fees.register_fee(quote.input_fees().borrow().pool_fees());
+        };
 
         // Transfers amount in
         reserve_in.deposit(bank_in, balance_in);
@@ -767,7 +785,8 @@ module slamm::pool {
             let out_pool_fees = quote.output_fees().borrow().pool_fees();
 
             output_protocol_fees.deposit(
-                coin_out.balance_mut().split(out_protocol_fees)
+                reserve_out.withdraw(bank_out, out_protocol_fees)
+                // coin_out.balance_mut().split(out_protocol_fees)
             );
 
             output_pool_fees.register_fee(out_pool_fees);
@@ -777,6 +796,7 @@ module slamm::pool {
 
         let net_output = quote.amount_out() - out_fees;
 
+        // Transfers amount out
         coin_out.balance_mut().join(reserve_out.withdraw(bank_out, net_output));
             
         // Update trading data
@@ -968,7 +988,7 @@ module slamm::pool {
         pool_id: ID,
         amount_in: u64,
         amount_out: u64,
-        input_fees: SwapFee,
+        input_fees: Option<SwapFee>,
         output_fees: Option<SwapFee>,
         a2b: bool,
     }
@@ -996,6 +1016,8 @@ module slamm::pool {
     public use fun swap_result_net_amount_in as SwapResult.net_amount_in;
     public use fun swap_result_input_protocol_fees as SwapResult.input_protocol_fees;
     public use fun swap_result_input_pool_fees as SwapResult.input_pool_fees;
+    public use fun swap_result_output_protocol_fees as SwapResult.output_protocol_fees;
+    public use fun swap_result_output_pool_fees as SwapResult.output_pool_fees;
     public use fun swap_result_a2b as SwapResult.a2b;
 
     public use fun deposit_result_user as DepositResult.user;
@@ -1014,11 +1036,49 @@ module slamm::pool {
     public fun swap_result_pool_id(self: &SwapResult): ID { self.pool_id }
     public fun swap_result_amount_in(self: &SwapResult): u64 { self.amount_in }
     public fun swap_result_amount_out(self: &SwapResult): u64 { self.amount_out }
-    public fun swap_result_net_amount_in(self: &SwapResult): u64 { self.amount_in - self.input_fees.protocol_fees() - self.input_fees.pool_fees() }
-    public fun swap_result_input_protocol_fees(self: &SwapResult): u64 { self.input_fees.protocol_fees() }
-    public fun swap_result_input_pool_fees(self: &SwapResult): u64 { self.input_fees.pool_fees() }
-    public fun swap_result_output_protocol_fees(self: &SwapResult): u64 { self.output_fees.borrow().protocol_fees() }
-    public fun swap_result_output_pool_fees(self: &SwapResult): u64 { self.output_fees.borrow().pool_fees() }
+    public fun swap_result_net_amount_in(self: &SwapResult): u64 {
+        let (protocol_fees, pool_fees) = if (self.input_fees.is_some()) {
+            (self.input_fees.borrow().protocol_fees(), self.input_fees.borrow().pool_fees())
+        } else {
+            (0, 0)
+        };
+
+        self.amount_in - protocol_fees - pool_fees
+    }
+
+
+    public fun swap_result_input_protocol_fees(self: &SwapResult): u64 {
+        if (self.input_fees.is_some()) {
+            self.input_fees.borrow().protocol_fees()
+        } else {
+            0
+        }
+    }
+
+    public fun swap_result_input_pool_fees(self: &SwapResult): u64 {
+        if (self.input_fees.is_some()) {
+            self.input_fees.borrow().pool_fees()
+        } else {
+            0
+        }
+    }
+
+    public fun swap_result_output_protocol_fees(self: &SwapResult): u64 {
+        if (self.output_fees.is_some()) {
+            self.output_fees.borrow().protocol_fees()
+        } else {
+            0
+        }
+    }
+
+    public fun swap_result_output_pool_fees(self: &SwapResult): u64 {
+        if (self.output_fees.is_some()) {
+            self.output_fees.borrow().pool_fees()
+        } else {
+            0
+        }
+    }
+
     public fun swap_result_a2b(self: &SwapResult): bool { self.a2b }
 
     public fun deposit_result_user(self: &DepositResult): address { self.user }
