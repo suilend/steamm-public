@@ -648,7 +648,7 @@ module slamm::pool {
         swap_outputs(net_amount_out, protocol_fees, pool_fees)
     }
     
-    fun compute_fees_<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, amount: u64): (u64, u64, u64) {
+    public(package) fun compute_fees_<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, amount: u64): (u64, u64, u64) {
         let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees.fee_ratio();
         let (pool_fee_num, pool_fee_denom) = self.pool_fees.fee_ratio();
         

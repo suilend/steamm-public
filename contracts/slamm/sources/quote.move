@@ -136,15 +136,16 @@ module slamm::quote {
     }
 
     // public(package) fun input_fees_mut(self: &mut SwapQuote): &mut SwapFee { &mut self.input_fees }
-    // public(package) fun set_output_fees(
-    //     self: &mut SwapQuote,
-    //     protocol_fees: u64,
-    //     pool_fees: u64
-    // ) {
-    //     assert!(protocol_fees + pool_fees < self.amount_out(), 0);
+    public(package) fun add_output_fees(
+        self: &mut SwapQuote,
+        protocol_fees: u64,
+        pool_fees: u64
+    ) {
+        let out_fees = self.output_fees.borrow_mut();
 
-    //     self.output_fees.fill(SwapFee { protocol_fees, pool_fees });
-    // }
+        out_fees.protocol_fees = out_fees.protocol_fees + protocol_fees;
+        out_fees.pool_fees = out_fees.pool_fees + pool_fees;
+    }
     
     public(package) fun add_protocol_fees(self: &SwapFee): u64 { self.protocol_fees }
     public(package) fun add_pool_fees(self: &SwapFee): u64 { self.pool_fees }
@@ -184,6 +185,26 @@ module slamm::quote {
         };
 
         self.amount_out - protocol_fees - pool_fees
+    }
+   
+    public fun amount_in_net_of_protocol_fees(self: &SwapQuote): u64 {
+        let protocol_fees = if (self.input_fees.is_some()) {
+            self.input_fees.borrow().protocol_fees
+        } else {
+            0
+        };
+
+        self.amount_in - protocol_fees
+    }
+    
+    public fun amount_out_net_of_protocol_fees(self: &SwapQuote): u64 {
+        let protocol_fees = if (self.output_fees.is_some()) {
+            self.output_fees.borrow().protocol_fees
+        } else {
+            0
+        };
+
+        self.amount_out - protocol_fees
     }
 
     public fun input_fees(self: &SwapQuote): &Option<SwapFee> { &self.input_fees }
