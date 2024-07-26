@@ -25,10 +25,9 @@ module slamm::omm {
 
     // ===== Errors =====
 
-    const EInvariantViolation: u64 = 1;
-    const EPriceIdentifierMismatch: u64 = 2;
-    const EInvalidPrice: u64 = 3;
-    const EPriceStale: u64 = 4;
+    const EPriceIdentifierMismatch: u64 = 1;
+    const EInvalidPrice: u64 = 2;
+    const EPriceStale: u64 = 3;
 
     /// Hook type for the Oracle AMM implementation. Serves as both
     /// the hook's witness (authentication) as well as it wraps around the pool
@@ -182,7 +181,7 @@ module slamm::omm {
     ): SwapResult {
         self.inner_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
 
-        let k0 = k(self);
+        let k0 = cpmm::k(self);
 
         let response = self.swap(
             Hook<W> {},
@@ -196,7 +195,7 @@ module slamm::omm {
         );
 
         // Recompute invariant
-        assert_invariant_does_not_decrease(self, k0);
+        cpmm::assert_invariant_does_not_decrease(self, k0);
 
         response
     }
@@ -272,7 +271,6 @@ module slamm::omm {
     public fun new_instant_price_oracle<A, B, W: drop>(
         self: &Pool<A, B, Hook<W>, State>
     ): Decimal {
-
         get_oracle_price(
             self.inner().price_info_a.price,
             self.inner().price_info_b.price
@@ -291,13 +289,6 @@ module slamm::omm {
 
         self.inner_mut().price_info_a.update_price(price_feed_a, clock);
         self.inner_mut().price_info_b.update_price(price_feed_b, clock);
-    }
-
-    // ===== View Functions =====
-    
-    public fun k<A, B, W: drop>(self: &Pool<A, B, Hook<W>, State>): u128 {
-        let (reserve_a, reserve_b) = self.reserves();
-        ((reserve_a as u128) * (reserve_b as u128))
     }
 
     // ===== Versioning =====
@@ -340,7 +331,6 @@ module slamm::omm {
             EPriceStale
         );
     }
-    
     
     // ===== Private Functions =====
 
@@ -427,11 +417,6 @@ module slamm::omm {
         }
     }
 
-    fun assert_invariant_does_not_decrease<A, B, W: drop>(self: &Pool<A, B, Hook<W>, State>, k0: u128) {
-        let k1 = k(self);
-        assert!(k1 >= k0, EInvariantViolation);
-    }
-
     fun from_price_feed(
         price_feed: &PriceInfoObject,
         clock: &Clock,
@@ -475,28 +460,45 @@ module slamm::omm {
     ): Decimal {
         price_a.div(price_b)
     }
-
-    // decimal::from(1), 
-    // decimal::from_percent(90)
-
-    use std::debug::print;
+    
+    #[test_only]
+    use sui::test_utils::assert_eq;
 
     #[test]
     fun test_vol_accumulator() {
-        // fun new_volatility_accumulator_(
-        // reference_price: Decimal,
-        // reference_vol: u64,
-        // new_price_internal: Decimal,
-        // new_price_oracle: Decimal,
-
-        let a = new_volatility_accumulator_(
+        let vol_acc = new_volatility_accumulator_(
             decimal::from(4),
             decimal::from_percent(20), // reference_vol = 20%
             decimal::from(2),
             decimal::from(3),
         );
 
-        print(&(a.mul(decimal::from(10_000)).floor()));
+        assert_eq(vol_acc, decimal::from_percent(70));
         
+        let vol_acc = new_volatility_accumulator_(
+            decimal::from(4),
+            decimal::from_percent(20), // reference_vol = 20%
+            decimal::from(4),
+            decimal::from(3),
+        );
+
+        assert_eq(vol_acc, decimal::from_percent(45));
+    }
+    
+    #[test]
+    fun test_get_oracle_price() {
+        let price = get_oracle_price(
+            decimal::from(110),
+            decimal::from(2),
+        );
+
+        assert_eq(price, decimal::from(55));
+        
+        let price = get_oracle_price(
+            decimal::from(2),
+            decimal::from(110),
+        );
+
+        assert_eq(price, decimal::from_scaled_val(18181818181818181_u256)); // 0.0181...
     }
 }

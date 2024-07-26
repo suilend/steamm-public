@@ -131,6 +131,9 @@ module slamm::cpmm {
         response
     }
 
+    // cpmm return price, take price that's best for LPs, on top we add dynamic fee
+    // fees should always be computed on the output amount;
+
     public fun quote_swap<A, B, W: drop>(
         self: &Pool<A, B, Hook<W>, State>,
         amount_in: u64,
@@ -177,7 +180,7 @@ module slamm::cpmm {
 
     // ===== View Functions =====
     
-    public fun k<A, B, W: drop>(self: &Pool<A, B, Hook<W>, State>): u128 {
+    public fun k<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>): u128 {
         let (reserve_a, reserve_b) = self.reserves();
         ((reserve_a as u128) * (reserve_b as u128))
     }
@@ -214,7 +217,7 @@ module slamm::cpmm {
         safe_mul_div_u64(reserve_out, amount_in, reserve_in + amount_in) // amount_out
     }
     
-    fun assert_invariant_does_not_decrease<A, B, W: drop>(self: &Pool<A, B, Hook<W>, State>, k0: u128) {
+    public(package) fun assert_invariant_does_not_decrease<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, k0: u128) {
         let k1 = k(self);
         assert!(k1 >= k0, EInvariantViolation);
     }
