@@ -29,6 +29,7 @@ module slamm::bank {
         id: UID,
         reserve: Balance<T>,
         lending: Option<Lending>,
+        c_tokens: u64,
         fields: Bag,
         version: Version,
     }
@@ -47,7 +48,7 @@ module slamm::bank {
         is_lend: bool,
     }
 
-    public struct LendingReserveKey<phantom T> has copy, store, drop {}
+    public struct ObligationCapKey<phantom P, phantom T> has copy, store, drop {}
 
     // ====== Entry Functions =====
 
@@ -71,6 +72,7 @@ module slamm::bank {
             id: object::new(ctx),
             reserve: balance::zero(),
             lending: none(),
+            c_tokens: 0,
             fields,
             version: version::new(CURRENT_VERSION),
         };
@@ -83,17 +85,19 @@ module slamm::bank {
     public fun init_lending<P, T>(
         self: &mut Bank<T>,
         _: &GlobalAdmin,
-        lending_market: &LendingMarket<P>,
+        lending_market: &mut LendingMarket<P>,
         target_liquidity_ratio_bps: u16,
         liquidity_buffer_bps: u16,
         reserve_array_index: u64,
+        ctx: &mut TxContext,
     ) {
         self.version.assert_version_and_upgrade(CURRENT_VERSION);
         assert!(target_liquidity_ratio_bps + liquidity_buffer_bps < 10_000, ELiquidityRangeAboveHundredPercent);
         assert!(target_liquidity_ratio_bps > liquidity_buffer_bps, ELiquidityRangeBelowHundredPercent);
 
+        let obligation_cap = lending_market.create_obligation(ctx);
 
-        self.fields.add(LendingReserveKey<T> {}, balance::zero<CToken<P, T>>());
+        self.fields.add(ObligationCapKey<P, T> {}, obligation_cap);
 
         self.lending.fill(Lending {
             lending_market: object::id(lending_market),
@@ -259,7 +263,17 @@ module slamm::bank {
             return
         };
 
-        let ctokens: Coin<CToken<P, T>> = coin::from_balance(bank.withdraw_c_tokens(amount), ctx);
+        let obligation_cap = bank.fields.borrow_mut(ObligationCapKey<P, T> {});
+
+        let ctokens: Coin<CToken<P, T>> = lending_market.withdraw_ctokens(
+            bank.lending.borrow().reserve_array_index,
+            obligation_cap,
+            clock,
+            amount,
+            ctx,
+        );
+
+        bank.c_tokens = bank.c_tokens - ctokens.value();
 
         let coin = lending_market.redeem_ctokens_and_withdraw_liquidity(
             bank.lending.borrow().reserve_array_index,
@@ -313,10 +327,20 @@ module slamm::bank {
             ctx,
         );
 
-        let lending = bank.lending.borrow_mut();
+        bank.c_tokens = bank.c_tokens + c_tokens.value();
 
+        let obligation_cap = bank.fields.borrow_mut(ObligationCapKey<P, T> {});
+
+        lending_market.deposit_ctokens_into_obligation(
+            lending.reserve_array_index,
+            obligation_cap,
+            clock,
+            c_tokens,
+            ctx,
+        );
+
+        let lending = bank.lending.borrow_mut();
         lending.lent = lending.lent + amount;
-        bank.deposit_c_tokens(c_tokens.into_balance());
     }
 
     fun recall_<T, P>(
@@ -326,11 +350,23 @@ module slamm::bank {
         clock: &Clock,
         ctx: &mut TxContext,
     ) {
+        let lending = bank.lending.borrow();
+
         if (amount == 0) {
             return
         };
 
-        let ctokens: Coin<CToken<P, T>> = coin::from_balance(bank.withdraw_c_tokens(amount), ctx);
+        let obligation_cap = bank.fields.borrow_mut(ObligationCapKey<P, T> {});
+
+        let ctokens: Coin<CToken<P, T>> = lending_market.withdraw_ctokens(
+            lending.reserve_array_index,
+            obligation_cap,
+            clock,
+            amount,
+            ctx,
+        );
+
+        bank.c_tokens = bank.c_tokens - ctokens.value();
 
         let coin = lending_market.redeem_ctokens_and_withdraw_liquidity(
             bank.lending.borrow().reserve_array_index,
@@ -344,22 +380,6 @@ module slamm::bank {
         lending.lent = lending.lent - amount;
 
         bank.reserve.join(coin.into_balance());
-    }
-
-    fun deposit_c_tokens<P, T>(
-        bank: &mut Bank<T>,
-        c_tokens: Balance<CToken<P, T>>
-    ) {
-        let c_balance: &mut Balance<CToken<P, T>> = bank.fields.borrow_mut(LendingReserveKey<T> {});
-        c_balance.join(c_tokens);
-    }
-    
-    fun withdraw_c_tokens<P, T>(
-        bank: &mut Bank<T>,
-        c_tokens: u64,
-    ): Balance<CToken<P, T>> {
-        let c_balance: &mut Balance<CToken<P, T>> = bank.fields.borrow_mut(LendingReserveKey<T> {});
-        c_balance.split(c_tokens)
     }
     
     fun assert_output_(
