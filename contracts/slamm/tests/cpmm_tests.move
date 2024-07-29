@@ -155,8 +155,8 @@ module slamm::slamm_tests {
         );
 
         assert_eq(swap_result.a2b(), true);
-        assert_eq(swap_result.pool_fees(), 400);
-        assert_eq(swap_result.protocol_fees(), 100);
+        assert_eq(swap_result.input_pool_fees(), 400);
+        assert_eq(swap_result.input_protocol_fees(), 100);
         assert_eq(swap_result.amount_out(), 45040);
 
         destroy(coin_a);
@@ -352,8 +352,8 @@ module slamm::slamm_tests {
         );
 
         assert_eq(swap_result.a2b(), true);
-        assert_eq(swap_result.pool_fees(), 1600000000);
-        assert_eq(swap_result.protocol_fees(), 400000000);
+        assert_eq(swap_result.input_pool_fees(), 1600000000);
+        assert_eq(swap_result.input_protocol_fees(), 400000000);
         assert_eq(swap_result.amount_out(), 82637729549181);
 
         destroy(registry);
@@ -511,8 +511,8 @@ module slamm::slamm_tests {
 
         assert_eq(swap_result.amount_out(), 499999999999949);
         assert_eq(swap_result.amount_in(), 10000000000000);
-        assert_eq(swap_result.protocol_fees(), 20000000000);
-        assert_eq(swap_result.pool_fees(), 80000000000);
+        assert_eq(swap_result.input_protocol_fees(), 20000000000);
+        assert_eq(swap_result.input_pool_fees(), 80000000000);
         assert_eq(swap_result.a2b(), false);
 
         destroy(coin_a);
@@ -1320,8 +1320,8 @@ module slamm::slamm_tests {
         );
 
         assert_eq(swap_result.a2b(), true);
-        assert_eq(swap_result.pool_fees(), expected_pool_fees);
-        assert_eq(swap_result.protocol_fees(), expected_protocol_fees);
+        assert_eq(swap_result.input_pool_fees(), expected_pool_fees);
+        assert_eq(swap_result.input_protocol_fees(), expected_protocol_fees);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -1350,8 +1350,8 @@ module slamm::slamm_tests {
                 ctx,
             );
 
-            acc_protocol_fees = acc_protocol_fees + swap_result.protocol_fees();
-            acc_pool_fees = acc_pool_fees + swap_result.pool_fees();
+            acc_protocol_fees = acc_protocol_fees + swap_result.input_protocol_fees();
+            acc_pool_fees = acc_pool_fees + swap_result.input_pool_fees();
 
             len = len - 1;
         };

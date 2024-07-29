@@ -5,6 +5,7 @@ module slamm::test_utils {
     use slamm::bank::{Self, Bank};
     use slamm::pool::{Pool};
     use sui::test_utils::destroy;
+    use sui::clock::Clock;
     use sui::test_scenario::{Self, ctx, Scenario};
     use sui::sui::SUI;
     use sui::bag::{Self, Bag};
@@ -12,6 +13,11 @@ module slamm::test_utils {
     use suilend::test_usdc::{TEST_USDC};
     use suilend::test_sui::{TEST_SUI};
     use suilend::lending_market;
+    use pyth::price_info::{Self, PriceInfoObject};
+    use pyth::price_feed;
+    use pyth::price_identifier;
+    use pyth::price;
+    use pyth::i64;
 
     public struct PoolWit has drop {}
     public struct COIN has drop {}
@@ -68,5 +74,89 @@ module slamm::test_utils {
         test_scenario::end(scenario);
 
         (pool, bank_a, bank_b)
+    }
+
+    #[test_only]
+    public fun get_price_info(
+        idx: u8,
+        price_: u64,
+        exponent: u64,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ): PriceInfoObject {
+        let mut v = vector::empty<u8>();
+        vector::push_back(&mut v, idx);
+
+        let mut i = 1;
+        while (i < 32) {
+            vector::push_back(&mut v, 0);
+            i = i + 1;
+        };
+
+        let price_info_obj = price_info::new_price_info_object_for_testing(
+            price_info::new_price_info(
+                0,
+                0,
+                price_feed::new(
+                    price_identifier::from_byte_vec(v),
+                    price::new(
+                        i64::new(price_, false),
+                        0,
+                        i64::new(exponent, false),
+                        clock.timestamp_ms(),
+                    ),
+                    price::new(
+                        i64::new(price_, false),
+                        0,
+                        i64::new(exponent, false),
+                        clock.timestamp_ms(),
+                    )
+                )
+            ),
+            ctx
+        );
+
+        price_info_obj
+    }
+    
+    #[test_only]
+    public fun zero_price_info(
+        idx: u8,
+        clock: &Clock,
+        ctx: &mut TxContext,
+    ): PriceInfoObject {
+        let mut v = vector::empty<u8>();
+        vector::push_back(&mut v, idx);
+
+        let mut i = 1;
+        while (i < 32) {
+            vector::push_back(&mut v, 0);
+            i = i + 1;
+        };
+
+        let price_info_obj = price_info::new_price_info_object_for_testing(
+            price_info::new_price_info(
+                0,
+                0,
+                price_feed::new(
+                    price_identifier::from_byte_vec(v),
+                    price::new(
+                        i64::new(0, false),
+                        0,
+                        i64::new(0, false),
+                        clock.timestamp_ms(),
+                    ),
+                    price::new(
+                        i64::new(0, false),
+                        0,
+                        i64::new(0, false),
+                        clock.timestamp_ms(),
+                    )
+                )
+            ),
+            ctx
+        );
+
+        price_info_obj
     }
 }

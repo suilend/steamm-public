@@ -4,7 +4,7 @@ module slamm::cpmm {
     use slamm::global_admin::GlobalAdmin;
     use slamm::registry::{Registry};
     use slamm::math::{safe_mul_div_u64};
-    use slamm::quote::{Self, SwapQuote};
+    use slamm::quote::SwapQuote;
     use slamm::bank::Bank;
     use slamm::pool::{Self, Pool, PoolCap, SwapResult, Intent};
     use slamm::version::{Self, Version};
@@ -131,40 +131,56 @@ module slamm::cpmm {
         response
     }
 
+    // cpmm return price, take price that's best for LPs, on top we add dynamic fee
+    // fees should always be computed on the output amount;
+
     public fun quote_swap<A, B, W: drop>(
         self: &Pool<A, B, Hook<W>, State>,
         amount_in: u64,
         a2b: bool,
     ): SwapQuote {
         let (reserve_a, reserve_b) = self.reserves();
-        let inputs = self.compute_fees(amount_in);
+        let inputs = self.compute_fees_on_input(amount_in);
 
-        let amount_out = if (a2b) {
+        let amount_out = quote_swap_impl(
+            reserve_a,
+            reserve_b,
+            inputs.amount_in_net(),
+            a2b,
+        );
+
+        inputs.to_quote(
+            amount_out,
+            a2b,
+        )
+    }
+    
+    public(package) fun quote_swap_impl(
+        reserve_a: u64,
+        reserve_b: u64,
+        amount_in: u64,
+        a2b: bool,
+    ): u64 {
+        if (a2b) {
             // IN: A && OUT: B
             quote_swap_(
                 reserve_b, // reserve_out
                 reserve_a, // reserve_in
-                inputs.amount_in_net(), // amount_in net of fees
+                amount_in,
             )
         } else {
             // IN: B && OUT: A
             quote_swap_(
                 reserve_a, // reserve_out
                 reserve_b, // reserve_in
-                inputs.amount_in_net(), // amount_in net of fees
+                amount_in,
             )
-        };
-
-        quote::swap_quote(
-            inputs,
-            amount_out,
-            a2b,
-        )
+        }
     }
 
     // ===== View Functions =====
     
-    public fun k<A, B, W: drop>(self: &Pool<A, B, Hook<W>, State>): u128 {
+    public fun k<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>): u128 {
         let (reserve_a, reserve_b) = self.reserves();
         ((reserve_a as u128) * (reserve_b as u128))
     }
@@ -201,7 +217,7 @@ module slamm::cpmm {
         safe_mul_div_u64(reserve_out, amount_in, reserve_in + amount_in) // amount_out
     }
     
-    fun assert_invariant_does_not_decrease<A, B, W: drop>(self: &Pool<A, B, Hook<W>, State>, k0: u128) {
+    public(package) fun assert_invariant_does_not_decrease<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, k0: u128) {
         let k1 = k(self);
         assert!(k1 >= k0, EInvariantViolation);
     }

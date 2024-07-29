@@ -93,6 +93,8 @@ module slamm::fees {
 
     public(package) fun fee_b_mut<A, B>(self: &mut Fees<A, B>,): &mut FeeReserve<B> { &mut self.fee_b }
     public(package) fun fee_a_mut<A, B>(self: &mut Fees<A, B>,): &mut FeeReserve<A> { &mut self.fee_a }
+    
+    public(package) fun fee_muts<A, B>(self: &mut Fees<A, B>,): (&mut FeeReserve<A>, &mut FeeReserve<B>) { (&mut self.fee_a, &mut self.fee_b) }
 
     // ===== View Functions =====
 

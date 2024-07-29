@@ -2,7 +2,7 @@
 module slamm::dummy_hook {
     use sui::coin::Coin;
     use slamm::registry::{Registry};
-    use slamm::quote::{Self, SwapQuote};
+    use slamm::quote::SwapQuote;
     use slamm::bank::Bank;
     use slamm::pool::{Self, Pool, PoolCap, SwapResult, Intent};
 
@@ -102,12 +102,11 @@ module slamm::dummy_hook {
         amount_in: u64,
         a2b: bool,
     ): SwapQuote {
-        let inputs = self.compute_fees(amount_in);
+        let inputs = self.compute_fees_on_input(amount_in);
 
         let amount_out = amount_in;
 
-        quote::swap_quote(
-            inputs,
+        inputs.to_quote(
             amount_out,
             a2b,
         )
