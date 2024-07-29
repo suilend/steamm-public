@@ -98,8 +98,8 @@ module slamm::omm_tests {
 
         // print(&swap_result);
 
-        assert_eq(pool.inner().reference_vol(), decimal::from(0));
-        assert_eq(pool.inner().vol_accumulated(), decimal::from_scaled_val(395120491997994000)); // 39..%
+        assert_eq(pool.inner().reference_val(), decimal::from(0));
+        assert_eq(pool.inner().accumulator(), decimal::from_scaled_val(395120491997994000)); // 39..%
         assert_eq(pool.inner().reference_price(), decimal::from(2)); // price = 10 / 5 = 2
         assert_eq(pool.inner().reference_price(), decimal::from(2)); // price = 10 / 5 = 2
         assert_eq(pool.inner().last_trade_ts(), clock.timestamp_ms());

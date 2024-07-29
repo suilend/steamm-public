@@ -47,15 +47,19 @@ module slamm::omm {
         version: Version,
         price_info_a: PriceInfo,
         price_info_b: PriceInfo,
-        reference_vol: Decimal,
-        vol_accumulated: Decimal,
         reference_price: Decimal,
+        ema: Ema,
         last_trade_ts: u64,
         filter_period: u64,
         decay_period: u64,
         fee_control: Decimal,
+    }
+
+    public struct Ema has store {
+        reference_val: Decimal,
+        accumulator: Decimal,
         reduction_factor: Decimal,
-        max_vol_accumulated: Decimal,
+        max_accumulator: Decimal,
     }
 
     public struct PriceInfo has store {
@@ -90,15 +94,17 @@ module slamm::omm {
             version: version::new(CURRENT_VERSION),
             price_info_a,
             price_info_b,
-            reference_vol: decimal::from(0),
-            vol_accumulated: decimal::from(0),
+            ema: Ema {
+                reference_val: decimal::from(0),
+                accumulator: decimal::from(0),
+                reduction_factor: decimal::from(reduction_factor_bps).div(decimal::from(BPS)),
+                max_accumulator: decimal::from(max_vol_accumulated_bps).div(decimal::from(BPS)),
+            },
             reference_price,
             last_trade_ts: clock.timestamp_ms(),
             filter_period,
             decay_period,
             fee_control: decimal::from(fee_control_bps).div(decimal::from(BPS)),
-            reduction_factor: decimal::from(reduction_factor_bps).div(decimal::from(BPS)),
-            max_vol_accumulated: decimal::from(max_vol_accumulated_bps).div(decimal::from(BPS)),
         };
 
         let (pool, pool_cap) = pool::new<A, B, Hook<W>, State>(
@@ -162,7 +168,7 @@ module slamm::omm {
         let (quote, vol_accumulator) = quote_swap_(self, amount_in, a2b);
         
         // Update the volatility accumulator - always
-        self.inner_mut().vol_accumulated = vol_accumulator;
+        self.inner_mut().ema.accumulator = vol_accumulator;
 
         // Update last_trade_ts
         self.inner_mut().last_trade_ts = clock.timestamp_ms();
@@ -201,7 +207,7 @@ module slamm::omm {
         response
     }
 
-    public fun quote_swap_<A, B, W: drop>(
+    fun quote_swap_<A, B, W: drop>(
         self: &Pool<A, B, Hook<W>, State>,
         amount_in: u64,
         a2b: bool,
@@ -338,8 +344,8 @@ module slamm::omm {
 
     public fun price_info_a(self: &State): &PriceInfo { &self.price_info_a }
     public fun price_info_b(self: &State): &PriceInfo { &self.price_info_b }
-    public fun reference_vol(self: &State): Decimal { self.reference_vol }
-    public fun vol_accumulated(self: &State): Decimal { self.vol_accumulated }
+    public fun reference_val(self: &State): Decimal { self.ema.reference_val }
+    public fun accumulator(self: &State): Decimal { self.ema.accumulator }
     public fun reference_price(self: &State): Decimal { self.reference_price }
     public fun last_trade_ts(self: &State): u64 { self.last_trade_ts }
     public fun filter_period(self: &State): u64 { self.filter_period }
@@ -382,17 +388,17 @@ module slamm::omm {
         };
 
         if (time_elapsed >= state.filter_period && time_elapsed <= state.decay_period) {
-            let reduction_factor = self.inner().reduction_factor;
-            let vol_accumulated = self.inner().vol_accumulated;
+            let reduction_factor = self.inner().ema.reduction_factor;
+            let vol_accumulated = self.inner().ema.accumulator;
 
-            self.inner_mut().reference_vol = vol_accumulated.mul(reduction_factor);
+            self.inner_mut().ema.reference_val = vol_accumulated.mul(reduction_factor);
             set_reference_price(self);
 
             return
         };
 
         if (time_elapsed > state.decay_period) {
-            self.inner_mut().reference_vol = decimal::from(0);
+            self.inner_mut().ema.reference_val = decimal::from(0);
             set_reference_price(self);
         }
     }
@@ -411,7 +417,7 @@ module slamm::omm {
     ): Decimal {
         new_volatility_accumulator_(
             self.reference_price,
-            self.reference_vol,
+            self.ema.reference_val,
             new_price_internal,
             new_price_oracle,
         )
