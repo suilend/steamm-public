@@ -37,10 +37,11 @@ module slamm::lend_tests {
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
-            &lending_market,
+            &mut lending_market,
             2_000, // liquidity_ratio_bps
             1_000, // liquidity_buffer_bps
             0, // reserve_array_index
+            ctx(&mut scenario),
         );
 
         // Init Pool
@@ -121,10 +122,11 @@ module slamm::lend_tests {
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
-            &lending_market,
+            &mut lending_market,
             2_000, // liquidity_ratio_bps
             1_000, // liquidity_buffer_bps
             0, // reserve_array_index
+            ctx(&mut scenario),
         );
 
         // Init Pool
@@ -236,10 +238,11 @@ module slamm::lend_tests {
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
-            &lending_market,
+            &mut lending_market,
             2_000, // liquidity_ratio_bps
             1_000, // liquidity_buffer_bps
             0, // reserve_array_index
+            ctx(&mut scenario),
         );
 
         // Init Pool
@@ -345,18 +348,20 @@ module slamm::lend_tests {
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
-            &lending_market,
+            &mut lending_market,
             2_000, // liquidity_ratio_bps
             1_000, // liquidity_buffer_bps
             0, // reserve_array_index
+            ctx(&mut scenario)
         );
         
         bank_b.init_lending<LENDING_MARKET, TEST_SUI>(
             &global_admin,
-            &lending_market,
+            &mut lending_market,
             2_000, // liquidity_ratio_bps
             1_000, // liquidity_buffer_bps
             1, // reserve_array_index
+            ctx(&mut scenario),
         );
 
         // Init Pool
@@ -438,18 +443,20 @@ module slamm::lend_tests {
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
-            &lending_market,
+            &mut lending_market,
             2_000, // liquidity_ratio_bps
             1_000, // liquidity_buffer_bps
             0, // reserve_array_index
+            ctx(&mut scenario),
         );
         
         bank_b.init_lending<LENDING_MARKET, TEST_SUI>(
             &global_admin,
-            &lending_market,
+            &mut lending_market,
             2_000, // liquidity_ratio_bps
             1_000, // liquidity_buffer_bps
             1, // reserve_array_index
+            ctx(&mut scenario),
         );
 
         // Init Pool
@@ -554,18 +561,20 @@ module slamm::lend_tests {
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
-            &lending_market,
+            &mut lending_market,
             2_000, // liquidity_ratio_bps
             1_000, // liquidity_buffer_bps
             0, // reserve_array_index
+            ctx(&mut scenario),
         );
         
         bank_b.init_lending<LENDING_MARKET, TEST_SUI>(
             &global_admin,
-            &lending_market,
+            &mut lending_market,
             2_000, // liquidity_ratio_bps
             1_000, // liquidity_buffer_bps
             1, // reserve_array_index
+            ctx(&mut scenario),
         );
 
         // Init Pool
@@ -680,18 +689,20 @@ module slamm::lend_tests {
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
-            &lending_market,
+            &mut lending_market,
             2_000, // liquidity_ratio_bps
             1_000, // liquidity_buffer_bps
             0, // reserve_array_index
+            ctx(&mut scenario),
         );
         
         bank_b.init_lending<LENDING_MARKET, TEST_SUI>(
             &global_admin,
-            &lending_market,
+            &mut lending_market,
             2_000, // liquidity_ratio_bps
             1_000, // liquidity_buffer_bps
             1, // reserve_array_index
+            ctx(&mut scenario),
         );
 
         // Init Pool
@@ -815,10 +826,11 @@ module slamm::lend_tests {
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
-            &lending_market,
+            &mut lending_market,
             2_000, // liquidity_ratio_bps
             500, // liquidity_buffer_bps
             0, // reserve_array_index
+            ctx(&mut scenario),
         );
 
         // Init Pool
@@ -969,10 +981,11 @@ module slamm::lend_tests {
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
-            &lending_market,
+            &mut lending_market,
             2_000, // liquidity_ratio_bps
             500, // liquidity_buffer_bps
             0, // reserve_array_index
+            ctx(&mut scenario),
         );
 
         // Init Pool
@@ -1071,10 +1084,11 @@ module slamm::lend_tests {
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
-            &lending_market,
+            &mut lending_market,
             2_000, // liquidity_ratio_bps
             500, // liquidity_buffer_bps
             0, // reserve_array_index
+            ctx(&mut scenario),
         );
 
         // Init Pool
@@ -1211,10 +1225,11 @@ module slamm::lend_tests {
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
-            &lending_market,
+            &mut lending_market,
             2_000, // liquidity_ratio_bps
             500, // liquidity_buffer_bps
             0, // reserve_array_index
+            ctx(&mut scenario),
         );
 
         // Init Pool
@@ -1302,10 +1317,11 @@ module slamm::lend_tests {
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
-            &lending_market,
+            &mut lending_market,
             2_000, // liquidity_ratio_bps
             500, // liquidity_buffer_bps
             0, // reserve_array_index
+            ctx(&mut scenario),
         );
 
         // Init Pool
@@ -1402,10 +1418,11 @@ module slamm::lend_tests {
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
-            &lending_market,
+            &mut lending_market,
             2_000, // liquidity_ratio_bps
             500, // liquidity_buffer_bps
             0, // reserve_array_index
+            ctx(&mut scenario),
         );
 
         // Init Pool
@@ -1504,10 +1521,11 @@ module slamm::lend_tests {
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
-            &lending_market,
+            &mut lending_market,
             2_000, // liquidity_ratio_bps
             500, // liquidity_buffer_bps
             0, // reserve_array_index
+            ctx(&mut scenario),
         );
 
         // Init Pool
@@ -1607,7 +1625,7 @@ module slamm::lend_tests {
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
 
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
@@ -1615,10 +1633,11 @@ module slamm::lend_tests {
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
-            &lending_market,
+            &mut lending_market,
             10_001, // liquidity_ratio_bps
             1_000, // liquidity_buffer_bps
             0, // reserve_array_index
+            ctx(&mut scenario),
         );
 
         destroy(bank_a);
@@ -1639,7 +1658,7 @@ module slamm::lend_tests {
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
 
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
@@ -1647,10 +1666,11 @@ module slamm::lend_tests {
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
-            &lending_market,
+            &mut lending_market,
             1_000, // liquidity_ratio_bps
             1_001, // liquidity_buffer_bps
             0, // reserve_array_index
+            ctx(&mut scenario),
         );
 
         destroy(bank_a);
