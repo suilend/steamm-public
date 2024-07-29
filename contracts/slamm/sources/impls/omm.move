@@ -1,6 +1,5 @@
 /// Oracle AMM Hook implementation
 module slamm::omm {
-    use std::option::none;
     use sui::coin::Coin;
     use sui::clock::{Self, Clock};
     use slamm::global_admin::GlobalAdmin;
@@ -28,6 +27,7 @@ module slamm::omm {
     const EPriceIdentifierMismatch: u64 = 1;
     const EInvalidPrice: u64 = 2;
     const EPriceStale: u64 = 3;
+    const EPriceInfoIsZero: u64 = 4;
 
     /// Hook type for the Oracle AMM implementation. Serves as both
     /// the hook's witness (authentication) as well as it wraps around the pool
@@ -49,7 +49,7 @@ module slamm::omm {
         price_info_b: PriceInfo,
         reference_vol: Decimal,
         vol_accumulated: Decimal,
-        reference_price: Option<Decimal>,
+        reference_price: Decimal,
         last_trade_ts: u64,
         filter_period: u64,
         decay_period: u64,
@@ -81,13 +81,18 @@ module slamm::omm {
         clock: &Clock,
         ctx: &mut TxContext,
     ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>>) {
+        let price_info_a = from_price_feed(price_feed_a, clock);
+        let price_info_b = from_price_feed(price_feed_b, clock);
+        let reference_price = new_instant_price_oracle_(&price_info_a, &price_info_b);
+        
+        
         let inner = State {
             version: version::new(CURRENT_VERSION),
-            price_info_a: from_price_feed(price_feed_a, clock),
-            price_info_b: from_price_feed(price_feed_b, clock),
+            price_info_a,
+            price_info_b,
             reference_vol: decimal::from(0),
             vol_accumulated: decimal::from(0),
-            reference_price: none(),
+            reference_price,
             last_trade_ts: clock.timestamp_ms(),
             filter_period,
             decay_period,
@@ -150,10 +155,6 @@ module slamm::omm {
     ): Intent<A, B, Hook<W>> {
         self.inner().assert_price_is_fresh(clock);
         self.inner_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
-        
-        // When we init the pool the reference price is not set so
-        // in the first swap this option is filled
-        set_reference_price_if_none(self);
 
         // Update price and vol reference depending on timespan ellapsed
         update_references(self, clock);
@@ -239,6 +240,13 @@ module slamm::omm {
         (quote, vol_accumulator)
     }
     
+    public fun compute_variable_fee_rate(
+        vol_accumulator: Decimal,
+        fee_control: Decimal,
+    ): Decimal {
+        vol_accumulator.pow(2).mul(fee_control).div(decimal::from(100))
+    }
+    
     public fun quote_swap<A, B, W: drop>(
         self: &Pool<A, B, Hook<W>, State>,
         amount_in: u64,
@@ -271,9 +279,22 @@ module slamm::omm {
     public fun new_instant_price_oracle<A, B, W: drop>(
         self: &Pool<A, B, Hook<W>, State>
     ): Decimal {
+        new_instant_price_oracle_(
+            &self.inner().price_info_a,
+            &self.inner().price_info_b,
+        )
+    }
+    
+    public fun new_instant_price_oracle_(
+        price_info_a: &PriceInfo,
+        price_info_b: &PriceInfo,
+    ): Decimal {
+        assert!(price_info_a.price.gt(decimal::from(0)), EPriceInfoIsZero);
+        assert!(price_info_b.price.gt(decimal::from(0)), EPriceInfoIsZero);
+        
         get_oracle_price(
-            self.inner().price_info_a.price,
-            self.inner().price_info_b.price
+            price_info_a.price,
+            price_info_b.price,
         )
     }
 
@@ -312,6 +333,20 @@ module slamm::omm {
     ) {
         self.inner_mut().version.migrate_(CURRENT_VERSION);
     }
+
+    // ===== Getter Functions =====
+
+    public fun price_info_a(self: &State): &PriceInfo { &self.price_info_a }
+    public fun price_info_b(self: &State): &PriceInfo { &self.price_info_b }
+    public fun reference_vol(self: &State): Decimal { self.reference_vol }
+    public fun vol_accumulated(self: &State): Decimal { self.vol_accumulated }
+    public fun reference_price(self: &State): Decimal { self.reference_price }
+    public fun last_trade_ts(self: &State): u64 { self.last_trade_ts }
+    public fun filter_period(self: &State): u64 { self.filter_period }
+    public fun decay_period(self: &State): u64 { self.decay_period }
+    public fun fee_control(self: &State): Decimal { self.fee_control }
+    public fun reduction_factor(self: &State): Decimal { self.fee_control }
+    public fun max_vol_accumulated(self: &State): Decimal { self.fee_control }
 
     // ===== Assert Functions =====
 
@@ -366,16 +401,7 @@ module slamm::omm {
         self: &mut Pool<A, B, Hook<W>, State>,
     ) {
         let instant_price = new_instant_price_oracle(self);
-
-        self.inner_mut().reference_price.fill(instant_price);
-    }
-    
-    fun set_reference_price_if_none<A, B, W: drop>(
-        self: &mut Pool<A, B, Hook<W>, State>,
-    ) {
-        if (self.inner().reference_price.is_none()) {
-            set_reference_price(self);
-        }
+        self.inner_mut().reference_price = instant_price;
     }
 
     fun new_volatility_accumulator(
@@ -384,7 +410,7 @@ module slamm::omm {
         new_price_oracle: Decimal,
     ): Decimal {
         new_volatility_accumulator_(
-            *self.reference_price.borrow(),
+            self.reference_price,
             self.reference_vol,
             new_price_internal,
             new_price_oracle,
@@ -500,5 +526,27 @@ module slamm::omm {
         );
 
         assert_eq(price, decimal::from_scaled_val(18181818181818181_u256)); // 0.0181...
+    }
+    
+    #[test]
+    fun test_compute_price_diff() {
+
+        assert_eq(
+            compute_price_diff_rate(
+                decimal::from(2), decimal::from_scaled_val(1_209759016004012000)
+            ),
+            decimal::from_scaled_val(395120491997994000) // 0.39..
+        );
+    }
+    
+    #[test]
+    fun test_compute_variable_fee_rate() {
+
+        assert_eq(
+            compute_variable_fee_rate(
+                decimal::from_percent(90), decimal::from(1)
+            ),
+            decimal::from_scaled_val(8100000000000000) // 0.0081..
+        );
     }
 }
