@@ -692,14 +692,14 @@ module slamm::pool {
         quote
     }
 
-    public(package) fun guard<A, B, Hook: drop, State: store>(
+    fun guard<A, B, Hook: drop, State: store>(
         pool: &mut Pool<A, B, Hook, State>,
     ) {
         pool.assert_unguarded();
         pool.lock_guard = true
     }
     
-    public(package) fun unguard<A, B, Hook: drop, State: store>(
+    fun unguard<A, B, Hook: drop, State: store>(
         pool: &mut Pool<A, B, Hook, State>,
     ) {
         pool.assert_guarded();
