@@ -415,12 +415,14 @@ module slamm::omm {
         new_price_internal: Decimal,
         new_price_oracle: Decimal,
     ): Decimal {
-        new_volatility_accumulator_(
+        let vol_acc = new_volatility_accumulator_(
             self.reference_price,
             self.ema.reference_val,
             new_price_internal,
             new_price_oracle,
-        )
+        );
+
+        if (vol_acc.lt(self.ema.max_accumulator)) { vol_acc } else { self.ema.max_accumulator }
     }
     
     fun new_volatility_accumulator_(

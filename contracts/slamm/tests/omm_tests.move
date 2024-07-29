@@ -49,7 +49,7 @@ module slamm::omm_tests {
             600000, // filter_period: 10 minutes
             10_000, // fee_control_bps: 1
             9_000, // reduction_factor_bps: 0.9
-            2_000, // max_vol_accumulated_bps: 0.2
+            4_000, // max_vol_accumulated_bps: 0.4
             &clock,
             ctx,
         );
