@@ -10,7 +10,8 @@ module slamm::bank {
     use slamm::global_admin::GlobalAdmin;
     use slamm::version::{Self, Version};
     use slamm::registry::Registry;
-    use suilend::lending_market::{LendingMarket};
+    use suilend::lending_market::LendingMarket;
+    use suilend::decimal;
     use suilend::reserve::{CToken};
 
     // ===== Constants =====
@@ -29,7 +30,6 @@ module slamm::bank {
         id: UID,
         reserve: Balance<T>,
         lending: Option<Lending>,
-        c_tokens: u64,
         fields: Bag,
         version: Version,
     }
@@ -38,6 +38,7 @@ module slamm::bank {
         lending_market: ID,
         p_type: TypeName,
         lent: u64,
+        ctokens: u64,
         target_liquidity_ratio_bps: u16,
         liquidity_buffer_bps: u16,
         reserve_array_index: u64,
@@ -72,7 +73,6 @@ module slamm::bank {
             id: object::new(ctx),
             reserve: balance::zero(),
             lending: none(),
-            c_tokens: 0,
             fields,
             version: version::new(CURRENT_VERSION),
         };
@@ -103,6 +103,7 @@ module slamm::bank {
             lending_market: object::id(lending_market),
             p_type: type_name::get<P>(),
             lent: 0,
+            ctokens: 0,
             target_liquidity_ratio_bps: target_liquidity_ratio_bps,
             liquidity_buffer_bps: liquidity_buffer_bps,
             reserve_array_index: reserve_array_index,
@@ -134,7 +135,7 @@ module slamm::bank {
                 bank.target_liquidity_ratio_bps(),
             );
 
-            bank.lend_(
+            bank.lend(
                 lending_market,
                 amount,
                 clock,
@@ -149,7 +150,7 @@ module slamm::bank {
                 bank.target_liquidity_ratio_bps(),
             );
 
-            bank.recall_(
+            bank.recall(
                 lending_market,
                 amount,
                 clock,
@@ -202,6 +203,22 @@ module slamm::bank {
     ): u16 {
         ((liquid_reserve * 10_000) / (liquid_reserve + iliquid_reserve)) as u16
     }
+
+    public fun ctoken_amount<P, T>(
+        bank: &Bank<T>,
+        lending_market: &LendingMarket<P>,
+        amount: u64,
+    ): u64 {
+        let reserves = lending_market.reserves();
+        let lending = bank.lending.borrow();
+        let reserve = reserves.borrow(lending.reserve_array_index);
+        let ctoken_ratio = reserve.ctoken_ratio();
+
+        let ctoken_amount = decimal::from(amount).div(ctoken_ratio).floor();
+        
+        ctoken_amount
+    }
+
 
     // We only check lower bound
     public fun assert_liquidity<T>(
@@ -259,34 +276,12 @@ module slamm::bank {
             )
         };
 
-        if (amount == 0) {
-            return
-        };
-
-        let obligation_cap = bank.fields.borrow_mut(ObligationCapKey<P, T> {});
-
-        let ctokens: Coin<CToken<P, T>> = lending_market.withdraw_ctokens(
-            bank.lending.borrow().reserve_array_index,
-            obligation_cap,
-            clock,
+        bank.recall(
+            lending_market,
             amount,
-            ctx,
-        );
-
-        bank.c_tokens = bank.c_tokens - ctokens.value();
-
-        let coin = lending_market.redeem_ctokens_and_withdraw_liquidity(
-            bank.lending.borrow().reserve_array_index,
             clock,
-            ctokens,
-            none(), // rate_limiter_exemption
             ctx,
         );
-
-        let lending = bank.lending.borrow_mut();
-        lending.lent = lending.lent - amount;
-
-        bank.reserve.join(coin.into_balance());
     }
 
     public(package) fun assert_p_type<T, P>(
@@ -305,7 +300,7 @@ module slamm::bank {
 
     // ====== Private Functions =====
 
-    fun lend_<T, P>(
+    fun lend<T, P>(
         bank: &mut Bank<T>,
         lending_market: &mut LendingMarket<P>,
         amount: u64,
@@ -327,8 +322,7 @@ module slamm::bank {
             ctx,
         );
 
-        bank.c_tokens = bank.c_tokens + c_tokens.value();
-
+        let ctoken_amount = c_tokens.value();
         let obligation_cap = bank.fields.borrow_mut(ObligationCapKey<P, T> {});
 
         lending_market.deposit_ctokens_into_obligation(
@@ -341,9 +335,10 @@ module slamm::bank {
 
         let lending = bank.lending.borrow_mut();
         lending.lent = lending.lent + amount;
+        lending.ctokens = lending.ctokens + ctoken_amount;
     }
 
-    fun recall_<T, P>(
+    fun recall<T, P>(
         bank: &mut Bank<T>,
         lending_market: &mut LendingMarket<P>,
         amount: u64,
@@ -356,17 +351,18 @@ module slamm::bank {
             return
         };
 
+        let mut ctoken_amount = bank.ctoken_amount(lending_market, amount);
         let obligation_cap = bank.fields.borrow_mut(ObligationCapKey<P, T> {});
 
         let ctokens: Coin<CToken<P, T>> = lending_market.withdraw_ctokens(
             lending.reserve_array_index,
             obligation_cap,
             clock,
-            amount,
+            ctoken_amount,
             ctx,
         );
 
-        bank.c_tokens = bank.c_tokens - ctokens.value();
+        ctoken_amount = ctokens.value();
 
         let coin = lending_market.redeem_ctokens_and_withdraw_liquidity(
             bank.lending.borrow().reserve_array_index,
@@ -378,6 +374,7 @@ module slamm::bank {
 
         let lending = bank.lending.borrow_mut();
         lending.lent = lending.lent - amount;
+        lending.ctokens = lending.ctokens - ctoken_amount;
 
         bank.reserve.join(coin.into_balance());
     }
