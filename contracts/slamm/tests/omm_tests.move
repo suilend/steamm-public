@@ -288,6 +288,97 @@ module slamm::omm_tests {
         destroy(lending_market);
         test_scenario::end(scenario);
     }
+    
+    #[test]
+    fun test_quote_symmetric_vol() {
+        let mut scenario = test_scenario::begin(ADMIN);
+
+        // Init Pool
+        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let ctx = ctx(&mut scenario);
+
+        
+        let price_info_a = test_utils::get_price_info(1, 1, 2, &clock, ctx); // price: 10
+        let price_info_b = test_utils::get_price_info(2, 1, 2, &clock, ctx); // price: 10
+
+        let (mut pool, pool_cap) = omm::new<SUI, COIN, Wit>(
+            Wit {},
+            &mut registry,
+            0, // swap fees BPS
+            &price_info_a,
+            &price_info_b,
+            60000, // filter_period: 1 minute
+            600000, // filter_period: 10 minutes
+            10_000, // fee_control_bps: 1
+            9_000, // reduction_factor_bps: 0.9
+            400_000, // max_vol_accumulated_bps: 4000%
+            &clock,
+            ctx,
+        );
+
+        let mut coin_a = coin::mint_for_testing<SUI>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
+
+        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+
+        let (lp_coins, _) = pool.deposit_liquidity(
+            &mut lending_market,
+            &mut bank_a,
+            &mut bank_b,
+            &mut coin_a,
+            &mut coin_b,
+            500_000,
+            500_000,
+            0,
+            0,
+            &clock,
+            ctx,
+        );
+
+        destroy(coin_a);
+        destroy(coin_b);
+
+        // Swap
+        test_scenario::next_tx(&mut scenario, TRADER);
+        
+        let (_quote_1, vol_1) = omm::quote_swap_for_testing(
+            &pool,
+            112_372,
+            true, // a2b
+        );
+
+        print(&vol_1);
+        
+        let (_quote_2, vol_2) = omm::quote_swap_for_testing(
+            &pool,
+            112_372,
+            false, // b2a
+        );
+
+        print(&vol_2);
+
+        // we divide by ten to remove the rounding difference in the last digit
+        assert_eq(vol_1.div(decimal::from(10)), vol_2.div(decimal::from(10)));
+
+        destroy(bank_a);
+        destroy(bank_b);
+        destroy(price_info_a);
+        destroy(price_info_b);
+        destroy(registry);
+        destroy(pool);
+        destroy(pool_cap);
+        destroy(lp_coins);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(clock);
+        destroy(bag);
+        destroy(lending_market);
+        test_scenario::end(scenario);
+    }
 
     
     

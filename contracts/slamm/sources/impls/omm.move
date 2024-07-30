@@ -432,10 +432,11 @@ module slamm::omm {
         new_price_internal: Decimal,
         new_price_oracle: Decimal,
     ): Decimal {
-        let price_diff_rate = decimal::max(
-            compute_price_diff_rate(reference_price, new_price_internal),
-            compute_price_diff_rate(reference_price, new_price_oracle)
-        );
+        let price_diff_rate = compute_price_diff_rate(reference_price, new_price_internal);
+        // let price_diff_rate = decimal::max(
+        //     compute_price_diff_rate(reference_price, new_price_internal),
+        //     compute_price_diff_rate(reference_price, new_price_oracle)
+        // );
 
         reference_vol.add(price_diff_rate)
     }
