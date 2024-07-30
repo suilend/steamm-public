@@ -212,10 +212,11 @@ module slamm::omm_tests {
         let mut fee = decimal::from(1);
 
         while (len > 0) {
-            let (quote, vol) = omm::quote_swap_for_testing(
+            let (quote, _, _, vol) = omm::quote_swap_for_testing(
                 &pool,
                 swap_amts[len - 1],
                 true, // a2b
+                &clock,
             );
 
             let total_fees = decimal::from(
@@ -243,10 +244,11 @@ module slamm::omm_tests {
         let mut fee = decimal::from(1);
 
         while (len > 0) {
-            let (quote, vol) = omm::quote_swap_for_testing(
+            let (quote, _, _, vol) = omm::quote_swap_for_testing(
                 &pool,
                 swap_amts[len - 1],
                 false, // a2b
+                &clock,
             );
 
             let fee_rate = decimal::from(
@@ -344,10 +346,11 @@ module slamm::omm_tests {
         // Swap
         test_scenario::next_tx(&mut scenario, TRADER);
         
-        let (_, vol) = omm::quote_swap_for_testing(
+        let (_, _, _, vol) = omm::quote_swap_for_testing(
             &pool,
             100_000_000,
             true, // a2b
+            &clock,
         );
 
         assert_eq(vol, decimal::from_percent(1));
@@ -431,10 +434,11 @@ module slamm::omm_tests {
             &clock,
         );
         
-        let (_, vol) = omm::quote_swap_for_testing(
+        let (_, _, _, vol) = omm::quote_swap_for_testing(
             &pool,
             100_000_000,
             true, // a2b
+            &clock,
         );
 
         assert_eq(vol, decimal::from_percent(1));
@@ -511,16 +515,18 @@ module slamm::omm_tests {
         // Swap
         test_scenario::next_tx(&mut scenario, TRADER);
         
-        let (_quote_1, vol_1) = omm::quote_swap_for_testing(
+        let (_quote_1, vol_1, _, _) = omm::quote_swap_for_testing(
             &pool,
             112_372,
-            true, // a2b
+            true, // a2b,
+            &clock,
         );
         
-        let (_quote_2, vol_2) = omm::quote_swap_for_testing(
+        let (_quote_2, vol_2, _, _) = omm::quote_swap_for_testing(
             &pool,
             112_372,
             false, // b2a
+            &clock,
         );
 
         // we divide by ten to remove the rounding difference in the last digit
@@ -605,16 +611,18 @@ module slamm::omm_tests {
         while (trades > 0) {
             let amount_in = rng.generate_u64_in_range(1_000, 500_000_000);
 
-            let (_quote_1, vol_1) = omm::quote_swap_for_testing(
+            let (_, vol_1, _, _) = omm::quote_swap_for_testing(
                 &pool,
                 amount_in,
                 true, // a2b
+                &clock,
             );
         
-            let (_quote_2, vol_2) = omm::quote_swap_for_testing(
+            let (_, vol_2, _, _) = omm::quote_swap_for_testing(
                 &pool,
                 amount_in,
                 false, // b2a
+                &clock,
             );
 
             if (vol_1.gt(vol_2)) {

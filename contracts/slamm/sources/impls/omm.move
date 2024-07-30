@@ -163,13 +163,15 @@ module slamm::omm {
         self.inner().assert_price_is_fresh(clock);
         self.inner_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
 
-        // Update price and vol reference depending on timespan ellapsed
-        update_references(self, clock);
+        // // Update price and vol reference depending on timespan ellapsed
+        // update_references(self, clock);
 
-        let (quote, vol_accumulator) = quote_swap_(self, amount_in, a2b);
+        let (quote, reference_price, reference_vol, vol_accumulator) = quote_swap_(self, amount_in, a2b, clock);
         
         // Update the volatility accumulator - always
         self.inner_mut().ema.accumulator = vol_accumulator;
+        self.inner_mut().reference_price = reference_price;
+        self.inner_mut().ema.reference_val = reference_vol;
 
         // Update last_trade_ts
         self.inner_mut().last_trade_ts = clock.timestamp_ms();
@@ -212,9 +214,12 @@ module slamm::omm {
         self: &Pool<A, B, Hook<W>, State>,
         amount_in: u64,
         a2b: bool,
-        // clock: &Clock,
-    ): (SwapQuote, Decimal) {
+        clock: &Clock,
+    ): (SwapQuote, Decimal, Decimal, Decimal) {
         let (reserve_a, reserve_b) = self.reserves();
+
+        // Update price and vol reference depending on timespan ellapsed
+        let (reference_price, reference_vol) = get_updated_references(self, clock);
 
         let amount_out = cpmm::quote_swap_impl(
             reserve_a,
@@ -231,6 +236,8 @@ module slamm::omm {
         let new_instant_price_oracle = new_instant_price_oracle(self);
 
         let vol_accumulator = self.inner().new_volatility_accumulator(
+            reference_price,
+            reference_vol,
             new_instant_price_internal,
             new_instant_price_oracle
         );
@@ -245,7 +252,7 @@ module slamm::omm {
 
         quote.add_output_fees(protocol_fees, pool_fees);
 
-        (quote, vol_accumulator)
+        (quote, reference_price, reference_vol, vol_accumulator)
     }
     
     public fun compute_variable_fee_rate(
@@ -259,8 +266,9 @@ module slamm::omm {
         self: &Pool<A, B, Hook<W>, State>,
         amount_in: u64,
         a2b: bool,
+        clock: &Clock,
     ): SwapQuote {
-        let (quote, _) = quote_swap_(self, amount_in, a2b);
+        let (quote, _, _, _) = quote_swap_(self, amount_in, a2b,clock);
 
         quote
     }
@@ -377,34 +385,6 @@ module slamm::omm {
     
     // ===== Private Functions =====
 
-    fun update_references<A, B, W: drop>(
-        self: &mut Pool<A, B, Hook<W>, State>,
-        clock: &Clock,
-    ) {
-        let state = self.inner();
-        let time_elapsed = clock.timestamp_ms() - state.last_trade_ts;
-
-        // Ths is kept here to make it more readable
-        if (time_elapsed < state.filter_period) {
-            return
-        };
-
-        if (time_elapsed >= state.filter_period && time_elapsed <= state.decay_period) {
-            let reduction_factor = self.inner().ema.reduction_factor;
-            let vol_accumulated = self.inner().ema.accumulator;
-
-            self.inner_mut().ema.reference_val = vol_accumulated.mul(reduction_factor);
-            set_reference_price(self);
-
-            return
-        };
-
-        if (time_elapsed > state.decay_period) {
-            self.inner_mut().ema.reference_val = decimal::from(0);
-            set_reference_price(self);
-        }
-    }
-
     fun get_updated_references<A, B, W: drop>(
         self: &Pool<A, B, Hook<W>, State>,
         clock: &Clock,
@@ -435,21 +415,16 @@ module slamm::omm {
         return (self.inner().reference_price, self.inner().ema.reference_val)
     }
 
-    fun set_reference_price<A, B, W: drop>(
-        self: &mut Pool<A, B, Hook<W>, State>,
-    ) {
-        let instant_price = new_instant_price_oracle(self);
-        self.inner_mut().reference_price = instant_price;
-    }
-
     fun new_volatility_accumulator(
         self: &State,
+        reference_price: Decimal,
+        reference_vol: Decimal,
         new_price_internal: Decimal,
         new_price_oracle: Decimal,
     ): Decimal {
         let vol_acc = new_volatility_accumulator_(
-            self.reference_price,
-            self.ema.reference_val,
+            reference_price,
+            reference_vol,
             new_price_internal,
             new_price_oracle,
         );
@@ -536,11 +511,13 @@ module slamm::omm {
         self: &Pool<A, B, Hook<W>, State>,
         amount_in: u64,
         a2b: bool,
-    ): (SwapQuote, Decimal) {
+        clock: &Clock,
+    ): (SwapQuote, Decimal, Decimal, Decimal) {
         quote_swap_(
             self,
             amount_in,
             a2b,
+            clock,
         )
 
     }
