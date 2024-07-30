@@ -1,5 +1,6 @@
 /// Oracle AMM Hook implementation
 module slamm::omm {
+    use std::debug::print;
     use sui::coin::Coin;
     use sui::clock::{Self, Clock};
     use slamm::global_admin::GlobalAdmin;
@@ -235,7 +236,7 @@ module slamm::omm {
 
         let variable_fee = vol_accumulator.pow(2).mul(self.inner().fee_control).div(decimal::from(100)); // TODO: control for bps
 
-        let total_variable_fee = decimal::from(quote.amount_out()).mul(variable_fee).floor();
+        let total_variable_fee = decimal::from(quote.amount_out()).mul(variable_fee).ceil();
         let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees().fee_ratio();
 
         let protocol_fees = safe_mul_div_u64(total_variable_fee, protocol_fee_num, protocol_fee_denom);
@@ -435,6 +436,7 @@ module slamm::omm {
             compute_price_diff_rate(reference_price, new_price_internal),
             compute_price_diff_rate(reference_price, new_price_oracle)
         );
+
         reference_vol.add(price_diff_rate)
     }
     
@@ -442,12 +444,12 @@ module slamm::omm {
         reference_price: Decimal,
         new_price: Decimal,
     ): Decimal {
-        // let reference_price = *self.reference_price_point.borrow();
+        let average_price = reference_price.add(new_price).div(decimal::from(2));
 
         if (new_price.ge(reference_price)) {
-            new_price.sub(reference_price).div(reference_price)
+            new_price.sub(reference_price).div(average_price)
         } else {
-            reference_price.sub(new_price).div(reference_price)
+            reference_price.sub(new_price).div(average_price)
         }
     }
 
@@ -493,6 +495,23 @@ module slamm::omm {
         price_b: Decimal
     ): Decimal {
         price_a.div(price_b)
+    }
+
+    // ===== Test-only functions =====
+
+
+    #[test_only]
+    public(package) fun quote_swap_for_testing<A, B, W: drop>(
+        self: &Pool<A, B, Hook<W>, State>,
+        amount_in: u64,
+        a2b: bool,
+    ): (SwapQuote, Decimal) {
+        quote_swap_(
+            self,
+            amount_in,
+            a2b,
+        )
+
     }
     
     #[test_only]
@@ -545,6 +564,8 @@ module slamm::omm {
             ),
             decimal::from_scaled_val(395120491997994000) // 0.39..
         );
+
+        // TODO: test assymetry
     }
     
     #[test]
