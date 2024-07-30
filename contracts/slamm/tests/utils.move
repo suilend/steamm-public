@@ -159,4 +159,29 @@ module slamm::test_utils {
 
         price_info_obj
     }
+
+    public fun update_price(price_info_obj: &mut PriceInfoObject, price: u64, expo: u8, clock: &Clock) {
+        let price_info = price_info::get_price_info_from_price_info_object(price_info_obj);
+
+        let price = price::new(
+            i64::new(price, false),
+            0,
+            i64::new((expo as u64), false),
+            clock.timestamp_ms() / 1000
+        );
+
+        price_info::update_price_info_object_for_testing(
+            price_info_obj,
+            &price_info::new_price_info(
+                0,
+                0,
+                price_feed::new(
+                    price_info::get_price_identifier(&price_info),
+                    price,
+                    price
+                )
+            )
+        );
+        
+    }
 }

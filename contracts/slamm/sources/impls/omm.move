@@ -212,6 +212,7 @@ module slamm::omm {
         self: &Pool<A, B, Hook<W>, State>,
         amount_in: u64,
         a2b: bool,
+        // clock: &Clock,
     ): (SwapQuote, Decimal) {
         let (reserve_a, reserve_b) = self.reserves();
 
@@ -404,6 +405,36 @@ module slamm::omm {
         }
     }
 
+    fun get_updated_references<A, B, W: drop>(
+        self: &Pool<A, B, Hook<W>, State>,
+        clock: &Clock,
+    ): (Decimal, Decimal) {
+        let state = self.inner();
+        let time_elapsed = clock.timestamp_ms() - state.last_trade_ts;
+
+        // Ths is kept here to make it more readable
+        if (time_elapsed < state.filter_period) {
+            return (self.inner().reference_price, self.inner().ema.reference_val)
+        };
+
+        if (time_elapsed >= state.filter_period && time_elapsed <= state.decay_period) {
+            let reduction_factor = self.inner().ema.reduction_factor;
+            let vol_accumulated = self.inner().ema.accumulator;
+
+            let reference_val = vol_accumulated.mul(reduction_factor);
+            let reference_price = new_instant_price_oracle(self);
+            return (reference_price, reference_val)
+        };
+
+        if (time_elapsed > state.decay_period) {
+            let reference_val = decimal::from(0);
+            let reference_price = new_instant_price_oracle(self);
+            return (reference_price, reference_val)
+        };
+
+        return (self.inner().reference_price, self.inner().ema.reference_val)
+    }
+
     fun set_reference_price<A, B, W: drop>(
         self: &mut Pool<A, B, Hook<W>, State>,
     ) {
@@ -432,11 +463,10 @@ module slamm::omm {
         new_price_internal: Decimal,
         new_price_oracle: Decimal,
     ): Decimal {
-        let price_diff_rate = compute_price_diff_rate(reference_price, new_price_internal);
-        // let price_diff_rate = decimal::max(
-        //     compute_price_diff_rate(reference_price, new_price_internal),
-        //     compute_price_diff_rate(reference_price, new_price_oracle)
-        // );
+        let price_diff_rate = decimal::max(
+            compute_price_diff_rate(reference_price, new_price_internal),
+            compute_price_diff_rate(reference_price, new_price_oracle)
+        );
 
         reference_vol.add(price_diff_rate)
     }
@@ -520,6 +550,13 @@ module slamm::omm {
 
     #[test]
     fun test_vol_accumulator() {
+        assert_eq(
+            compute_price_diff_rate(
+                decimal::from(4), decimal::from(2)
+            ),
+            decimal::from_scaled_val(666666666666666666) // 66%..
+        );
+
         let vol_acc = new_volatility_accumulator_(
             decimal::from(4),
             decimal::from_percent(20), // reference_vol = 20%
@@ -527,7 +564,14 @@ module slamm::omm {
             decimal::from(3),
         );
 
-        assert_eq(vol_acc, decimal::from_percent(70));
+        assert_eq(vol_acc, decimal::from_scaled_val(866666666666666666)); // 20% + 66%
+
+        assert_eq(
+            compute_price_diff_rate(
+                decimal::from(4), decimal::from(3)
+            ),
+            decimal::from_scaled_val(285714285714285714) // 28.57%..
+        );
         
         let vol_acc = new_volatility_accumulator_(
             decimal::from(4),
@@ -536,7 +580,7 @@ module slamm::omm {
             decimal::from(3),
         );
 
-        assert_eq(vol_acc, decimal::from_percent(45));
+        assert_eq(vol_acc, decimal::from_scaled_val(485714285714285714));
     }
     
     #[test]
@@ -559,14 +603,24 @@ module slamm::omm {
     #[test]
     fun test_compute_price_diff() {
 
+        // Relative Deviation = (1.50 - 1) / 1.25 = 40%
         assert_eq(
             compute_price_diff_rate(
-                decimal::from(2), decimal::from_scaled_val(1_209759016004012000)
+                decimal::from(1), decimal::from(15).div(decimal::from(10))
             ),
-            decimal::from_scaled_val(395120491997994000) // 0.39..
+            decimal::from_scaled_val(400000000000000000) // 40%..
         );
-
-        // TODO: test assymetry
+        
+        // Relative Deviation = (0.667 - 1) / 0.833 = 40%
+        // Where 0.667 = 1 / 1.5, in other words the inverse price
+        assert_eq(
+            compute_price_diff_rate(
+                decimal::from(1), decimal::from(1).div(
+                    decimal::from(15).div(decimal::from(10)
+                ))
+            ),
+            decimal::from_scaled_val(400000000000000000) // 40%..
+        );
     }
     
     #[test]
