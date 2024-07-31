@@ -2,6 +2,7 @@
 module slamm::test_utils {
     use slamm::cpmm::{Self, State as CpmmState, Hook as CpmmHook};
     use slamm::registry;
+    use slamm::omm::{Self, Hook as OmmHook, State as OmmState};
     use slamm::bank::{Self, Bank};
     use slamm::pool::{Pool};
     use sui::test_utils::destroy;
@@ -76,6 +77,13 @@ module slamm::test_utils {
         (pool, bank_a, bank_b)
     }
 
+    #[test_only]
+    public fun set_clock_time(
+        clock: &mut Clock,
+    ) {
+        clock.set_for_testing(1704067200000); //2024-01-01 00:00:00
+    }
+    
     #[test_only]
     public fun get_price_info(
         idx: u8,
@@ -160,7 +168,7 @@ module slamm::test_utils {
         price_info_obj
     }
 
-    public fun update_price(price_info_obj: &mut PriceInfoObject, price: u64, expo: u8, clock: &Clock) {
+    public fun update_pyth_price(price_info_obj: &mut PriceInfoObject, price: u64, expo: u8, clock: &Clock) {
         let price_info = price_info::get_price_info_from_price_info_object(price_info_obj);
 
         let price = price::new(
@@ -183,5 +191,35 @@ module slamm::test_utils {
             )
         );
         
+    }
+
+    public fun update_pool_oracle_price_ahead_of_trade<A, B, W: drop>(
+        pool: &mut Pool<A, B, OmmHook<W>, OmmState>,
+        amount_in: u64,
+        a2b: bool,
+        clock: &mut Clock,
+    ) {
+        let (quote, _, _, _) = omm::quote_swap_for_testing(
+            pool,
+            amount_in,
+            a2b, // a2b,
+            clock,
+        );
+
+        bump_clock(clock, 1); // 1 seconds
+
+        let a = pool.reserve_a() - quote.amount_out();
+        let b = pool.reserve_b() + quote.amount_in();
+        omm::set_oracle_price_as_hypothetical_internal_reserves(
+            pool,
+            a,
+            b,
+            clock,
+        );
+    }
+    
+    public fun bump_clock(clock: &mut Clock, seconds: u64) {
+        let new_ts = clock.timestamp_ms() + (1000 * seconds); // 1 second * X
+        clock.set_for_testing(new_ts);
     }
 }
