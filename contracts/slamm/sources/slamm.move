@@ -1227,4 +1227,27 @@ module slamm::pool {
             min_b,
         )
     }
+    
+    #[test_only]
+    public(package)fun to_quote(
+        result: SwapResult,
+    ): SwapQuote {
+        let SwapResult {
+            user: _,
+            pool_id: _,
+            amount_in,
+            amount_out,
+            input_fees,
+            output_fees,
+            a2b,
+        } = result;
+
+        quote::quote_for_testing(
+            amount_in,
+            amount_out,
+            input_fees,
+            output_fees,
+            a2b,
+        )
+    }
 }

@@ -1,6 +1,6 @@
 /// Oracle AMM Hook implementation
 module slamm::omm {
-    use std::debug::print;
+    // use std::debug::print;
     use sui::coin::Coin;
     use sui::clock::{Self, Clock};
     use slamm::global_admin::GlobalAdmin;
@@ -242,7 +242,7 @@ module slamm::omm {
             new_instant_price_oracle
         );
 
-        let variable_fee = vol_accumulator.pow(2).mul(self.inner().fee_control).div(decimal::from(100)); // TODO: control for bps
+        let variable_fee = vol_accumulator.pow(2).mul(self.inner().fee_control).div(decimal::from(100));
 
         let total_variable_fee = decimal::from(quote.amount_out()).mul(variable_fee).ceil();
         let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees().fee_ratio();
@@ -444,15 +444,6 @@ module slamm::omm {
             compute_price_diff_rate(reference_price, new_price_internal),
             compute_price_diff_rate(reference_price, new_price_oracle)
         );
-
-        // Who gets to 363875575973427048
-        // who gets to 364435885607926950
-        // print(&@0x11);
-        // print(&new_price_internal);
-        // print(&new_price_oracle);
-        // print(&compute_price_diff_rate(reference_price, new_price_internal));
-        // print(&compute_price_diff_rate(reference_price, new_price_oracle));
-        // print(&@0x22);
 
         reference_vol.add(price_diff_rate)
     }

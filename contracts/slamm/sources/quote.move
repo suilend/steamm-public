@@ -1,6 +1,7 @@
 /// Module for informative structs which provide the input/outputs of a given quotation.
 module slamm::quote {
     use std::option::{some, none};
+    use suilend::decimal::{Self, Decimal};
 
     public use fun slamm::pool::as_intent as SwapQuote.as_intent;
     public use fun slamm::quote::swap_input_amount_in_net as SwapInputs.amount_in_net;
@@ -206,6 +207,22 @@ module slamm::quote {
 
         self.amount_out - protocol_fees
     }
+    
+    public fun output_fee_rate(self: &SwapQuote): Decimal {
+        let total_fees = decimal::from(
+            self.output_fees().borrow().pool_fees() + self.output_fees().borrow().protocol_fees()
+        );
+
+        total_fees.div(decimal::from(self.amount_out()))
+    }
+    
+    public fun input_fee_rate(self: &SwapQuote): Decimal {
+        let total_fees = decimal::from(
+            self.input_fees().borrow().pool_fees() + self.input_fees().borrow().protocol_fees()
+        );
+
+        total_fees.div(decimal::from(self.amount_out()))
+    }
 
     public fun input_fees(self: &SwapQuote): &Option<SwapFee> { &self.input_fees }
     public fun output_fees(self: &SwapQuote): &Option<SwapFee> { &self.output_fees }
@@ -218,4 +235,22 @@ module slamm::quote {
     public fun withdraw_a(self: &RedeemQuote): u64 { self.withdraw_a }
     public fun withdraw_b(self: &RedeemQuote): u64 { self.withdraw_b }
     public fun burn_lp(self: &RedeemQuote): u64 { self.burn_lp }
+
+
+    #[test_only]
+    public(package) fun quote_for_testing(
+        amount_in: u64,
+        amount_out: u64,
+        input_fees: Option<SwapFee>,
+        output_fees: Option<SwapFee>,
+        a2b: bool,
+    ): SwapQuote {
+        SwapQuote {
+            amount_in,
+            amount_out,
+            input_fees,
+            output_fees,
+            a2b,
+        }
+    }
 }

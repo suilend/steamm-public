@@ -43,16 +43,6 @@ module slamm::fees {
         }
     }
     
-    // public(package) fun new_(
-    //     swap_fee_numerator: u64,
-    //     swap_fee_denominator: u64,
-    // ): FeeConfig {
-    //     FeeConfig {
-    //         swap_fee_numerator,
-    //         swap_fee_denominator,
-    //     }
-    // }
-    
     public fun fee_ratio<A, B>(
         self: &Fees<A, B>,
     ): (u64, u64) {
@@ -93,7 +83,6 @@ module slamm::fees {
 
     public(package) fun fee_b_mut<A, B>(self: &mut Fees<A, B>,): &mut FeeReserve<B> { &mut self.fee_b }
     public(package) fun fee_a_mut<A, B>(self: &mut Fees<A, B>,): &mut FeeReserve<A> { &mut self.fee_a }
-    
     public(package) fun fee_muts<A, B>(self: &mut Fees<A, B>,): (&mut FeeReserve<A>, &mut FeeReserve<B>) { (&mut self.fee_a, &mut self.fee_b) }
 
     // ===== View Functions =====
