@@ -160,7 +160,6 @@ module slamm::omm {
         a2b: bool,
         clock: &Clock,
     ): Intent<A, B, Hook<W>> {
-        self.inner().assert_price_is_fresh(clock);
         self.inner_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
 
         // // Update price and vol reference depending on timespan ellapsed
@@ -216,6 +215,7 @@ module slamm::omm {
         a2b: bool,
         clock: &Clock,
     ): (SwapQuote, Decimal, Decimal, Decimal) {
+        self.inner().assert_price_is_fresh(clock);
         let (reserve_a, reserve_b) = self.reserves();
 
         // Update price and vol reference depending on timespan ellapsed
@@ -354,15 +354,16 @@ module slamm::omm {
 
     public fun price_info_a(self: &State): &PriceInfo { &self.price_info_a }
     public fun price_info_b(self: &State): &PriceInfo { &self.price_info_b }
-    public fun reference_val(self: &State): Decimal { self.ema.reference_val }
-    public fun accumulator(self: &State): Decimal { self.ema.accumulator }
+    public fun ema(self: &State): &Ema { &self.ema }
+    public fun reference_val(self: &Ema): Decimal { self.reference_val }
+    public fun accumulator(self: &Ema): Decimal { self.accumulator }
+    public fun reduction_factor(self: &Ema): Decimal { self.reduction_factor }
+    public fun max_accumulator(self: &Ema): Decimal { self.max_accumulator }
     public fun reference_price(self: &State): Decimal { self.reference_price }
     public fun last_trade_ts(self: &State): u64 { self.last_trade_ts }
     public fun filter_period(self: &State): u64 { self.filter_period }
     public fun decay_period(self: &State): u64 { self.decay_period }
     public fun fee_control(self: &State): Decimal { self.fee_control }
-    public fun reduction_factor(self: &State): Decimal { self.fee_control }
-    public fun max_vol_accumulated(self: &State): Decimal { self.fee_control }
 
     // ===== Assert Functions =====
 
@@ -372,6 +373,7 @@ module slamm::omm {
         clock: &Clock,
     ) {
         let cur_time_s = clock::timestamp_ms(clock) / 1000;
+
         assert!(
             cur_time_s - self.price_info_a.price_last_update_timestamp_s <= PRICE_STALENESS_THRESHOLD_S, 
             EPriceStale
@@ -442,6 +444,15 @@ module slamm::omm {
             compute_price_diff_rate(reference_price, new_price_internal),
             compute_price_diff_rate(reference_price, new_price_oracle)
         );
+
+        // Who gets to 363875575973427048
+        // who gets to 364435885607926950
+        // print(&@0x11);
+        // print(&new_price_internal);
+        // print(&new_price_oracle);
+        // print(&compute_price_diff_rate(reference_price, new_price_internal));
+        // print(&compute_price_diff_rate(reference_price, new_price_oracle));
+        // print(&@0x22);
 
         reference_vol.add(price_diff_rate)
     }
@@ -520,6 +531,31 @@ module slamm::omm {
             clock,
         )
 
+    }
+    
+    #[test_only]
+    public(package) fun set_oracle_price_as_hypothetical_internal_reserves<A, B, W: drop>(
+        self: &mut Pool<A, B, Hook<W>, State>,
+        reserve_a: u64,
+        reserve_b: u64,
+        clock: &Clock,
+    ) {
+        self.inner_mut().price_info_a.price = decimal::from(reserve_a);
+        self.inner_mut().price_info_a.smoothed_price = decimal::from(reserve_a);
+        self.inner_mut().price_info_b.price = decimal::from(reserve_b);
+        self.inner_mut().price_info_b.smoothed_price = decimal::from(reserve_b);
+        self.inner_mut().price_info_b.price_last_update_timestamp_s = clock.timestamp_ms() / 1_000;
+        self.inner_mut().price_info_a.price_last_update_timestamp_s = clock.timestamp_ms() / 1_000;
+    }
+    
+    #[test_only]
+    public(package) fun set_oracle_price_as_internal_for_testing<A, B, W: drop>(
+        self: &mut Pool<A, B, Hook<W>, State>,
+        clock: &Clock,
+    ) {
+        let reserve_a = self.reserve_a();
+        let reserve_b = self.reserve_b();
+        set_oracle_price_as_hypothetical_internal_reserves(self, reserve_a, reserve_b, clock)
     }
     
     #[test_only]
