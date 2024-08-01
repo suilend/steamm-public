@@ -13,6 +13,7 @@ module slamm::test_utils {
     use std::type_name;
     use suilend::test_usdc::{TEST_USDC};
     use suilend::test_sui::{TEST_SUI};
+    use suilend::decimal::{Self, Decimal};
     use suilend::lending_market;
     use pyth::price_info::{Self, PriceInfoObject};
     use pyth::price_feed;
@@ -197,19 +198,20 @@ module slamm::test_utils {
         pool: &mut Pool<A, B, OmmHook<W>, OmmState>,
         amount_in: u64,
         a2b: bool,
+        clock_bump: u64,
         clock: &mut Clock,
     ) {
-        let (quote, _, _, _) = omm::quote_swap_for_testing(
+        let (quote, _, _, _, _) = omm::quote_swap_for_testing(
             pool,
             amount_in,
             a2b, // a2b,
-            clock,
+            clock.timestamp_ms() + clock_bump,
         );
 
-        bump_clock(clock, 1); // 1 seconds
+        bump_clock(clock, clock_bump);
 
-        let a = pool.reserve_a() - quote.amount_out();
-        let b = pool.reserve_b() + quote.amount_in();
+        let a = if (a2b) {pool.reserve_a() + quote.amount_in()} else {pool.reserve_a() - quote.amount_out()};
+        let b = if (a2b) {pool.reserve_b() - quote.amount_out()} else {pool.reserve_b() + quote.amount_in()};
         omm::set_oracle_price_as_hypothetical_internal_reserves(
             pool,
             a,
