@@ -1,6 +1,6 @@
 /// Oracle AMM Hook implementation
 module slamm::omm {
-    use std::debug::print;
+    // use std::debug::print;
     use sui::coin::Coin;
     use sui::clock::{Self, Clock};
     use slamm::global_admin::GlobalAdmin;
@@ -423,7 +423,6 @@ module slamm::omm {
         };
 
         if (time_elapsed > state.decay_period) {
-            print(&@0x222);
             let reference_val = decimal::from(0);
             let reference_price = new_instant_price_oracle(self);
             return (reference_price, reference_val, current_ms)
