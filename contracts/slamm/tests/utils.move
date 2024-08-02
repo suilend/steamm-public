@@ -13,7 +13,6 @@ module slamm::test_utils {
     use std::type_name;
     use suilend::test_usdc::{TEST_USDC};
     use suilend::test_sui::{TEST_SUI};
-    use suilend::decimal::{Self, Decimal};
     use suilend::lending_market;
     use pyth::price_info::{Self, PriceInfoObject};
     use pyth::price_feed;

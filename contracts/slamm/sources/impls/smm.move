@@ -138,14 +138,15 @@ module slamm::smm {
         amount_in: u64,
         a2b: bool,
     ): SwapQuote {
-        let inputs = self.compute_fees_on_input(amount_in);
+        let amount_out = amount_in;
 
-        let amount_out = inputs.amount_in_net();
+        let output = self.compute_fees_on_output(amount_out);
 
-        inputs.to_quote(
-            amount_out,
+        output.to_quote(
+            amount_in,
             a2b,
         )
+
     }
     
     // ===== View Functions =====

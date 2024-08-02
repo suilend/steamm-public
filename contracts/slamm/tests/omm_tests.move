@@ -245,12 +245,13 @@ module slamm::omm_tests {
                 clock.timestamp_ms(),
             );
 
+            // TODO: use fee rate method
             let fee_rate = decimal::from(
-                quote.output_fees().borrow().pool_fees()
+                quote.output_fees().pool_fees()
             )
             .add(
                 decimal::from(
-                    quote.output_fees().borrow().protocol_fees()
+                    quote.output_fees().protocol_fees()
                 )
             )
             .div(

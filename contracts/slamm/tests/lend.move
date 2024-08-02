@@ -310,12 +310,12 @@ module slamm::lend_tests {
         );
 
         let (reserve_a, reserve_b) = pool.reserves();
-        assert_eq(reserve_a, 549_900);
-        assert_eq(reserve_b, 454_960);
+        assert_eq(reserve_a, 550_000);
+        assert_eq(reserve_b, 454_910);
 
         assert_eq(bank_a.lent(), 400_000);
-        assert_eq(bank_a.reserve().value(), 149_900);
-        assert_eq(bank_b.reserve().value(), 454_960);
+        assert_eq(bank_a.reserve().value(), 150_000);
+        assert_eq(bank_b.reserve().value(), 454_910);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -649,14 +649,14 @@ module slamm::lend_tests {
 
 
         let (reserve_a, reserve_b) = pool.reserves();
-        assert_eq(reserve_a, 549_900);
-        assert_eq(reserve_b, 454_960);
+        assert_eq(reserve_a, 550_000);
+        assert_eq(reserve_b, 454_910);
 
         assert_eq(bank_a.lent(), 400_000);
-        assert_eq(bank_a.reserve().value(), 149_900);
+        assert_eq(bank_a.reserve().value(), 150_000);
         
         assert_eq(bank_b.lent(), 400_000);
-        assert_eq(bank_b.reserve().value(), 54_960);
+        assert_eq(bank_b.reserve().value(), 54_910);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -785,14 +785,15 @@ module slamm::lend_tests {
         );
 
         let (reserve_a, reserve_b) = pool.reserves();
-        assert_eq(reserve_a, 699_600);
-        assert_eq(reserve_b, 358_167);
+        assert_eq(reserve_a, 700_000);
+        assert_eq(reserve_b, 358_286);
+        assert_eq(reserve_b + pool.protocol_fees().fee_b().acc_fees(), 358_571);
 
         assert_eq(bank_a.lent(), 400_000);
-        assert_eq(bank_a.reserve().value(), 299_600);
+        assert_eq(bank_a.reserve().value(), 300_000);
         
-        assert_eq(bank_b.lent(), 286_534);
-        assert_eq(bank_b.reserve().value(), 71_633);
+        assert_eq(bank_b.lent(), 286_629);
+        assert_eq(bank_b.reserve().value(), 71_657);
 
         destroy(coin_a);
         destroy(coin_b);

@@ -15,7 +15,7 @@ module slamm::pool {
     use slamm::math::{safe_mul_div_u64};
     use slamm::global_admin::GlobalAdmin;
     use slamm::fees::{Self, Fees, FeeReserve};
-    use slamm::quote::{Self, SwapQuote, SwapFee, DepositQuote, RedeemQuote, SwapInputs, SwapOutputs, swap_inputs, swap_outputs};
+    use slamm::quote::{Self, SwapQuote, SwapFee, DepositQuote, RedeemQuote, SwapOutputs, swap_outputs};
     use slamm::bank::{Bank};
 
     use suilend::lending_market::{LendingMarket};
@@ -277,9 +277,6 @@ module slamm::pool {
                 &mut self.reserve_a, // reserve_in
                 coin_a, // coin_in
                 &mut self.trading_data.swap_a_in_amount, // swap_in_amount
-                protocol_fee_a, // protocol_fees
-                pool_fee_a, // pool_fees
-
                 // Outputs
                 protocol_fee_b, // protocol_fees
                 pool_fee_b, // pool_fees
@@ -295,9 +292,6 @@ module slamm::pool {
                 &mut self.reserve_b, // reserve_in
                 coin_b, // coin_in
                 &mut self.trading_data.swap_b_in_amount, // swap_in_amount
-                protocol_fee_b, // protocol_fees
-                pool_fee_b, // pool_fees
-
                 // Outputs
                 protocol_fee_a, // protocol_fees
                 pool_fee_a, // pool_fees
@@ -314,7 +308,6 @@ module slamm::pool {
             pool_id: object::id(self),
             amount_in: quote.amount_in(),
             amount_out: quote.amount_out(),
-            input_fees: *quote.input_fees(),
             output_fees: *quote.output_fees(),
             a2b: quote.a2b(),
         };
@@ -578,14 +571,14 @@ module slamm::pool {
         if (intent.quote.a2b()) {
             bank_b.provision(
                 lending_market,
-                intent.quote.amount_out(),
+                intent.quote.amount_out_net_of_pool_fees(), // output amount - pool fees
                 clock,
                 ctx
             );
         } else {
             bank_a.provision(
                 lending_market,
-                intent.quote.amount_out(),
+                intent.quote.amount_out_net_of_pool_fees(),
                 clock,
                 ctx
             );
@@ -639,12 +632,6 @@ module slamm::pool {
     public fun minimum_liquidity(): u64 { MINIMUM_LIQUIDITY }
 
     // ===== Package functions =====
-
-    public(package) fun compute_fees_on_input<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, amount_in: u64): SwapInputs {
-        let (net_amount_in, protocol_fees, pool_fees) = self.compute_fees_(amount_in);
-
-        swap_inputs(net_amount_in, protocol_fees, pool_fees)
-    }
 
     public(package) fun compute_fees_on_output<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, amount_out: u64): SwapOutputs {
         let (net_amount_out, protocol_fees, pool_fees) = self.compute_fees_(amount_out);
@@ -757,8 +744,6 @@ module slamm::pool {
         reserve_in: &mut Reserve<In>,
         coin_in: &mut Coin<In>,
         swap_in_amount: &mut u128,
-        input_protocol_fees: &mut FeeReserve<In>,
-        input_pool_fees: &mut FeeReserve<In>,
         output_protocol_fees: &mut FeeReserve<Out>,
         output_pool_fees: &mut FeeReserve<Out>,
         bank_out: &mut Bank<Out>,
@@ -769,24 +754,15 @@ module slamm::pool {
         assert!(quote.amount_out() < reserve_out.0, EOutputExceedsLiquidity);
         assert!(coin_in.value() >= quote.amount_in(), EInsufficientFunds);
 
-        let mut balance_in = coin_in.balance_mut().split(quote.amount_in());
-
-        // Input fees
-        if (quote.input_fees().is_some()) {
-            // Transfers input protocol fees in
-            input_protocol_fees.deposit(balance_in.split(quote.input_fees().borrow().protocol_fees()));
-            
-            // Account input pool fees in
-            input_pool_fees.register_fee(quote.input_fees().borrow().pool_fees());
-        };
+        let balance_in = coin_in.balance_mut().split(quote.amount_in());
 
         // Transfers amount in
         reserve_in.deposit(bank_in, balance_in);
         
         // Transfers amount out - post fees if any
-        let out_fees = if (quote.output_fees().is_some()) {
-            let out_protocol_fees = quote.output_fees().borrow().protocol_fees();
-            let out_pool_fees = quote.output_fees().borrow().pool_fees();
+        let out_fees = {
+            let out_protocol_fees = quote.output_fees().protocol_fees();
+            let out_pool_fees = quote.output_fees().pool_fees();
 
             output_protocol_fees.deposit(
                 reserve_out.withdraw(bank_out, out_protocol_fees)
@@ -796,7 +772,7 @@ module slamm::pool {
             output_pool_fees.register_fee(out_pool_fees);
             
             out_protocol_fees + out_pool_fees
-        } else { 0 };
+        };
 
         let net_output = quote.amount_out() - out_fees;
 
@@ -992,8 +968,7 @@ module slamm::pool {
         pool_id: ID,
         amount_in: u64,
         amount_out: u64,
-        input_fees: Option<SwapFee>,
-        output_fees: Option<SwapFee>,
+        output_fees: SwapFee,
         a2b: bool,
     }
     
@@ -1017,11 +992,8 @@ module slamm::pool {
     public use fun swap_result_pool_id as SwapResult.pool_id;
     public use fun swap_result_amount_in as SwapResult.amount_in;
     public use fun swap_result_amount_out as SwapResult.amount_out;
-    public use fun swap_result_net_amount_in as SwapResult.net_amount_in;
-    public use fun swap_result_input_protocol_fees as SwapResult.input_protocol_fees;
-    public use fun swap_result_input_pool_fees as SwapResult.input_pool_fees;
-    public use fun swap_result_output_protocol_fees as SwapResult.output_protocol_fees;
-    public use fun swap_result_output_pool_fees as SwapResult.output_pool_fees;
+    public use fun swap_result_protocol_fees as SwapResult.protocol_fees;
+    public use fun swap_result_pool_fees as SwapResult.pool_fees;
     public use fun swap_result_a2b as SwapResult.a2b;
 
     public use fun deposit_result_user as DepositResult.user;
@@ -1040,47 +1012,13 @@ module slamm::pool {
     public fun swap_result_pool_id(self: &SwapResult): ID { self.pool_id }
     public fun swap_result_amount_in(self: &SwapResult): u64 { self.amount_in }
     public fun swap_result_amount_out(self: &SwapResult): u64 { self.amount_out }
-    public fun swap_result_net_amount_in(self: &SwapResult): u64 {
-        let (protocol_fees, pool_fees) = if (self.input_fees.is_some()) {
-            (self.input_fees.borrow().protocol_fees(), self.input_fees.borrow().pool_fees())
-        } else {
-            (0, 0)
-        };
 
-        self.amount_in - protocol_fees - pool_fees
+    public fun swap_result_protocol_fees(self: &SwapResult): u64 {
+        self.output_fees.protocol_fees()
     }
 
-
-    public fun swap_result_input_protocol_fees(self: &SwapResult): u64 {
-        if (self.input_fees.is_some()) {
-            self.input_fees.borrow().protocol_fees()
-        } else {
-            0
-        }
-    }
-
-    public fun swap_result_input_pool_fees(self: &SwapResult): u64 {
-        if (self.input_fees.is_some()) {
-            self.input_fees.borrow().pool_fees()
-        } else {
-            0
-        }
-    }
-
-    public fun swap_result_output_protocol_fees(self: &SwapResult): u64 {
-        if (self.output_fees.is_some()) {
-            self.output_fees.borrow().protocol_fees()
-        } else {
-            0
-        }
-    }
-
-    public fun swap_result_output_pool_fees(self: &SwapResult): u64 {
-        if (self.output_fees.is_some()) {
-            self.output_fees.borrow().pool_fees()
-        } else {
-            0
-        }
+    public fun swap_result_pool_fees(self: &SwapResult): u64 {
+        self.output_fees.pool_fees()
     }
 
     public fun swap_result_a2b(self: &SwapResult): bool { self.a2b }
@@ -1237,7 +1175,6 @@ module slamm::pool {
             pool_id: _,
             amount_in,
             amount_out,
-            input_fees,
             output_fees,
             a2b,
         } = result;
@@ -1245,7 +1182,6 @@ module slamm::pool {
         quote::quote_for_testing(
             amount_in,
             amount_out,
-            input_fees,
             output_fees,
             a2b,
         )

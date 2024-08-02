@@ -285,13 +285,13 @@ module slamm::omm {
     ): Decimal {
         let (a, b) = if (quote.a2b()) {
             (
-                self.reserve_a() + quote.amount_in_net_of_protocol_fees(),
+                self.reserve_a() + quote.amount_in(),
                 self.reserve_b() - quote.amount_out_net_of_protocol_fees()
             )
         } else {
             (
                 self.reserve_a() - quote.amount_out_net_of_protocol_fees(),
-                self.reserve_b() + quote.amount_in_net_of_protocol_fees(),
+                self.reserve_b() + quote.amount_in(),
             )
         };
 

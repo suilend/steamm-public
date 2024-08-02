@@ -155,9 +155,9 @@ module slamm::slamm_tests {
         );
 
         assert_eq(swap_result.a2b(), true);
-        assert_eq(swap_result.input_pool_fees(), 400);
-        assert_eq(swap_result.input_protocol_fees(), 100);
-        assert_eq(swap_result.amount_out(), 45040);
+        assert_eq(swap_result.pool_fees(), 364);
+        assert_eq(swap_result.protocol_fees(), 90);
+        assert_eq(swap_result.amount_out(), 45_454);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -180,8 +180,8 @@ module slamm::slamm_tests {
         let (reserve_a, reserve_b) = pool.reserves();
 
         // Guarantees that roundings are in favour of the pool
-        assert_eq(coin_a.value(), 549_889);
-        assert_eq(coin_b.value(), 454_950);
+        assert_eq(coin_a.value(), 549_989);
+        assert_eq(coin_b.value(), 454_900);
         assert_eq(reserve_a, 11);
         assert_eq(reserve_b, 10);
         assert_eq(pool.lp_supply_val(), minimum_liquidity());
@@ -193,15 +193,15 @@ module slamm::slamm_tests {
         let global_admin = global_admin::init_for_testing(ctx);
         let (coin_a, coin_b) = pool.collect_protocol_fees(&global_admin, ctx);
 
-        assert_eq(coin_a.value(), 100);
-        assert_eq(coin_b.value(), 0);
-        assert_eq(pool.protocol_fees().fee_a().acc_fees(), 100);
-        assert_eq(pool.protocol_fees().fee_b().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 400);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(coin_a.value(), 0);
+        assert_eq(coin_b.value(), 90);
+        assert_eq(pool.protocol_fees().fee_a().acc_fees(), 0);
+        assert_eq(pool.protocol_fees().fee_b().acc_fees(), 90);
+        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
+        assert_eq(pool.pool_fees().fee_b().acc_fees(), 364);
         
         assert_eq(pool.trading_data().total_swap_a_in_amount(), 50_000);
-        assert_eq(pool.trading_data().total_swap_b_out_amount(), 45040);
+        assert_eq(pool.trading_data().total_swap_b_out_amount(), 45_454);
         assert_eq(pool.trading_data().total_swap_a_out_amount(), 0);
         assert_eq(pool.trading_data().total_swap_b_in_amount(), 0);
 
@@ -351,10 +351,16 @@ module slamm::slamm_tests {
             ctx,
         );
 
+        // amount in:    200000000000
+        // fees:        2000000000
+        // amount out: 83333333333265
+
+        // fees: 666666666666 + 166666666666
+
         assert_eq(swap_result.a2b(), true);
-        assert_eq(swap_result.input_pool_fees(), 1600000000);
-        assert_eq(swap_result.input_protocol_fees(), 400000000);
-        assert_eq(swap_result.amount_out(), 82637729549181);
+        assert_eq(swap_result.amount_out(), 83333333333265);
+        assert_eq(swap_result.pool_fees(), 666666666666);
+        assert_eq(swap_result.protocol_fees(), 166666666666);
 
         destroy(registry);
         destroy(coin_a);
@@ -509,10 +515,10 @@ module slamm::slamm_tests {
             ctx,
         );
 
-        assert_eq(swap_result.amount_out(), 499999999999949);
+        assert_eq(swap_result.amount_out(), 499999999999950);
         assert_eq(swap_result.amount_in(), 10000000000000);
-        assert_eq(swap_result.input_protocol_fees(), 20000000000);
-        assert_eq(swap_result.input_pool_fees(), 80000000000);
+        assert_eq(swap_result.protocol_fees(), 999999999999);
+        assert_eq(swap_result.pool_fees(), 4000000000000);
         assert_eq(swap_result.a2b(), false);
 
         destroy(coin_a);
@@ -1299,8 +1305,8 @@ module slamm::slamm_tests {
         destroy(coin_b);
 
         // Swap first pool
-        let expected_pool_fees = 8_000_000_000_000;
-        let expected_protocol_fees = 2_000_000_000_000;
+        let expected_pool_fees = 7_920_792_079_208;
+        let expected_protocol_fees = 1_980_198_019_801;
 
         test_scenario::next_tx(&mut scenario, TRADER);
         let ctx = ctx(&mut scenario);
@@ -1320,8 +1326,8 @@ module slamm::slamm_tests {
         );
 
         assert_eq(swap_result.a2b(), true);
-        assert_eq(swap_result.input_pool_fees(), expected_pool_fees);
-        assert_eq(swap_result.input_protocol_fees(), expected_protocol_fees);
+        assert_eq(swap_result.pool_fees(), expected_pool_fees);
+        assert_eq(swap_result.protocol_fees(), expected_protocol_fees);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -1333,7 +1339,7 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000_000), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        let mut len = 100;
+        let mut len = 1000;
 
         let mut acc_protocol_fees = 0;
         let mut acc_pool_fees = 0;
@@ -1344,20 +1350,22 @@ module slamm::slamm_tests {
                 &mut bank_b,
                 &mut coin_a,
                 &mut coin_b,
-                e9(10_000),
+                e9(10_00),
                 0,
                 true, // a2b
                 ctx,
             );
 
-            acc_protocol_fees = acc_protocol_fees + swap_result.input_protocol_fees();
-            acc_pool_fees = acc_pool_fees + swap_result.input_pool_fees();
+            acc_protocol_fees = acc_protocol_fees + swap_result.protocol_fees();
+            acc_pool_fees = acc_pool_fees + swap_result.pool_fees();
 
             len = len - 1;
         };
 
-        assert_eq(acc_protocol_fees, expected_protocol_fees);
-        assert_eq(acc_pool_fees, expected_pool_fees);
+        // Assert that cumulative fees from small swaps are not smaller
+        // than a bigger swap
+        assert!(acc_protocol_fees >= expected_protocol_fees, 0);
+        assert!(acc_pool_fees >= expected_pool_fees, 0);
 
         destroy(coin_a);
         destroy(coin_b);

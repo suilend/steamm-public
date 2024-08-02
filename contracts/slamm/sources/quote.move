@@ -1,22 +1,9 @@
 /// Module for informative structs which provide the input/outputs of a given quotation.
 module slamm::quote {
-    use std::option::{some, none};
     use suilend::decimal::{Self, Decimal};
 
     public use fun slamm::pool::as_intent as SwapQuote.as_intent;
-    public use fun slamm::quote::swap_input_amount_in_net as SwapInputs.amount_in_net;
-    public use fun slamm::quote::swap_input_protocol_fees as SwapInputs.protocol_fees;
-    public use fun slamm::quote::swap_input_pool_fees as SwapInputs.pool_fees;
     public use fun slamm::pool::swap_inner as SwapQuote.swap_inner;
-    public use fun slamm::quote::swap_quote_from_input as SwapInputs.to_quote;
-    public use fun slamm::quote::swap_quote_from_output as SwapOutputs.to_quote;
-
-
-    public struct SwapInputs has drop {
-        amount_in_net: u64,
-        protocol_fees: u64,
-        pool_fees: u64,
-    }
     
     public struct SwapOutputs has drop {
         amount_out_net: u64,
@@ -27,8 +14,7 @@ module slamm::quote {
     public struct SwapQuote has store, drop {
         amount_in: u64,
         amount_out: u64,
-        input_fees: Option<SwapFee>,
-        output_fees: Option<SwapFee>,
+        output_fees: SwapFee,
         a2b: bool,
     }
 
@@ -51,18 +37,6 @@ module slamm::quote {
     }
 
     // ===== Package Methods =====
-
-    public(package) fun swap_inputs(
-        amount_in_net: u64,
-        protocol_fees: u64,
-        pool_fees: u64,
-    ): SwapInputs {
-        SwapInputs {
-            amount_in_net,
-            protocol_fees,
-            pool_fees,
-        }
-    }
     
     public(package) fun swap_outputs(
         amount_out_net: u64,
@@ -75,25 +49,8 @@ module slamm::quote {
             pool_fees,
         }
     }
-    
-    public(package) fun swap_quote_from_input(
-        swap_inputs: SwapInputs,
-        amount_out: u64,
-        a2b: bool,
-    ): SwapQuote {
-        SwapQuote {
-            amount_in: swap_inputs.amount_in_net + swap_inputs.protocol_fees + swap_inputs.pool_fees,
-            amount_out,
-            input_fees: some(SwapFee {
-                protocol_fees: swap_inputs.protocol_fees,
-                pool_fees: swap_inputs.pool_fees,
-            }),
-            output_fees: none(),
-            a2b,
-        }
-    }
 
-    public(package) fun swap_quote_from_output(
+    public(package) fun to_quote(
         swap_outputs: SwapOutputs,
         amount_in: u64,
         a2b: bool,
@@ -101,11 +58,11 @@ module slamm::quote {
         SwapQuote {
             amount_in: amount_in,
             amount_out: swap_outputs.amount_out_net + swap_outputs.protocol_fees + swap_outputs.pool_fees,
-            input_fees: none(),
-            output_fees: some(SwapFee {
+            // input_fees: none(),
+            output_fees: SwapFee {
                 protocol_fees: swap_outputs.protocol_fees,
                 pool_fees: swap_outputs.pool_fees,
-            }),
+            },
             a2b,
         }
     }
@@ -136,16 +93,13 @@ module slamm::quote {
         }
     }
 
-    // public(package) fun input_fees_mut(self: &mut SwapQuote): &mut SwapFee { &mut self.input_fees }
     public(package) fun add_output_fees(
         self: &mut SwapQuote,
         protocol_fees: u64,
         pool_fees: u64
     ) {
-        let out_fees = self.output_fees.borrow_mut();
-
-        out_fees.protocol_fees = out_fees.protocol_fees + protocol_fees;
-        out_fees.pool_fees = out_fees.pool_fees + pool_fees;
+        self.output_fees.protocol_fees = self.output_fees.protocol_fees + protocol_fees;
+        self.output_fees.pool_fees = self.output_fees.pool_fees + pool_fees;
     }
     
     public(package) fun add_protocol_fees(self: &SwapFee): u64 { self.protocol_fees }
@@ -157,75 +111,30 @@ module slamm::quote {
     public fun protocol_fees(self: &SwapFee): u64 { self.protocol_fees }
     public fun pool_fees(self: &SwapFee): u64 { self.pool_fees }
 
-    public fun swap_input_amount_in_net(self: &SwapInputs): u64 { self.amount_in_net }
-    public fun swap_input_protocol_fees(self: &SwapInputs): u64 { self.protocol_fees }
-    public fun swap_input_pool_fees(self: &SwapInputs): u64 { self.pool_fees }
-    
-    // public fun output_fees(self: &SwapQuote): &Option<SwapFee> { &self.output_fees }
-
-
     public fun amount_in(self: &SwapQuote): u64 { self.amount_in }
     public fun amount_out(self: &SwapQuote): u64 { self.amount_out }
     public fun a2b(self: &SwapQuote): bool { self.a2b }
     
-    public fun amount_in_net(self: &SwapQuote): u64 {
-        let (protocol_fees, pool_fees) = if (self.input_fees.is_some()) {
-            (self.input_fees.borrow().protocol_fees, self.input_fees.borrow().pool_fees)
-        } else {
-            (0, 0)
-        };
-
-        self.amount_in - protocol_fees - pool_fees
-    }
-    
     public fun amount_out_net(self: &SwapQuote): u64 {
-        let (protocol_fees, pool_fees) = if (self.output_fees.is_some()) {
-            (self.output_fees.borrow().protocol_fees, self.output_fees.borrow().pool_fees)
-        } else {
-            (0, 0)
-        };
-
-        self.amount_out - protocol_fees - pool_fees
+        self.amount_out - self.output_fees.protocol_fees - self.output_fees.pool_fees
     }
    
-    public fun amount_in_net_of_protocol_fees(self: &SwapQuote): u64 {
-        let protocol_fees = if (self.input_fees.is_some()) {
-            self.input_fees.borrow().protocol_fees
-        } else {
-            0
-        };
-
-        self.amount_in - protocol_fees
+    public fun amount_out_net_of_protocol_fees(self: &SwapQuote): u64 {
+        self.amount_out - self.output_fees.protocol_fees
     }
     
-    public fun amount_out_net_of_protocol_fees(self: &SwapQuote): u64 {
-        let protocol_fees = if (self.output_fees.is_some()) {
-            self.output_fees.borrow().protocol_fees
-        } else {
-            0
-        };
-
-        self.amount_out - protocol_fees
+    public fun amount_out_net_of_pool_fees(self: &SwapQuote): u64 {
+        self.amount_out - self.output_fees.pool_fees
     }
     
     public fun output_fee_rate(self: &SwapQuote): Decimal {
         let total_fees = decimal::from(
-            self.output_fees().borrow().pool_fees() + self.output_fees().borrow().protocol_fees()
+            self.output_fees().pool_fees() + self.output_fees().protocol_fees()
         );
 
         total_fees.div(decimal::from(self.amount_out()))
     }
-    
-    public fun input_fee_rate(self: &SwapQuote): Decimal {
-        let total_fees = decimal::from(
-            self.input_fees().borrow().pool_fees() + self.input_fees().borrow().protocol_fees()
-        );
-
-        total_fees.div(decimal::from(self.amount_out()))
-    }
-
-    public fun input_fees(self: &SwapQuote): &Option<SwapFee> { &self.input_fees }
-    public fun output_fees(self: &SwapQuote): &Option<SwapFee> { &self.output_fees }
+    public fun output_fees(self: &SwapQuote): &SwapFee { &self.output_fees }
     
     public fun initial_deposit(self: &DepositQuote): bool { self.initial_deposit }
     public fun deposit_a(self: &DepositQuote): u64 { self.deposit_a }
@@ -241,14 +150,13 @@ module slamm::quote {
     public(package) fun quote_for_testing(
         amount_in: u64,
         amount_out: u64,
-        input_fees: Option<SwapFee>,
-        output_fees: Option<SwapFee>,
+        output_fees: SwapFee,
         a2b: bool,
     ): SwapQuote {
         SwapQuote {
             amount_in,
             amount_out,
-            input_fees,
+            // input_fees,
             output_fees,
             a2b,
         }

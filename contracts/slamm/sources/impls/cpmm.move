@@ -140,17 +140,18 @@ module slamm::cpmm {
         a2b: bool,
     ): SwapQuote {
         let (reserve_a, reserve_b) = self.reserves();
-        let inputs = self.compute_fees_on_input(amount_in);
 
         let amount_out = quote_swap_impl(
             reserve_a,
             reserve_b,
-            inputs.amount_in_net(),
+            amount_in,
             a2b,
         );
 
-        inputs.to_quote(
-            amount_out,
+        let output = self.compute_fees_on_output(amount_out);
+
+        output.to_quote(
+            amount_in,
             a2b,
         )
     }
