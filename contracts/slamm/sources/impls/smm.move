@@ -7,6 +7,7 @@ module slamm::smm {
     use slamm::bank::Bank;
     use slamm::pool::{Self, Pool, PoolCap, SwapResult, Intent};
     use slamm::version::{Self, Version};
+    use suilend::decimal::{Self, Decimal};
 
     // ===== Constants =====
 
@@ -15,6 +16,7 @@ module slamm::smm {
     // ===== Errors =====
 
     const EInvariantViolation: u64 = 1;
+    const EInvalidReserveRatio: u64 = 2;
 
     /// Hook type for the constant-sum AMM implementation. Serves as both
     /// the hook's witness (authentication) as well as it wraps around the pool
@@ -31,6 +33,7 @@ module slamm::smm {
     /// Constant-Sum AMM specific state. We do not store the invariant,
     /// instead we compute it at runtime.
     public struct State has store {
+        reserve_ratio: Decimal,
         version: Version,
     }
 
@@ -40,9 +43,13 @@ module slamm::smm {
         _witness: W,
         registry: &mut Registry,
         swap_fee_bps: u64,
+        reserve_ratio_bps: u64,
         ctx: &mut TxContext,
     ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>>) {
-        let inner = State { version: version::new(CURRENT_VERSION) };
+        let inner = State {
+            version: version::new(CURRENT_VERSION),
+            reserve_ratio: decimal::from(reserve_ratio_bps).div(decimal::from(10_000)),
+        };
 
         let (pool, pool_cap) = pool::new<A, B, Hook<W>, State>(
             Hook<W> {},
@@ -125,13 +132,11 @@ module slamm::smm {
         );
 
         // Recompute invariant
+        assert_reserve_ratio(self);
         assert_invariant_does_not_decrease(self, k0);
 
         response
     }
-
-    // cpmm return price, take price that's best for LPs, on top we add dynamic fee
-    // fees should always be computed on the output amount;
 
     public fun quote_swap<A, B, W: drop>(
         self: &Pool<A, B, Hook<W>, State>,
@@ -146,8 +151,26 @@ module slamm::smm {
             amount_in,
             a2b,
         )
-
     }
+    
+    // ===== Assert Functions =====
+
+    fun check_reserve_ratio<A, B, W: drop>(
+        self: &Pool<A, B, Hook<W>, State>,
+    ): bool {
+        let a = decimal::from(self.reserve_a());
+        let b = decimal::from(self.reserve_b());
+        let ratio = self.inner().reserve_ratio;
+
+        !(a.div(b).le(ratio) && b.div(a).le(ratio))
+    }
+    
+    fun assert_reserve_ratio<A, B, W: drop>(
+        self: &Pool<A, B, Hook<W>, State>,
+    ) {
+        assert!(check_reserve_ratio(self), EInvalidReserveRatio);
+    }
+    
     
     // ===== View Functions =====
     
