@@ -12,7 +12,7 @@ module slamm::pool {
     use slamm::events::emit_event;
     use slamm::version::{Self, Version};
     use slamm::registry::{Registry};
-    use slamm::math::{safe_mul_div_u64};
+    use slamm::math::{safe_mul_div, safe_mul_div_up};
     use slamm::global_admin::GlobalAdmin;
     use slamm::fees::{Self, Fees, FeeReserve};
     use slamm::quote::{Self, SwapQuote, SwapFee, DepositQuote, RedeemQuote, SwapOutputs, swap_outputs};
@@ -643,8 +643,8 @@ module slamm::pool {
         let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees.fee_ratio();
         let (pool_fee_num, pool_fee_denom) = self.pool_fees.fee_ratio();
         
-        let total_fees = safe_mul_div_u64(amount, pool_fee_num, pool_fee_denom);
-        let protocol_fees = safe_mul_div_u64(total_fees, protocol_fee_num, protocol_fee_denom);
+        let total_fees = safe_mul_div_up(amount, pool_fee_num, pool_fee_denom);
+        let protocol_fees = safe_mul_div_up(total_fees, protocol_fee_num, protocol_fee_denom);
         let pool_fees = total_fees - protocol_fees;
         let net_amount = amount - protocol_fees - pool_fees;
 
@@ -766,7 +766,6 @@ module slamm::pool {
 
             output_protocol_fees.deposit(
                 reserve_out.withdraw(bank_out, out_protocol_fees)
-                // coin_out.balance_mut().split(out_protocol_fees)
             );
 
             output_pool_fees.register_fee(out_pool_fees);
@@ -862,7 +861,7 @@ module slamm::pool {
         if(reserve_a == 0 && reserve_b == 0) {
             (max_a, max_b)
         } else {
-            let b_star = safe_mul_div_u64(max_a, reserve_b, reserve_a);
+            let b_star = safe_mul_div_up(max_a, reserve_b, reserve_a);
             if (b_star <= max_b) {
 
                 assert!(b_star > 0, EDepositRatioLeadsToZeroB);
@@ -870,7 +869,7 @@ module slamm::pool {
 
                 (max_a, b_star)
             } else {
-                let a_star = safe_mul_div_u64(max_b, reserve_a, reserve_b);
+                let a_star = safe_mul_div_up(max_b, reserve_a, reserve_b);
                 assert!(a_star > 0, EDepositRatioLeadsToZeroA);
                 assert!(a_star <= max_a, EDepositRatioInvalid);
                 assert!(a_star >= min_a, EInsufficientDepositA);
@@ -888,10 +887,10 @@ module slamm::pool {
     ): u64 {
         if (lp_supply == 0) {
             (sqrt_u128((amount_a as u128) * (amount_b as u128)) as u64)
-        } else {
+        } else {            
             min(
-                safe_mul_div_u64(amount_a, lp_supply, reserve_a),
-                safe_mul_div_u64(amount_b, lp_supply, reserve_b)
+                safe_mul_div(amount_a, lp_supply, reserve_a),
+                safe_mul_div(amount_b, lp_supply, reserve_b)
             )
         }
     }
@@ -933,8 +932,8 @@ module slamm::pool {
     ): (u64, u64) {
         // Compute the amount of tokens the user is allowed to
         // receive for each reserve, via the lp ratio
-        let withdraw_a = safe_mul_div_u64(reserve_a, lp_tokens, lp_supply);
-        let withdraw_b = safe_mul_div_u64(reserve_b, lp_tokens, lp_supply);
+        let withdraw_a = safe_mul_div(reserve_a, lp_tokens, lp_supply);
+        let withdraw_b = safe_mul_div(reserve_b, lp_tokens, lp_supply);
 
         // Assert slippage
         assert!(withdraw_a >= min_a, ERedeemSlippageAExceeded);

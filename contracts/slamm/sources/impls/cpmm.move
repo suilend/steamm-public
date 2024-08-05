@@ -3,7 +3,7 @@ module slamm::cpmm {
     use sui::coin::Coin;
     use slamm::global_admin::GlobalAdmin;
     use slamm::registry::{Registry};
-    use slamm::math::{safe_mul_div_u64};
+    use slamm::math::safe_mul_div;
     use slamm::quote::SwapQuote;
     use slamm::bank::Bank;
     use slamm::pool::{Self, Pool, PoolCap, SwapResult, Intent};
@@ -215,7 +215,7 @@ module slamm::cpmm {
         reserve_in: u64,
         amount_in: u64
     ): u64 {
-        safe_mul_div_u64(reserve_out, amount_in, reserve_in + amount_in) // amount_out
+        safe_mul_div(reserve_out, amount_in, reserve_in + amount_in) // amount_out
     }
     
     public(package) fun assert_invariant_does_not_decrease<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, k0: u128) {

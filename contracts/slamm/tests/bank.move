@@ -1,34 +1,19 @@
 
 module slamm::bank_tests {
-    use std::{
-        option::{none, some},
-        type_name::{Self, TypeName},
-        // debug::print,
-    };
     use sui::{
-        balance::{Self, Balance},
-        transfer::share_object,
-        clock::Clock,
-        coin::{Self, Coin},
-        bag::{Self, Bag},
         test_scenario::{Self, ctx},
-        test_utils::{assert_eq, destroy},
+        test_utils::destroy,
     };
     use slamm::{
         bank,
-        version::{Self, Version},
-        registry::{Self, Registry},
-        global_admin::{Self, GlobalAdmin},
+        registry,
+        global_admin,
         test_utils::{COIN, reserve_args},
     };
     use suilend::{
-        decimal,
-        reserve::CToken,
-        lending_market::{Self, LendingMarket, LENDING_MARKET},
+        lending_market::{Self, LENDING_MARKET},
     };
-
     use suilend::test_usdc::{TEST_USDC};
-    use suilend::test_sui::{TEST_SUI};
 
     public struct FAKE_LENDING has drop {}
 

@@ -5,7 +5,7 @@ module slamm::omm {
     use sui::clock::{Self, Clock};
     use slamm::global_admin::GlobalAdmin;
     use slamm::registry::{Registry};
-    use slamm::math::{safe_mul_div_u64};
+    use slamm::math::safe_mul_div_up;
     use slamm::quote::SwapQuote;
     use slamm::bank::Bank;
     use slamm::cpmm;
@@ -253,7 +253,7 @@ module slamm::omm {
         let total_variable_fee = decimal::from(quote.amount_out()).mul(variable_fee).ceil();
         let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees().fee_ratio();
 
-        let protocol_fees = safe_mul_div_u64(total_variable_fee, protocol_fee_num, protocol_fee_denom);
+        let protocol_fees = safe_mul_div_up(total_variable_fee, protocol_fee_num, protocol_fee_denom);
         let pool_fees = total_variable_fee - protocol_fees;
 
         quote.add_output_fees(protocol_fees, pool_fees);

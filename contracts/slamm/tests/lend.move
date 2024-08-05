@@ -787,7 +787,7 @@ module slamm::lend_tests {
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 700_000);
         assert_eq(reserve_b, 358_286);
-        assert_eq(reserve_b + pool.protocol_fees().fee_b().acc_fees(), 358_571);
+        assert_eq(reserve_b + pool.protocol_fees().fee_b().acc_fees(), 358_572);
 
         assert_eq(bank_a.lent(), 400_000);
         assert_eq(bank_a.reserve().value(), 300_000);

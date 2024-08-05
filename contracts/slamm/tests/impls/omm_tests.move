@@ -101,7 +101,7 @@ module slamm::omm_tests {
         );
 
         assert_eq(pool.inner().ema().reference_val(), decimal::from(0));
-        assert_eq(pool.inner().ema().accumulator(), decimal::from_scaled_val(189847865296485492)); // 18..%
+        assert_eq(pool.inner().ema().accumulator(), decimal::from_scaled_val(189845685556076473)); // 18..%
         assert_eq(pool.inner().reference_price(), decimal::from(1)); // price = 1
         assert_eq(pool.inner().reference_price(), decimal::from(1)); // price = 1
         assert_eq(pool.inner().last_update_ms(), clock.timestamp_ms());
@@ -1176,8 +1176,7 @@ module slamm::omm_tests {
 
         assert_eq(initial_reference_vol, pool.inner().ema().reference_val());
         assert_eq(initial_reference_price, pool.inner().reference_price());
-        // This is slightly lower because of the fees
-        assert!(end_accumulator.lt(mid_accumulator_2));
+        assert!(end_accumulator.eq(mid_accumulator_2));
         assert!(fee_rate_3.lt(fee_rate_2));
 
         destroy(coin_a);

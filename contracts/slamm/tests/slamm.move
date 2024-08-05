@@ -64,11 +64,13 @@ module slamm::slamm_tests {
         );
 
         let (reserve_a, reserve_b) = pool.reserves();
+        let (bank_reserve_a, bank_reserve_b) = (bank_a.reserve().value(), bank_b.reserve().value());
         let reserve_ratio_0 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
 
         assert_eq(pool.cpmm_k(), 500000000000000000000000000);
         assert_eq(pool.lp_supply_val(), 22360679774997);
-        assert_eq(reserve_a, e9(1_000));
+        assert_eq(reserve_a, bank_reserve_a);
+        assert_eq(reserve_b, bank_reserve_b);
         assert_eq(reserve_b, e9(500_000));
         assert_eq(lp_coins.value(), 22360679774997 - minimum_liquidity());
         assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
@@ -129,6 +131,10 @@ module slamm::slamm_tests {
         assert_eq(coin_b.value(), e9(10) - 12); // double rounddown: inital lp tokens minted + redeed
 
         let (reserve_a, reserve_b) = pool.reserves();
+        let (bank_reserve_a, bank_reserve_b) = (bank_a.reserve().value(), bank_b.reserve().value());
+        assert_eq(reserve_a, bank_reserve_a);
+        assert_eq(reserve_b, bank_reserve_b);
+
         let reserve_ratio_2 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
         assert_eq(reserve_ratio_0, reserve_ratio_2);
 
@@ -153,6 +159,11 @@ module slamm::slamm_tests {
             true, // a2b
             ctx,
         );
+
+        let (reserve_a, reserve_b) = pool.reserves();
+        let (bank_reserve_a, bank_reserve_b) = (bank_a.reserve().value(), bank_b.reserve().value());
+        assert_eq(reserve_a, bank_reserve_a);
+        assert_eq(reserve_b, bank_reserve_b);
 
         assert_eq(swap_result.a2b(), true);
         assert_eq(swap_result.amount_out(), 200000000000);
