@@ -33,7 +33,8 @@ module slamm::smm {
     /// Constant-Sum AMM specific state. We do not store the invariant,
     /// instead we compute it at runtime.
     public struct State has store {
-        reserve_ratio: Decimal,
+        upper_reserve_ratio: Decimal,
+        lower_reserve_ratio: Decimal,
         version: Version,
     }
 
@@ -43,12 +44,14 @@ module slamm::smm {
         _witness: W,
         registry: &mut Registry,
         swap_fee_bps: u64,
-        reserve_ratio_bps: u64,
+        upper_reserve_ratio_bps: u64,
+        lower_reserve_ratio_bps: u64,
         ctx: &mut TxContext,
     ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>>) {
         let inner = State {
             version: version::new(CURRENT_VERSION),
-            reserve_ratio: decimal::from(reserve_ratio_bps).div(decimal::from(10_000)),
+            upper_reserve_ratio: decimal::from(upper_reserve_ratio_bps).div(decimal::from(10_000)),
+            lower_reserve_ratio: decimal::from(lower_reserve_ratio_bps).div(decimal::from(10_000)),
         };
 
         let (pool, pool_cap) = pool::new<A, B, Hook<W>, State>(
@@ -160,9 +163,9 @@ module slamm::smm {
     ): bool {
         let a = decimal::from(self.reserve_a());
         let b = decimal::from(self.reserve_b());
-        let ratio = self.inner().reserve_ratio;
+        let ratio = a.div(b);
 
-        !(a.div(b).le(ratio) && b.div(a).le(ratio))
+        ratio.le(self.inner().upper_reserve_ratio) && ratio.ge(self.inner().lower_reserve_ratio)
     }
     
     fun assert_reserve_ratio<A, B, W: drop>(
