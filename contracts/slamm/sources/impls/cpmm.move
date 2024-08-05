@@ -33,17 +33,19 @@ module slamm::cpmm {
     /// instead we compute it at runtime.
     public struct State has store {
         version: Version,
+        offset: u64,
     }
 
     // ===== Public Methods =====
 
-    public fun new<A, B, W: drop>(
+    public fun new_with_offset<A, B, W: drop>(
         _witness: W,
         registry: &mut Registry,
         swap_fee_bps: u64,
+        offset: u64,
         ctx: &mut TxContext,
     ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>>) {
-        let inner = State { version: version::new(CURRENT_VERSION) };
+        let inner = State { version: version::new(CURRENT_VERSION), offset };
 
         let (pool, pool_cap) = pool::new<A, B, Hook<W>, State>(
             Hook<W> {},
@@ -54,6 +56,21 @@ module slamm::cpmm {
         );
 
         (pool, pool_cap)
+    }
+    
+    public fun new<A, B, W: drop>(
+        witness: W,
+        registry: &mut Registry,
+        swap_fee_bps: u64,
+        ctx: &mut TxContext,
+    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>>) {
+        new_with_offset(
+            witness,
+            registry,
+            swap_fee_bps,
+            0,
+            ctx,
+        )
     }
 
     public fun swap<A, B, W: drop>(
@@ -146,6 +163,7 @@ module slamm::cpmm {
             reserve_b,
             amount_in,
             a2b,
+            self.inner().offset,
         );
 
         let output = self.compute_fees_on_output(amount_out);
@@ -161,6 +179,7 @@ module slamm::cpmm {
         reserve_b: u64,
         amount_in: u64,
         a2b: bool,
+        offset: u64,
     ): u64 {
         if (a2b) {
             // IN: A && OUT: B
@@ -168,6 +187,7 @@ module slamm::cpmm {
                 reserve_b, // reserve_out
                 reserve_a, // reserve_in
                 amount_in,
+                offset,
             )
         } else {
             // IN: B && OUT: A
@@ -175,6 +195,7 @@ module slamm::cpmm {
                 reserve_a, // reserve_out
                 reserve_b, // reserve_in
                 amount_in,
+                offset,
             )
         }
     }
@@ -213,9 +234,11 @@ module slamm::cpmm {
     fun quote_swap_(
         reserve_out: u64,
         reserve_in: u64,
-        amount_in: u64
+        amount_in: u64,
+        offset: u64,
     ): u64 {
-        safe_mul_div(reserve_out, amount_in, reserve_in + amount_in) // amount_out
+        let amount_in_less_offset = amount_in - offset;
+        safe_mul_div(reserve_out, amount_in_less_offset, reserve_in + amount_in_less_offset) // amount_out
     }
     
     public(package) fun assert_invariant_does_not_decrease<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, k0: u128) {
@@ -230,31 +253,31 @@ module slamm::cpmm {
 
     #[test]
     fun test_swap_base_for_quote() {
-        let delta_quote = quote_swap_(50000000000, 50000000000, 1000000000);
+        let delta_quote = quote_swap_(50000000000, 50000000000, 1000000000, 0);
         assert_eq(delta_quote, 980392156);
 
-        let delta_quote = quote_swap_(9999005960552740, 1095387779115020, 1000000000);
+        let delta_quote = quote_swap_(9999005960552740, 1095387779115020, 1000000000, 0);
         assert_eq(delta_quote, 9128271305);
 
-        let delta_quote = quote_swap_(1029168250865450, 7612534772798660, 1000000000);
+        let delta_quote = quote_swap_(1029168250865450, 7612534772798660, 1000000000, 0);
         assert_eq(delta_quote, 135193880);
         	
-        let delta_quote = quote_swap_(2768608899383570, 5686051292328860, 1000000000);
+        let delta_quote = quote_swap_(2768608899383570, 5686051292328860, 1000000000, 0);
         assert_eq(delta_quote, 486912317);
 
-        let delta_quote = quote_swap_(440197283258732, 9283788821706570, 1000000000);
+        let delta_quote = quote_swap_(440197283258732, 9283788821706570, 1000000000, 0);
         assert_eq(delta_quote, 47415688);
 
-        let delta_quote = quote_swap_(7199199355268960, 9313530357314980, 1000000000);
+        let delta_quote = quote_swap_(7199199355268960, 9313530357314980, 1000000000, 0);
         assert_eq(delta_quote, 772982779);
 
-        let delta_quote = quote_swap_(6273576615700410, 1630712284783210, 1000000000);
+        let delta_quote = quote_swap_(6273576615700410, 1630712284783210, 1000000000, 0);
         assert_eq(delta_quote, 3847136510);
 
-        let delta_quote = quote_swap_(5196638254543900, 9284728716079420, 1000000000);
+        let delta_quote = quote_swap_(5196638254543900, 9284728716079420, 1000000000, 0);
         assert_eq(delta_quote, 559697310);
 
-        let delta_quote = quote_swap_(1128134431179110, 4632243184772740, 1000000000);
+        let delta_quote = quote_swap_(1128134431179110, 4632243184772740, 1000000000, 0);
         assert_eq(delta_quote, 243539499);
     }
 }
