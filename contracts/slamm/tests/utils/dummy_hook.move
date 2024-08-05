@@ -11,7 +11,7 @@ module slamm::dummy_hook {
 
     // ===== Public Methods =====
 
-    public fun new<A, B, W: drop>(
+    public fun new_no_fees<A, B, W: drop>(
         _witness: W,
         registry: &mut Registry,
         swap_fee_bps: u64,
@@ -28,6 +28,25 @@ module slamm::dummy_hook {
         );
 
         pool.no_protocol_fees();
+
+        (pool, pool_cap)
+    }
+    
+    public fun new<A, B, W: drop>(
+        _witness: W,
+        registry: &mut Registry,
+        swap_fee_bps: u64,
+        ctx: &mut TxContext,
+    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>>) {
+        let inner = State {};
+
+        let (pool, pool_cap) = pool::new<A, B, Hook<W>, State>(
+            Hook<W> {},
+            registry,
+            swap_fee_bps,
+            inner,
+            ctx,
+        );
 
         (pool, pool_cap)
     }

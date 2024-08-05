@@ -1,11 +1,11 @@
 #[test_only]
-module slamm::slamm_tests {
+module slamm::cpmm_tests {
     use slamm::pool::{Self, minimum_liquidity};
     use slamm::registry;
     use slamm::global_admin;
     use slamm::bank;
     use slamm::cpmm::{Self};
-    use slamm::test_utils::{COIN, reserve_args};
+    use slamm::test_utils::{COIN, reserve_args, e9};
     use sui::test_scenario::{Self, ctx};
     use sui::sui::SUI;
     use sui::coin::{Self};
@@ -20,12 +20,8 @@ module slamm::slamm_tests {
     public struct Wit has drop {}
     public struct Wit2 has drop {}
 
-    fun e9(amt: u64): u64 {
-        1_000_000_000 * amt
-    }
-
     #[test]
-    fun test_full_amm_cycle() {
+    fun test_full_cpmm_cycle() {
         let mut scenario = test_scenario::begin(ADMIN);
 
         // Init Pool
@@ -223,7 +219,7 @@ module slamm::slamm_tests {
     
     
     #[test]
-    fun test_slamm() {
+    fun test_cpmm_deposit_redeem_swap() {
         let mut scenario = test_scenario::begin(ADMIN);
 
         // Init Pool
@@ -350,12 +346,6 @@ module slamm::slamm_tests {
             true, // a2b
             ctx,
         );
-
-        // amount in:    200000000000
-        // fees:        2000000000
-        // amount out: 83333333333265
-
-        // fees: 666666666666 + 166666666666
 
         assert_eq(swap_result.a2b(), true);
         assert_eq(swap_result.amount_out(), 83333333333265);
@@ -1242,7 +1232,7 @@ module slamm::slamm_tests {
     }
     
     #[test]
-    fun test_slamm_fees() {
+    fun test_cpmm_fees() {
         let mut scenario = test_scenario::begin(ADMIN);
 
         // Init Pool

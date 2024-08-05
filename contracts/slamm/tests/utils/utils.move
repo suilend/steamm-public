@@ -20,6 +20,10 @@ module slamm::test_utils {
     use pyth::price;
     use pyth::i64;
 
+    public fun e9(amt: u64): u64 {
+        1_000_000_000 * amt
+    }
+
     public struct PoolWit has drop {}
     public struct COIN has drop {}
 

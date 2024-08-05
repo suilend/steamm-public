@@ -838,7 +838,7 @@ module slamm::lend_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = dummy_hook::new<TEST_USDC, COIN, Wit>(
+        let (mut pool, pool_cap) = dummy_hook::new_no_fees<TEST_USDC, COIN, Wit>(
             Wit {},
             &mut registry,
             0, // admin fees BPS
@@ -993,7 +993,7 @@ module slamm::lend_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = dummy_hook::new<TEST_USDC, COIN, Wit>(
+        let (mut pool, pool_cap) = dummy_hook::new_no_fees<TEST_USDC, COIN, Wit>(
             Wit {},
             &mut registry,
             0, // admin fees BPS
@@ -1096,7 +1096,7 @@ module slamm::lend_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = dummy_hook::new<TEST_USDC, COIN, Wit>(
+        let (mut pool, pool_cap) = dummy_hook::new_no_fees<TEST_USDC, COIN, Wit>(
             Wit {},
             &mut registry,
             0, // admin fees BPS
@@ -1237,7 +1237,7 @@ module slamm::lend_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = dummy_hook::new<TEST_USDC, COIN, Wit>(
+        let (mut pool, pool_cap) = dummy_hook::new_no_fees<TEST_USDC, COIN, Wit>(
             Wit {},
             &mut registry,
             0, // admin fees BPS
@@ -1329,7 +1329,7 @@ module slamm::lend_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = dummy_hook::new<TEST_USDC, COIN, Wit>(
+        let (mut pool, pool_cap) = dummy_hook::new_no_fees<TEST_USDC, COIN, Wit>(
             Wit {},
             &mut registry,
             0, // admin fees BPS
@@ -1430,7 +1430,7 @@ module slamm::lend_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = dummy_hook::new<TEST_USDC, COIN, Wit>(
+        let (mut pool, pool_cap) = dummy_hook::new_no_fees<TEST_USDC, COIN, Wit>(
             Wit {},
             &mut registry,
             0, // admin fees BPS
@@ -1533,7 +1533,7 @@ module slamm::lend_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = dummy_hook::new<TEST_USDC, COIN, Wit>(
+        let (mut pool, pool_cap) = dummy_hook::new_no_fees<TEST_USDC, COIN, Wit>(
             Wit {},
             &mut registry,
             0, // admin fees BPS
