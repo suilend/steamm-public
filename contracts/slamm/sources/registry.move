@@ -46,7 +46,7 @@ module slamm::registry {
         registry.assert_version_and_upgrade();
         
         let bank_type = type_name::get<BANK>();
-        assert!(!table::contains(&registry.amms, bank_type), EDuplicatedBankType);
+        assert!(!table::contains(&registry.banks, bank_type), EDuplicatedBankType);
 
         table::add(&mut registry.banks, bank_type, object::id(bank));
     }
