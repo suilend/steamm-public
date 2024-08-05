@@ -13,7 +13,7 @@ module slamm::slamm_tests {
         global_admin,
         bank,
         test_utils::{e9, COIN, reserve_args},
-        dummy_hook::{Self, Hook as DummyHook, swap, intent_swap, execute_swap, quote_swap},
+        dummy_hook::{Self, swap, intent_swap, execute_swap, quote_swap},
     };
     use suilend::lending_market;
 
