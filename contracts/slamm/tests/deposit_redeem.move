@@ -278,7 +278,7 @@ module slamm::deposit_redeem {
         destroy(bank_a);
         destroy(bank_b);
     }
-    
+
     #[test]
     #[expected_failure(abort_code = pool::EDepositMaxParamsCantBeZero)]
     fun test_fail_max_params_as_zero() {

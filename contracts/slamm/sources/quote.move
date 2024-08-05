@@ -102,9 +102,6 @@ module slamm::quote {
         self.output_fees.pool_fees = self.output_fees.pool_fees + pool_fees;
     }
     
-    public(package) fun add_protocol_fees(self: &SwapFee): u64 { self.protocol_fees }
-    public(package) fun add_pool_fees(self: &SwapFee): u64 { self.pool_fees }
-    
 
     // ===== Public View Methods =====
 
@@ -150,14 +147,18 @@ module slamm::quote {
     public(package) fun quote_for_testing(
         amount_in: u64,
         amount_out: u64,
-        output_fees: SwapFee,
+        protocol_fees: u64,
+        pool_fees: u64,
         a2b: bool,
     ): SwapQuote {
         SwapQuote {
             amount_in,
             amount_out,
             // input_fees,
-            output_fees,
+            output_fees: SwapFee {
+                protocol_fees: protocol_fees,
+                pool_fees: pool_fees,
+            },
             a2b,
         }
     }

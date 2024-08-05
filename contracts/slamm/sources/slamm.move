@@ -398,9 +398,9 @@ module slamm::pool {
         };
 
         assert_lp_supply_reserve_ratio(
-            self.reserve_a(),
             initial_reserve_a,
             initial_lp_supply,
+            self.reserve_a(),
             self.lp_supply.supply_value(),
         );
 
@@ -500,9 +500,9 @@ module slamm::pool {
         );
 
         assert_lp_supply_reserve_ratio(
-            self.reserve_a(),
             initial_reserve_a,
             initial_lp_supply,
+            self.reserve_a(),
             self.lp_supply.supply_value(),
         );
 
@@ -943,9 +943,9 @@ module slamm::pool {
     }
     
     fun assert_lp_supply_reserve_ratio(
-        final_reserve_a: u64,
         initial_reserve_a: u64,
         initial_lp_supply: u64,
+        final_reserve_a: u64,
         final_lp_supply: u64,
     ) {
         assert!(
@@ -1035,6 +1035,21 @@ module slamm::pool {
     public fun redeem_result_burn_lp(self: &RedeemResult): u64 { self.burn_lp }
 
     // ===== Test-Only =====
+    
+    #[test_only]
+    public(package) fun intent_for_testing<A, B, Hook: drop, State: store>(
+        self: &mut Pool<A, B, Hook, State>,
+        quote: SwapQuote,
+        with_guard: bool,
+    ): Intent<A, B, Hook> {
+        if (with_guard) {
+            self.guard();
+        };
+
+        Intent {
+            quote,
+        }
+    }
     
     #[test_only]
     public(package) fun no_protocol_fees<A, B, Hook: drop, State: store>(
@@ -1181,8 +1196,52 @@ module slamm::pool {
         quote::quote_for_testing(
             amount_in,
             amount_out,
-            output_fees,
+            output_fees.protocol_fees(),
+            output_fees.pool_fees(),
             a2b,
         )
+    }
+
+    // ===== Tests =====
+
+    #[test]
+    fun test_assert_lp_supply_reserve_ratio_ok() {
+
+        // Perfect ratio
+        assert_lp_supply_reserve_ratio(
+            10, // initial_reserve_a
+            10, // initial_lp_supply
+            100, // final_reserve_a
+            100, // final_lp_supply
+        );
+        
+        // Ratio gets better in favor of the pool
+        assert_lp_supply_reserve_ratio(
+            10, // initial_reserve_a
+            10, // initial_lp_supply
+            100, // final_reserve_a
+            99, // final_lp_supply
+        );
+
+        // initial_reserve_a
+        // initial_lp_supply
+        // final_reserve_a
+        // final_lp_supply
+
+    }
+    
+    // Note: This error cannot occur unless there is a bug in the contract.
+    // It provides an extra layer of security
+    #[test]
+    #[expected_failure(abort_code = ELpSupplyToReserveRatioViolation)]
+    fun test_assert_lp_supply_reserve_ratio_not_ok() {
+
+        // Ratio gets worse in favor of the pool
+        assert_lp_supply_reserve_ratio(
+            10, // initial_reserve_a
+            10, // initial_lp_supply
+            100, // final_reserve_a
+            101, // final_lp_supply
+        );
     }
 }
