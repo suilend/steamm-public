@@ -233,6 +233,7 @@ module slamm::omm {
             amount_in,
             a2b,
             0, // TODO: confirm if offset feature should be offered in this hook
+            0, // TODO: confirm if offset feature should be offered in this hook
         );
 
         let swap_outputs = self.compute_fees_on_output(amount_out);
