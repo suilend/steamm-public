@@ -1,11 +1,7 @@
 #[test_only]
 module slamm::smm_tests {
-    use std::debug::print;
-    use slamm::pool::{Self, minimum_liquidity};
     use slamm::registry;
-    use slamm::global_admin;
     use slamm::bank;
-    use slamm::cpmm;
     use slamm::smm;
     use slamm::test_utils::{COIN, reserve_args, e9};
     use sui::test_scenario::{Self, ctx};
@@ -16,7 +12,6 @@ module slamm::smm_tests {
 
     const ADMIN: address = @0x10;
     const POOL_CREATOR: address = @0x11;
-    const LP_PROVIDER: address = @0x12;
     const TRADER: address = @0x13;
 
     public struct Wit has drop {}

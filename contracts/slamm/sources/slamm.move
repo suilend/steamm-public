@@ -3,20 +3,24 @@
 /// called directly. Is also exports an intializer and swap method to be
 /// called by the hook modules.
 module slamm::pool {
-    use sui::clock::Clock;
-    use sui::transfer::public_transfer;
-    use sui::tx_context::sender;
-    use sui::math::{sqrt_u128, min};
-    use sui::coin::{Self, Coin};
-    use sui::balance::{Self, Balance, Supply};
-    use slamm::events::emit_event;
-    use slamm::version::{Self, Version};
-    use slamm::registry::{Registry};
-    use slamm::math::{safe_mul_div, safe_mul_div_up};
-    use slamm::global_admin::GlobalAdmin;
-    use slamm::fees::{Self, Fees, FeeReserve};
-    use slamm::quote::{Self, SwapQuote, SwapFee, DepositQuote, RedeemQuote, SwapOutputs, swap_outputs};
-    use slamm::bank::{Bank};
+    use sui::{
+        clock::Clock,
+        transfer::public_transfer,
+        tx_context::sender,
+        math::{sqrt_u128, min},
+        coin::{Self, Coin},
+        balance::{Self, Balance, Supply},
+    };
+    use slamm::{
+        events::emit_event,
+        version::{Self, Version},
+        registry::{Registry},
+        math::{safe_mul_div, safe_mul_div_up},
+        global_admin::GlobalAdmin,
+        fees::{Self, Fees, FeeReserve},
+        quote::{Self, SwapQuote, SwapFee, DepositQuote, RedeemQuote, SwapOutputs, swap_outputs},
+        bank::{Bank},
+    };
 
     use suilend::lending_market::{LendingMarket};
     

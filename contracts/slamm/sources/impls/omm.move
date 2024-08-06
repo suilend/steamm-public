@@ -1,21 +1,25 @@
 /// Oracle AMM Hook implementation
 module slamm::omm {
-    // use std::debug::print;
     use sui::coin::Coin;
     use sui::clock::{Self, Clock};
-    use slamm::global_admin::GlobalAdmin;
-    use slamm::registry::{Registry};
-    use slamm::math::safe_mul_div_up;
-    use slamm::quote::SwapQuote;
-    use slamm::bank::Bank;
-    use slamm::cpmm;
-    use slamm::pool::{Self, Pool, PoolCap, SwapResult, Intent};
-    use slamm::version::{Self, Version};
-    use pyth::price_info::{PriceInfoObject};
-    use suilend::decimal::{Self, Decimal};
-    use suilend::oracles;
-    use pyth::price_identifier::{PriceIdentifier};
-    // use pyth::price::Price;
+    use slamm::{
+        global_admin::GlobalAdmin,
+        registry::{Registry},
+        math::safe_mul_div_up,
+        quote::SwapQuote,
+        bank::Bank,
+        cpmm,
+        pool::{Self, Pool, PoolCap, SwapResult, Intent},
+        version::{Self, Version},
+    };
+    use suilend::{
+        decimal::{Self, Decimal},
+        oracles,
+    };
+    use pyth::{
+        price_info::{PriceInfoObject},
+        price_identifier::{PriceIdentifier},
+    };
 
     // ===== Constants =====
 

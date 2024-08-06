@@ -1,13 +1,15 @@
 /// Constant-Product AMM Hook implementation
 module slamm::cpmm {
     use sui::coin::Coin;
-    use slamm::global_admin::GlobalAdmin;
-    use slamm::registry::{Registry};
-    use slamm::math::safe_mul_div;
-    use slamm::quote::SwapQuote;
-    use slamm::bank::Bank;
-    use slamm::pool::{Self, Pool, PoolCap, SwapResult, Intent};
-    use slamm::version::{Self, Version};
+    use slamm::{
+        global_admin::GlobalAdmin,
+        registry::{Registry},
+        math::safe_mul_div,
+        quote::SwapQuote,
+        bank::Bank,
+        pool::{Self, Pool, PoolCap, SwapResult, Intent},
+        version::{Self, Version},
+    };
 
     // ===== Constants =====
 
