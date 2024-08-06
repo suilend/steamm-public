@@ -29,6 +29,10 @@ module slamm::pool {
     public use fun slamm::omm::execute_swap as Pool.omm_execute_swap;
     public use fun slamm::omm::swap as Pool.omm_swap;
     public use fun slamm::omm::quote_swap as Pool.omm_quote_swap;
+    public use fun slamm::smm::intent_swap as Pool.smm_intent_swap;
+    public use fun slamm::smm::execute_swap as Pool.smm_execute_swap;
+    public use fun slamm::smm::swap as Pool.smm_swap;
+    public use fun slamm::smm::quote_swap as Pool.smm_quote_swap;
     public use fun slamm::cpmm::k as Pool.cpmm_k;
 
     // ===== Constants =====

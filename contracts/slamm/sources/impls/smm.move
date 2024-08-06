@@ -179,7 +179,7 @@ module slamm::smm {
     
     public fun k<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>): u128 {
         let (reserve_a, reserve_b) = self.reserves();
-        ((reserve_a as u128) * (reserve_b as u128))
+        ((reserve_a as u128) + (reserve_b as u128))
     }
 
     // ===== Versioning =====
