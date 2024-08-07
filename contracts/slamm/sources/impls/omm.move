@@ -186,7 +186,7 @@ module slamm::omm {
     ): SwapResult {
         self.inner_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
 
-        let k0 = cpmm::k(self);
+        let k0 = cpmm::k_(self, 0, 0);
 
         let response = self.swap(
             Hook<W> {},
@@ -200,7 +200,7 @@ module slamm::omm {
         );
 
         // Recompute invariant
-        cpmm::assert_invariant_does_not_decrease(self, k0);
+        cpmm::assert_invariant_does_not_decrease_(self, k0, 0, 0);
 
         response
     }

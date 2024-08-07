@@ -209,9 +209,22 @@ module slamm::cpmm {
 
     // ===== View Functions =====
     
-    public fun k<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>): u128 {
+    public fun offsets<A, B, W: drop>(self: &Pool<A, B, Hook<W>, State>): (u64, u64) {
+        (self.inner().offset_a, self.inner().offset_b)
+    }
+    
+    public fun k<A, B, W: drop>(self: &Pool<A, B, Hook<W>, State>): u128 {
+        let (offset_a, offset_b) = offsets(self);
+        k_(self, offset_a, offset_b)
+    }
+    
+    public fun k_<A, B, Hook: drop, State: store>(
+        self: &Pool<A, B, Hook, State>,
+        offset_a: u64,
+        offset_b: u64,
+    ): u128 {
         let (reserve_a, reserve_b) = self.reserves();
-        ((reserve_a as u128) * (reserve_b as u128))
+        (((reserve_a + offset_a) as u128) * ((reserve_b + offset_b) as u128))
     }
 
     // ===== Versioning =====
@@ -252,8 +265,18 @@ module slamm::cpmm {
         safe_mul_div(adjusted_reserve_out, amount_in, adjusted_reserve_in + amount_in) // amount_out
     }
     
-    public(package) fun assert_invariant_does_not_decrease<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, k0: u128) {
+    fun assert_invariant_does_not_decrease<A, B, W: drop>(self: &Pool<A, B, Hook<W>, State>, k0: u128) {
         let k1 = k(self);
+        assert!(k1 >= k0, EInvariantViolation);
+    }
+    
+    public(package) fun assert_invariant_does_not_decrease_<A, B, Hook: drop, State: store>(
+        self: &Pool<A, B, Hook, State>,
+        k0: u128,
+        offset_a: u64,
+        offset_b: u64,
+    ) {
+        let k1 = k_(self, offset_a, offset_b);
         assert!(k1 >= k0, EInvariantViolation);
     }
     

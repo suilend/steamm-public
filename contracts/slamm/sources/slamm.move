@@ -6,13 +6,13 @@ module slamm::pool {
     use sui::clock::Clock;
     use sui::transfer::public_transfer;
     use sui::tx_context::sender;
-    use sui::math::{sqrt_u128, min};
+    use sui::math::{sqrt_u128};
     use sui::coin::{Self, Coin};
     use sui::balance::{Self, Balance, Supply};
     use slamm::events::emit_event;
     use slamm::version::{Self, Version};
     use slamm::registry::{Registry};
-    use slamm::math::{safe_mul_div, safe_mul_div_up};
+    use slamm::math::{safe_mul_div, safe_mul_div_up, min_non_zero, checked_mul_div_up};
     use slamm::global_admin::GlobalAdmin;
     use slamm::fees::{Self, Fees, FeeReserve};
     use slamm::quote::{Self, SwapQuote, SwapFee, DepositQuote, RedeemQuote, SwapOutputs, swap_outputs};
@@ -72,16 +72,15 @@ module slamm::pool {
     const ESwapOutputAmountIsZero: u64 = 10;
     // When depositing the max deposit params cannot be zero
     const EDepositMaxParamsCantBeZero: u64 = 11;
-    // The deposit ratio computed leads to a coin B deposit of zero
-    const EDepositRatioLeadsToZeroB: u64 = 12;
-    // The deposit ratio computed leads to a coin A deposit of zero
-    const EDepositRatioLeadsToZeroA: u64 = 13;
     // There cannot be two intents concurrently
-    const EPoolGuarded: u64 = 14;
+    const EPoolGuarded: u64 = 12;
     // Attempting to unguard pool that is already unguarded
-    const EPoolUnguarded: u64 = 15;
-    const EInsufficientFunds: u64 = 16;
-    const EInsufficientFundsInBank: u64 = 17;
+    const EPoolUnguarded: u64 = 13;
+    // Not enough funds in the user's input coin
+    const EInsufficientFunds: u64 = 14;
+    const EInsufficientFundsInBank: u64 = 15;
+    // This error should not occur
+    const EUnableToDeposit: u64 = 16;
 
     /// Marker type for the LP coins of a pool. There can only be one
     /// pool per type, albeit given the permissionless aspect of the pool
@@ -351,7 +350,7 @@ module slamm::pool {
         min_a: u64,
         min_b: u64,
         clock: &Clock,
-        ctx:  &mut TxContext,
+        ctx: &mut TxContext,
     ): (Coin<LP<A, B, Hook>>, DepositResult) {
         self.version.assert_version_and_upgrade(CURRENT_VERSION);
         self.assert_unguarded();
@@ -856,25 +855,33 @@ module slamm::pool {
         min_a: u64,
         min_b: u64
     ): (u64, u64) {
-        assert!(max_a > 0 && max_b > 0, EDepositMaxParamsCantBeZero);
+        assert!(!(max_a == 0 && max_b == 0), EDepositMaxParamsCantBeZero);
 
         if(reserve_a == 0 && reserve_b == 0) {
             (max_a, max_b)
         } else {
-            let b_star = safe_mul_div_up(max_a, reserve_b, reserve_a);
-            if (b_star <= max_b) {
+            let b_star_ = checked_mul_div_up(max_a, reserve_b, reserve_a);
+            let a_star_ = checked_mul_div_up(max_b, reserve_a, reserve_b);
 
-                assert!(b_star > 0, EDepositRatioLeadsToZeroB);
+            assert!(!(a_star_.is_none() && b_star_.is_none()), EUnableToDeposit);
+
+            let is_true = {
+                if (b_star_.is_some()) {
+                    if (*b_star_.borrow() <= max_b) { true } else { false }
+                } else { false }
+            };
+            
+            if (is_true) {
+                let b_star = *b_star_.borrow();
                 assert!(b_star >= min_b, EInsufficientDepositB);
 
                 (max_a, b_star)
             } else {
-                let a_star = safe_mul_div_up(max_b, reserve_a, reserve_b);
-                assert!(a_star > 0, EDepositRatioLeadsToZeroA);
+                let a_star = *a_star_.borrow();
                 assert!(a_star <= max_a, EDepositRatioInvalid);
                 assert!(a_star >= min_a, EInsufficientDepositA);
                 (a_star, max_b)
-            } 
+            }
         }
     }
 
@@ -886,12 +893,25 @@ module slamm::pool {
         amount_b: u64
     ): u64 {
         if (lp_supply == 0) {
-            (sqrt_u128((amount_a as u128) * (amount_b as u128)) as u64)
-        } else {            
-            min(
-                safe_mul_div(amount_a, lp_supply, reserve_a),
-                safe_mul_div(amount_b, lp_supply, reserve_b)
-            )
+            if (amount_a != 0 && amount_b != 0) {
+                (sqrt_u128((amount_a as u128) * (amount_b as u128)) as u64)
+            } else {
+                assert!(!(amount_a == 0 && amount_b == 0) , 0);
+
+                if (amount_a == 0) {
+                    // amount b is not zero
+                    amount_b
+                } else {
+                    // amount a is not zero
+                    amount_a
+                }
+            }
+        } else {
+
+            let a_ratio = if (reserve_a > 0) { safe_mul_div(amount_a, lp_supply, reserve_a) } else { 0 };
+            let b_ratio = if (reserve_b > 0) { safe_mul_div(amount_b, lp_supply, reserve_b) } else { 0 };
+
+            min_non_zero(a_ratio, b_ratio)
         }
     }
 
