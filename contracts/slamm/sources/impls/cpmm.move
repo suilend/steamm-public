@@ -75,10 +75,10 @@ module slamm::cpmm {
         )
     }
 
-    public fun swap<A, B, W: drop>(
+    public fun swap<A, B, W: drop, P>(
         self: &mut Pool<A, B, Hook<W>, State>,
-        bank_a: &mut Bank<A>,
-        bank_b: &mut Bank<B>,
+        bank_a: &mut Bank<P, A>,
+        bank_b: &mut Bank<P, B>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
         amount_in: u64,
@@ -119,10 +119,10 @@ module slamm::cpmm {
         quote.as_intent(self)
     }
 
-    public fun execute_swap<A, B, W: drop>(
+    public fun execute_swap<A, B, W: drop, P>(
         self: &mut Pool<A, B, Hook<W>, State>,
-        bank_a: &mut Bank<A>,
-        bank_b: &mut Bank<B>,
+        bank_a: &mut Bank<P, A>,
+        bank_b: &mut Bank<P, B>,
         intent: Intent<A, B, Hook<W>>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,

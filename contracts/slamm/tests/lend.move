@@ -32,8 +32,8 @@ module slamm::lend_tests {
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -117,8 +117,8 @@ module slamm::lend_tests {
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -233,8 +233,8 @@ module slamm::lend_tests {
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -343,8 +343,8 @@ module slamm::lend_tests {
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<TEST_SUI>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -438,8 +438,8 @@ module slamm::lend_tests {
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<TEST_SUI>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -556,8 +556,8 @@ module slamm::lend_tests {
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<TEST_SUI>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -684,8 +684,8 @@ module slamm::lend_tests {
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<TEST_SUI>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -822,8 +822,8 @@ module slamm::lend_tests {
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -977,8 +977,8 @@ module slamm::lend_tests {
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -1080,8 +1080,8 @@ module slamm::lend_tests {
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -1221,8 +1221,8 @@ module slamm::lend_tests {
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -1313,8 +1313,8 @@ module slamm::lend_tests {
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -1414,8 +1414,8 @@ module slamm::lend_tests {
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -1517,8 +1517,8 @@ module slamm::lend_tests {
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,

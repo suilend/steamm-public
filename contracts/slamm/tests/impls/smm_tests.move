@@ -8,7 +8,7 @@ module slamm::smm_tests {
     use sui::sui::SUI;
     use sui::coin::{Self};
     use sui::test_utils::{destroy, assert_eq};
-    use suilend::lending_market;
+    use suilend::lending_market::{Self, LENDING_MARKET};
 
     const ADMIN: address = @0x10;
     const POOL_CREATOR: address = @0x11;
@@ -41,8 +41,8 @@ module slamm::smm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(500_000, ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
 
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
             &mut lending_market,
@@ -124,8 +124,8 @@ module slamm::smm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(500_000, ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
 
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
             &mut lending_market,
@@ -203,8 +203,8 @@ module slamm::smm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(500_000, ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
 
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
             &mut lending_market,
@@ -281,8 +281,8 @@ module slamm::smm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(500_000, ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
 
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
             &mut lending_market,
@@ -360,8 +360,8 @@ module slamm::smm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(500_000, ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
 
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
             &mut lending_market,
@@ -433,8 +433,8 @@ module slamm::smm_tests {
     //         ctx,
     //     );
 
-    //     let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-    //     let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+    //     let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+    //     let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
     //     let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000), ctx);
     //     let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
@@ -584,8 +584,8 @@ module slamm::smm_tests {
     //         ctx,
     //     );
 
-    //     let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-    //     let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+    //     let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+    //     let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
     //     let mut coin_a = coin::mint_for_testing<SUI>(500_000_000_000_000, ctx);
     //     let mut coin_b = coin::mint_for_testing<COIN>(1, ctx);
@@ -660,8 +660,8 @@ module slamm::smm_tests {
     //         ctx,
     //     );
 
-    //     let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-    //     let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+    //     let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+    //     let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
     //     let mut coin_a = coin::mint_for_testing<SUI>(500_000_000_000_000, ctx);
     //     let mut coin_b = coin::mint_for_testing<COIN>(1, ctx);
@@ -743,8 +743,8 @@ module slamm::smm_tests {
     //         ctx,
     //     );
 
-    //     let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-    //     let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+    //     let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+    //     let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
     //     let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000), ctx);
     //     let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
@@ -849,8 +849,8 @@ module slamm::smm_tests {
     //         ctx,
     //     );
 
-    //     let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-    //     let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+    //     let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+    //     let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
     //     let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000), ctx);
     //     let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
@@ -955,8 +955,8 @@ module slamm::smm_tests {
     //         ctx,
     //     );
 
-    //     let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-    //     let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+    //     let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+    //     let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
     //     let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000), ctx);
     //     let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
@@ -1043,8 +1043,8 @@ module slamm::smm_tests {
     //         ctx,
     //     );
 
-    //     let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-    //     let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+    //     let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+    //     let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
     //     let mut coin_a = coin::mint_for_testing<SUI>(e9(200_000_000), ctx);
     //     let mut coin_b = coin::mint_for_testing<COIN>(e9(200_000_000), ctx);

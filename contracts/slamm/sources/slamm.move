@@ -225,13 +225,13 @@ module slamm::pool {
         (pool, pool_cap)
     }
 
-    fun deposit<T>(reserve: &mut Reserve<T>, bank: &mut Bank<T>, balance: Balance<T>) {
+    fun deposit<P, T>(reserve: &mut Reserve<T>, bank: &mut Bank<P, T>, balance: Balance<T>) {
         reserve.0 = reserve.0 + balance.value();
 
         bank.reserve_mut().join(balance);
     }
     
-    fun withdraw<T>(reserve: &mut Reserve<T>, bank: &mut Bank<T>, amount: u64): Balance<T> {
+    fun withdraw<P, T>(reserve: &mut Reserve<T>, bank: &mut Bank<P, T>, amount: u64): Balance<T> {
         assert!(amount <= bank.reserve().value(), EInsufficientFundsInBank);
 
         reserve.0 = reserve.0 - amount;
@@ -257,11 +257,11 @@ module slamm::pool {
     /// - `quote.amount_out()` is less than `min_amount_out`
     /// - if the `quote.amount_out()` exceeds the funds in the assocatied reserve
     #[allow(unused_mut_parameter)]
-    public(package) fun swap<A, B, Hook: drop, State: store>(
+    public(package) fun swap<A, B, Hook: drop, State: store, P>(
         self: &mut Pool<A, B, Hook, State>,
         _witness: Hook,
-        bank_a: &mut Bank<A>,
-        bank_b: &mut Bank<B>,
+        bank_a: &mut Bank<P, A>,
+        bank_b: &mut Bank<P, B>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
         intent: Intent<A, B, Hook>,
@@ -350,8 +350,8 @@ module slamm::pool {
     public fun deposit_liquidity<A, B, Hook: drop, State: store, P>(
         self: &mut Pool<A, B, Hook, State>,
         lending_market: &mut LendingMarket<P>,
-        bank_a: &mut Bank<A>,
-        bank_b: &mut Bank<B>,
+        bank_a: &mut Bank<P, A>,
+        bank_b: &mut Bank<P, B>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
         max_a: u64,
@@ -453,8 +453,8 @@ module slamm::pool {
     public fun redeem_liquidity<A, B, Hook: drop, State: store, P>(
         self: &mut Pool<A, B, Hook, State>,
         lending_market: &mut LendingMarket<P>,
-        bank_a: &mut Bank<A>,
-        bank_b: &mut Bank<B>,
+        bank_a: &mut Bank<P, A>,
+        bank_b: &mut Bank<P, B>,
         lp_tokens: Coin<LP<A, B, Hook>>,
         min_a: u64,
         min_b: u64,
@@ -569,8 +569,8 @@ module slamm::pool {
     // ===== Public Lending functions =====
     
     public fun sync_bank<A, B, Hook: drop, P>(
-        bank_a: &mut Bank<A>,
-        bank_b: &mut Bank<B>,
+        bank_a: &mut Bank<P, A>,
+        bank_b: &mut Bank<P, B>,
         lending_market: &mut LendingMarket<P>,
         intent: &mut Intent<A, B, Hook>,
         clock: &Clock,
@@ -746,15 +746,15 @@ module slamm::pool {
     
     // ===== Private functions =====
 
-    fun swap_inner<In, Out>(
+    fun swap_inner<In, Out, P>(
         quote: &SwapQuote,
-        bank_in: &mut Bank<In>,
+        bank_in: &mut Bank<P, In>,
         reserve_in: &mut Reserve<In>,
         coin_in: &mut Coin<In>,
         swap_in_amount: &mut u128,
         output_protocol_fees: &mut FeeReserve<Out>,
         output_pool_fees: &mut FeeReserve<Out>,
-        bank_out: &mut Bank<Out>,
+        bank_out: &mut Bank<P, Out>,
         reserve_out: &mut Reserve<Out>,
         coin_out: &mut Coin<Out>,
         swap_out_amount: &mut u128,
@@ -1068,9 +1068,9 @@ module slamm::pool {
     }
     
     #[test_only]
-    public(package) fun mut_reserve_a<A, B, Hook: drop, State: store>(
+    public(package) fun mut_reserve_a<A, B, Hook: drop, State: store, P>(
         self: &mut Pool<A, B, Hook, State>,
-        bank: &mut Bank<A>,
+        bank: &mut Bank<P, A>,
         amount: u64,
         increase: bool,
     ) {
@@ -1082,9 +1082,9 @@ module slamm::pool {
     }
     
     #[test_only]
-    public(package) fun mut_reserve_b<A, B, Hook: drop, State: store>(
+    public(package) fun mut_reserve_b<A, B, Hook: drop, State: store, P>(
         self: &mut Pool<A, B, Hook, State>,
-        bank: &mut Bank<B>,
+        bank: &mut Bank<P, B>,
         amount: u64,
         increase: bool,
     ) {

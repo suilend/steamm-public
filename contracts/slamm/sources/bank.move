@@ -2,7 +2,6 @@
 module slamm::bank {
     use std::{
         option::{none, some},
-        type_name::{Self, TypeName},
         // debug::print,
     };
     use sui::{
@@ -20,7 +19,7 @@ module slamm::bank {
     use suilend::{
         decimal,
         reserve::CToken,
-        lending_market::LendingMarket,
+        lending_market::{LendingMarket, ObligationOwnerCap},
     };
 
     // ===== Constants =====
@@ -31,28 +30,27 @@ module slamm::bank {
 
     const ELiquidityRangeAboveHundredPercent: u64 = 1;
     const ELiquidityRangeBelowHundredPercent: u64 = 2;
-    const ELendingMarketTypeMismatch: u64 = 3;
-    const EOutputExceedsTotalBankReserves: u64 = 4;
-    const ELiquidityRatioOffTarget: u64 = 5;
-    const ELendingAlreadyActive: u64 = 6;
-    const EEmptyBank: u64 = 7;
+    const EOutputExceedsTotalBankReserves: u64 = 3;
+    const ELiquidityRatioOffTarget: u64 = 4;
+    const ELendingAlreadyActive: u64 = 5;
+    const EEmptyBank: u64 = 6;
 
-    public struct Bank<phantom T> has key {
+    public struct Bank<phantom P, phantom T> has key {
         id: UID,
         reserve: Balance<T>,
-        lending: Option<Lending>,
+        lending: Option<Lending<P>>,
         fields: Bag,
         version: Version,
     }
 
-    public struct Lending has store {
+    public struct Lending<phantom P> has store {
         lending_market: ID,
-        p_type: TypeName,
         lent: u64,
         ctokens: u64,
         target_liquidity_ratio_bps: u16,
         liquidity_buffer_bps: u16,
         reserve_array_index: u64,
+        obligation_cap: ObligationOwnerCap<P>,
     }
     
     public struct LendingAction has copy, store, drop {
@@ -60,27 +58,25 @@ module slamm::bank {
         is_lend: bool,
     }
 
-    public struct ObligationCapKey<phantom P, phantom T> has copy, store, drop {}
-
     // ====== Entry Functions =====
 
-    public entry fun create_bank_and_share<T>(
+    public entry fun create_bank_and_share<P, T>(
         registry: &mut Registry,
         ctx: &mut TxContext,
     ) {
-        let bank = create_bank<T>(registry, ctx);
+        let bank = create_bank<P, T>(registry, ctx);
         share_object(bank);
     }
     
     // ====== Public Functions =====
 
-    public fun create_bank<T>(
+    public fun create_bank<P, T>(
         registry: &mut Registry,
         ctx: &mut TxContext,
-    ): Bank<T> {
+    ): Bank<P, T> {
         let fields = bag::new(ctx);
 
-        let bank = Bank<T> {
+        let bank = Bank<P, T> {
             id: object::new(ctx),
             reserve: balance::zero(),
             lending: none(),
@@ -94,7 +90,7 @@ module slamm::bank {
     }
     
     public fun init_lending<P, T>(
-        self: &mut Bank<T>,
+        self: &mut Bank<P, T>,
         _: &GlobalAdmin,
         lending_market: &mut LendingMarket<P>,
         target_liquidity_ratio_bps: u16,
@@ -109,21 +105,19 @@ module slamm::bank {
 
         let obligation_cap = lending_market.create_obligation(ctx);
 
-        self.fields.add(ObligationCapKey<P, T> {}, obligation_cap);
-
         self.lending.fill(Lending {
             lending_market: object::id(lending_market),
-            p_type: type_name::get<P>(),
             lent: 0,
             ctokens: 0,
             target_liquidity_ratio_bps: target_liquidity_ratio_bps,
             liquidity_buffer_bps: liquidity_buffer_bps,
             reserve_array_index: reserve_array_index,
+            obligation_cap,
         })
     }
     
     public fun rebalance<P, T>(
-        bank: &mut Bank<T>,
+        bank: &mut Bank<P, T>,
         lending_market: &mut LendingMarket<P>,
         clock: &Clock,
         ctx: &mut TxContext,
@@ -133,8 +127,6 @@ module slamm::bank {
         if (bank.lending.is_none()) {
             return
         };
-
-        bank.assert_p_type<P, T>();
 
         let effective_liquidity = bank.effective_liquidity_ratio_bps();
         let target_liquidity = bank.target_liquidity_ratio_bps();
@@ -171,8 +163,8 @@ module slamm::bank {
         };
     }
 
-    public fun compute_lending_action_with_amount<T>(
-        bank: &Bank<T>,
+    public fun compute_lending_action_with_amount<P, T>(
+        bank: &Bank<P, T>,
         amount: u64,
         is_input: bool,
     ): Option<LendingAction> {
@@ -192,8 +184,8 @@ module slamm::bank {
         )
     }
     
-    public fun compute_lending_action<T>(
-        bank: &Bank<T>,
+    public fun compute_lending_action<P, T>(
+        bank: &Bank<P, T>,
     ): Option<LendingAction> {
         if (bank.lending.is_none()) {
             return none()
@@ -217,18 +209,17 @@ module slamm::bank {
     }
 
     public fun ctoken_amount<P, T>(
-        bank: &Bank<T>,
+        bank: &Bank<P, T>,
         lending_market: &LendingMarket<P>,
         amount: u64,
     ): u64 {
-        bank.assert_p_type<P, T>();
         bank.ctoken_amount_(lending_market, amount)
     }
 
 
     // We only check lower bound
-    public(package) fun assert_liquidity<T>(
-        bank: &Bank<T>,
+    public(package) fun assert_liquidity<P, T>(
+        bank: &Bank<P, T>,
     ) {
         if (bank.lending.is_none()) {
             return
@@ -246,8 +237,8 @@ module slamm::bank {
 
     // ====== Admin Functions =====
     
-    entry fun migrate_as_global_admin<T>(
-        self: &mut Bank<T>,
+    entry fun migrate_as_global_admin<P, T>(
+        self: &mut Bank<P, T>,
         _admin: &GlobalAdmin,
     ) {
         self.version.migrate_(CURRENT_VERSION);
@@ -256,7 +247,7 @@ module slamm::bank {
     // ====== Package Functions =====
 
     public(package) fun provision<P, T>(
-        bank: &mut Bank<T>,
+        bank: &mut Bank<P, T>,
         lending_market: &mut LendingMarket<P>,
         required_output: u64,
         clock: &Clock,
@@ -267,8 +258,6 @@ module slamm::bank {
         if (bank.lending.is_none()) {
             return
         };
-
-        bank.assert_p_type<P, T>();
 
         let amount = {
             let lending = bank.lending.borrow();
@@ -290,16 +279,8 @@ module slamm::bank {
         );
     }
 
-    public(package) fun assert_p_type<P, T>(
-        bank: &Bank<T>,
-    ) {
-        let lending = bank.lending.borrow();
-
-        assert!(type_name::get<P>() == lending.p_type, ELendingMarketTypeMismatch);
-    }
-
-    public(package) fun reserve_mut<T>(
-        bank: &mut Bank<T>,
+    public(package) fun reserve_mut<P, T>(
+        bank: &mut Bank<P, T>,
     ): &mut Balance<T> {
         &mut bank.reserve
     }
@@ -307,7 +288,7 @@ module slamm::bank {
     // ====== Private Functions =====
 
     fun deploy<P, T>(
-        bank: &mut Bank<T>,
+        bank: &mut Bank<P, T>,
         lending_market: &mut LendingMarket<P>,
         amount: u64,
         clock: &Clock,
@@ -329,11 +310,10 @@ module slamm::bank {
         );
 
         let ctoken_amount = c_tokens.value();
-        let obligation_cap = bank.fields.borrow_mut(ObligationCapKey<P, T> {});
 
         lending_market.deposit_ctokens_into_obligation(
             lending.reserve_array_index,
-            obligation_cap,
+            &lending.obligation_cap,
             clock,
             c_tokens,
             ctx,
@@ -345,7 +325,7 @@ module slamm::bank {
     }
 
     fun recall<P, T>(
-        bank: &mut Bank<T>,
+        bank: &mut Bank<P, T>,
         lending_market: &mut LendingMarket<P>,
         amount: u64,
         clock: &Clock,
@@ -358,11 +338,11 @@ module slamm::bank {
         };
 
         let mut ctoken_amount = bank.ctoken_amount_(lending_market, amount);
-        let obligation_cap = bank.fields.borrow_mut(ObligationCapKey<P, T> {});
+        // let obligation_cap = bank.fields.borrow_mut(ObligationCapKey<P, T> {});
 
         let ctokens: Coin<CToken<P, T>> = lending_market.withdraw_ctokens(
             lending.reserve_array_index,
-            obligation_cap,
+            &lending.obligation_cap,
             clock,
             ctoken_amount,
             ctx,
@@ -533,7 +513,7 @@ module slamm::bank {
     }
 
     fun ctoken_amount_<P, T>(
-        bank: &Bank<T>,
+        bank: &Bank<P, T>,
         lending_market: &LendingMarket<P>,
         amount: u64,
     ): u64 {
@@ -549,46 +529,45 @@ module slamm::bank {
 
     // ====== Getters Functions =====
 
-    public fun lending<T>(self: &Bank<T>): &Option<Lending> { &self.lending }
+    public fun lending<P, T>(self: &Bank<P, T>): &Option<Lending<P>> { &self.lending }
     
-    public fun total_reserve<T>(self: &Bank<T>): u64 {
+    public fun total_reserve<P, T>(self: &Bank<P, T>): u64 {
         self.reserve.value() + self.lent()
     }
     
-    public fun effective_liquidity_ratio_bps<T>(self: &Bank<T>): u64 { 
+    public fun effective_liquidity_ratio_bps<P, T>(self: &Bank<P, T>): u64 { 
         compute_liquidity_ratio(self.reserve.value(), self.lent())
     }
     
-    public fun lent<T>(self: &Bank<T>): u64 {
+    public fun lent<P, T>(self: &Bank<P, T>): u64 {
         if (self.lending.is_some()) {
             self.lent_unchecked()
         } else { 0 }
     }
     
-    public fun target_liquidity_ratio_bps<T>(self: &Bank<T>): u64 {
+    public fun target_liquidity_ratio_bps<P, T>(self: &Bank<P, T>): u64 {
         if (self.lending.is_some()) {
             self.liquidity_ratio_bps_unchecked()
         } else { 0 }
     }
     
-    public fun liquidity_buffer_bps<T>(self: &Bank<T>): u64 {
+    public fun liquidity_buffer_bps<P, T>(self: &Bank<P, T>): u64 {
         if (self.lending.is_some()) {
             self.liquidity_buffer_bps_unchecked()
         } else { 0 }
     }
     
-    public fun lending_market<T>(self: &Bank<T>): ID { self.lending.borrow().lending_market }
-    public fun p_type<T>(self: &Bank<T>): TypeName { self.lending.borrow().p_type }
-    public fun reserve<T>(self: &Bank<T>): &Balance<T> { &self.reserve }
-    public fun lent_unchecked<T>(self: &Bank<T>): u64 { self.lending.borrow().lent }
-    public fun liquidity_ratio_bps_unchecked<T>(self: &Bank<T>): u64 { self.lending.borrow().target_liquidity_ratio_bps as u64}
-    public fun liquidity_buffer_bps_unchecked<T>(self: &Bank<T>): u64 { self.lending.borrow().liquidity_buffer_bps as u64 }
-    public fun reserve_array_index<T>(self: &Bank<T>): u64 { self.lending.borrow().reserve_array_index }
+    public fun lending_market<P, T>(self: &Bank<P, T>): ID { self.lending.borrow().lending_market }
+    public fun reserve<P, T>(self: &Bank<P, T>): &Balance<T> { &self.reserve }
+    public fun lent_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().lent }
+    public fun liquidity_ratio_bps_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().target_liquidity_ratio_bps as u64}
+    public fun liquidity_buffer_bps_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().liquidity_buffer_bps as u64 }
+    public fun reserve_array_index<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().reserve_array_index }
 
     // ===== Test-Only Functions =====
     
     #[test_only]
-    public fun mock_amount_lent<T>(self: &mut Bank<T>, amount: u64){ self.lending.borrow_mut().lent = amount; }
+    public fun mock_amount_lent<P, T>(self: &mut Bank<P, T>, amount: u64){ self.lending.borrow_mut().lent = amount; }
 
     // ===== Tests =====
 
