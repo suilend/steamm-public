@@ -129,14 +129,14 @@ module slamm::bank {
         };
 
         let effective_liquidity = bank.effective_liquidity_ratio_bps();
-        let target_liquidity = bank.target_liquidity_ratio_bps();
+        let target_liquidity = bank.target_liquidity_ratio_bps_unchecked();
         let liquidity_buffer = bank.liquidity_buffer_bps();
 
         if (effective_liquidity > target_liquidity + liquidity_buffer) {
             let amount = compute_lend(
                 bank.reserve.value(),
                 bank.lent(),
-                bank.target_liquidity_ratio_bps(),
+                target_liquidity,
             );
 
             bank.deploy(
@@ -151,7 +151,7 @@ module slamm::bank {
             let amount = compute_recall(
                 bank.reserve.value(),
                 bank.lent(),
-                bank.target_liquidity_ratio_bps(),
+                target_liquidity,
             );
 
             bank.recall(
@@ -226,7 +226,7 @@ module slamm::bank {
         };
 
         let effective_liquidity = bank.effective_liquidity_ratio_bps();
-        let target_liquidity = bank.target_liquidity_ratio_bps();
+        let target_liquidity = bank.target_liquidity_ratio_bps_unchecked();
         let liquidity_buffer = bank.liquidity_buffer_bps();
 
         assert!(
@@ -547,7 +547,7 @@ module slamm::bank {
     
     public fun target_liquidity_ratio_bps<P, T>(self: &Bank<P, T>): u64 {
         if (self.lending.is_some()) {
-            self.liquidity_ratio_bps_unchecked()
+            self.target_liquidity_ratio_bps_unchecked()
         } else { 0 }
     }
     
@@ -560,7 +560,7 @@ module slamm::bank {
     public fun lending_market<P, T>(self: &Bank<P, T>): ID { self.lending.borrow().lending_market }
     public fun reserve<P, T>(self: &Bank<P, T>): &Balance<T> { &self.reserve }
     public fun lent_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().lent }
-    public fun liquidity_ratio_bps_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().target_liquidity_ratio_bps as u64}
+    public fun target_liquidity_ratio_bps_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().target_liquidity_ratio_bps as u64}
     public fun liquidity_buffer_bps_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().liquidity_buffer_bps as u64 }
     public fun reserve_array_index<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().reserve_array_index }
 
