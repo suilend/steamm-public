@@ -389,21 +389,17 @@ module slamm::pool {
             self.lp_supply.supply_value(),
         );
 
-        if (bank_a.lending().is_some()) {
-            bank_a.rebalance(
-                lending_market,
-                clock,
-                ctx
-            );
-        };
+        bank_a.rebalance(
+            lending_market,
+            clock,
+            ctx
+        );
         
-        if (bank_b.lending().is_some()) {
-            bank_b.rebalance(
-                lending_market,
-                clock,
-                ctx
-            );
-        };
+        bank_b.rebalance(
+            lending_market,
+            clock,
+            ctx
+        );
         
         (lp_coins, result)
     }
