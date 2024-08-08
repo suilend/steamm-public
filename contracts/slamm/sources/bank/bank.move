@@ -33,10 +33,11 @@ module slamm::bank {
     const EUtilisationRangeBelowHundredPercent: u64 = 2;
     const EUtilisationRateOffTarget: u64 = 3;
     const ELendingAlreadyActive: u64 = 4;
+    const EInsufficientFundsInBank: u64 = 5;
 
     public struct Bank<phantom P, phantom T> has key {
         id: UID,
-        reserve: Balance<T>,
+        funds_available: Balance<T>,
         lending: Option<Lending<P>>,
         fields: Bag,
         version: Version,
@@ -44,7 +45,7 @@ module slamm::bank {
 
     public struct Lending<phantom P> has store {
         lending_market: ID,
-        lent: u64,
+        funds_deployed: u64,
         ctokens: u64,
         target_utilisation: u16,
         utilisation_buffer: u16,
@@ -77,7 +78,7 @@ module slamm::bank {
 
         let bank = Bank<P, T> {
             id: object::new(ctx),
-            reserve: balance::zero(),
+            funds_available: balance::zero(),
             lending: none(),
             fields,
             version: version::new(CURRENT_VERSION),
@@ -106,7 +107,7 @@ module slamm::bank {
 
         self.lending.fill(Lending {
             lending_market: object::id(lending_market),
-            lent: 0,
+            funds_deployed: 0,
             ctokens: 0,
             target_utilisation,
             utilisation_buffer,
@@ -132,30 +133,31 @@ module slamm::bank {
         let buffer = bank.utilisation_buffer();
 
         if (effective_utilisation < target_utilisation - buffer) {
-            let amount = bank_math::compute_lend(
-                bank.reserve.value(),
-                bank.lent(),
+            let amount_to_deploy = bank_math::compute_amount_to_deploy(
+                bank.funds_available.value(),
+                bank.funds_deployed_unchecked(),
                 target_utilisation,
             );
 
             bank.deploy(
                 lending_market,
-                amount,
+                amount_to_deploy,
                 clock,
                 ctx,
             );
         };
 
         if (effective_utilisation > target_utilisation + buffer) {
-            let amount = bank_math::compute_recall(
-                bank.reserve.value(),
-                bank.lent(),
+            let amount_to_recall = bank_math::compute_amount_to_recall(
+                bank.funds_available.value(),
+                0,
+                bank.funds_deployed_unchecked(),
                 target_utilisation,
             );
 
             bank.recall(
                 lending_market,
-                amount,
+                amount_to_recall,
                 clock,
                 ctx,
             );
@@ -174,10 +176,10 @@ module slamm::bank {
         let lending = bank.lending.borrow();
 
         compute_lending_action_with_amount_(
-            bank.reserve.value(),
+            bank.funds_available.value(),
             amount,
             is_input,
-            lending.lent,
+            lending.funds_deployed,
             lending.target_utilisation as u64,
             lending.utilisation_buffer as u64,
         )
@@ -193,8 +195,8 @@ module slamm::bank {
         let lending = bank.lending.borrow();
 
         compute_lending_action_(
-            bank.reserve.value(),
-            lending.lent,
+            bank.funds_available.value(),
+            lending.funds_deployed,
             lending.target_utilisation as u64,
             lending.utilisation_buffer as u64,
         )
@@ -237,10 +239,10 @@ module slamm::bank {
     
     // ====== Package Functions =====
 
-    public(package) fun provision<P, T>(
+    public(package) fun prepare_bank_for_pending_withdraw<P, T>(
         bank: &mut Bank<P, T>,
         lending_market: &mut LendingMarket<P>,
-        required_output: u64,
+        withdraw_amount: u64,
         clock: &Clock,
         ctx: &mut TxContext,
     ) {
@@ -250,13 +252,13 @@ module slamm::bank {
             return
         };
 
-        let amount = {
+        let amount_to_recall = {
             let lending = bank.lending.borrow();
             
             bank_math::compute_recall_amount(
-                bank.reserve.value(),
-                required_output,
-                lending.lent,
+                bank.funds_available.value(),
+                withdraw_amount,
+                lending.funds_deployed,
                 lending.target_utilisation as u64,
                 lending.utilisation_buffer as u64,
             )
@@ -264,16 +266,20 @@ module slamm::bank {
 
         bank.recall(
             lending_market,
-            amount,
+            amount_to_recall,
             clock,
             ctx,
         );
     }
 
-    public(package) fun reserve_mut<P, T>(
-        bank: &mut Bank<P, T>,
-    ): &mut Balance<T> {
-        &mut bank.reserve
+    public(package) fun deposit<P, T>(bank: &mut Bank<P, T>, balance: Balance<T>) {
+        bank.funds_available.join(balance);
+    }
+    
+    public(package) fun withdraw<P, T>(bank: &mut Bank<P, T>, amount: u64): Balance<T> {
+        assert!(amount <= bank.funds_available.value(), EInsufficientFundsInBank);
+
+        bank.funds_available.split(amount)
     }
 
     // ====== Private Functions =====
@@ -281,17 +287,17 @@ module slamm::bank {
     fun deploy<P, T>(
         bank: &mut Bank<P, T>,
         lending_market: &mut LendingMarket<P>,
-        amount: u64,
+        amount_to_deploy: u64,
         clock: &Clock,
         ctx: &mut TxContext,
     ) {
         let lending = bank.lending.borrow();
 
-        if (amount == 0) {
+        if (amount_to_deploy == 0) {
             return
         };
 
-        let balance_to_lend = bank.reserve.split(amount);
+        let balance_to_lend = bank.funds_available.split(amount_to_deploy);
 
         let c_tokens = lending_market.deposit_liquidity_and_mint_ctokens<P, T>(
             lending.reserve_array_index,
@@ -311,25 +317,24 @@ module slamm::bank {
         );
 
         let lending = bank.lending.borrow_mut();
-        lending.lent = lending.lent + amount;
+        lending.funds_deployed = lending.funds_deployed + amount_to_deploy;
         lending.ctokens = lending.ctokens + ctoken_amount;
     }
 
     fun recall<P, T>(
         bank: &mut Bank<P, T>,
         lending_market: &mut LendingMarket<P>,
-        amount: u64,
+        amount_to_recall: u64,
         clock: &Clock,
         ctx: &mut TxContext,
     ) {
         let lending = bank.lending.borrow();
 
-        if (amount == 0) {
+        if (amount_to_recall == 0) {
             return
         };
 
-        let mut ctoken_amount = bank.ctoken_amount_(lending_market, amount);
-        // let obligation_cap = bank.fields.borrow_mut(ObligationCapKey<P, T> {});
+        let mut ctoken_amount = bank.ctoken_amount_(lending_market, amount_to_recall);
 
         let ctokens: Coin<CToken<P, T>> = lending_market.withdraw_ctokens(
             lending.reserve_array_index,
@@ -350,10 +355,10 @@ module slamm::bank {
         );
 
         let lending = bank.lending.borrow_mut();
-        lending.lent = lending.lent - amount;
+        lending.funds_deployed = lending.funds_deployed - amount_to_recall;
         lending.ctokens = lending.ctokens - ctoken_amount;
 
-        bank.reserve.join(coin.into_balance());
+        bank.funds_available.join(coin.into_balance());
     }
 
     fun compute_lending_action_with_amount_(
@@ -372,7 +377,7 @@ module slamm::bank {
             if (amount > reserve) {
                 return some(LendingAction {
                     is_lend: false,
-                    amount: bank_math::compute_recall_with_amount(
+                    amount: bank_math::compute_amount_to_recall(
                         reserve,
                         amount,
                         lent,
@@ -404,7 +409,7 @@ module slamm::bank {
         if (effective_utilisation < target_utilisation - buffer) {
             return some(LendingAction {
                 is_lend: true,
-                amount: bank_math::compute_lend(
+                amount: bank_math::compute_amount_to_deploy(
                     reserve,
                     lent,
                     target_utilisation,
@@ -415,8 +420,9 @@ module slamm::bank {
         if (effective_utilisation > target_utilisation + buffer) {
             return some(LendingAction {
                 is_lend: false,
-                amount: bank_math::compute_recall(
+                amount: bank_math::compute_amount_to_recall(
                     reserve,
+                    0,
                     lent,
                     target_utilisation,
                 )
@@ -445,17 +451,17 @@ module slamm::bank {
 
     public fun lending<P, T>(self: &Bank<P, T>): &Option<Lending<P>> { &self.lending }
     
-    public fun total_reserve<P, T>(self: &Bank<P, T>): u64 {
-        self.reserve.value() + self.lent()
+    public fun total_funds<P, T>(self: &Bank<P, T>): u64 {
+        self.funds_available.value() + self.funds_deployed()
     }
 
     public fun effective_utilisation_rate<P, T>(self: &Bank<P, T>): u64 { 
-        bank_math::compute_utilisation_rate(self.reserve.value(), self.lent())
+        bank_math::compute_utilisation_rate(self.funds_available.value(), self.funds_deployed())
     }
     
-    public fun lent<P, T>(self: &Bank<P, T>): u64 {
+    public fun funds_deployed<P, T>(self: &Bank<P, T>): u64 {
         if (self.lending.is_some()) {
-            self.lent_unchecked()
+            self.funds_deployed_unchecked()
         } else { 0 }
     }
     
@@ -472,8 +478,8 @@ module slamm::bank {
     }
     
     public fun lending_market<P, T>(self: &Bank<P, T>): ID { self.lending.borrow().lending_market }
-    public fun reserve<P, T>(self: &Bank<P, T>): &Balance<T> { &self.reserve }
-    public fun lent_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().lent }
+    public fun funds_available<P, T>(self: &Bank<P, T>): &Balance<T> { &self.funds_available }
+    public fun funds_deployed_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().funds_deployed }
     public fun target_utilisation_rate_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().target_utilisation as u64}
     public fun utilisation_buffer_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().utilisation_buffer as u64 }
     public fun reserve_array_index<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().reserve_array_index }
@@ -481,7 +487,7 @@ module slamm::bank {
     // ===== Test-Only Functions =====
     
     #[test_only]
-    public fun mock_amount_lent<P, T>(self: &mut Bank<P, T>, amount: u64){ self.lending.borrow_mut().lent = amount; }
+    public fun mock_amount_lent<P, T>(self: &mut Bank<P, T>, amount: u64){ self.lending.borrow_mut().funds_deployed = amount; }
 
     // ===== Tests =====
 

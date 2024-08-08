@@ -71,7 +71,6 @@ module slamm::pool {
     // Attempting to unguard pool that is already unguarded
     const EPoolUnguarded: u64 = 7;
     const EInsufficientFunds: u64 = 8;
-    const EInsufficientFundsInBank: u64 = 9;
 
     /// Marker type for the LP coins of a pool. There can only be one
     /// pool per type, albeit given the permissionless aspect of the pool
@@ -445,14 +444,14 @@ module slamm::pool {
             min_b,
         );
 
-        bank_a.provision(
+        bank_a.prepare_bank_for_pending_withdraw(
             lending_market,
             quote.withdraw_a(),
             clock,
             ctx
         );
         
-        bank_b.provision(
+        bank_b.prepare_bank_for_pending_withdraw(
             lending_market,
             quote.withdraw_b(),
             clock,
@@ -541,7 +540,7 @@ module slamm::pool {
 
     // ===== Public Lending functions =====
     
-    public fun sync_bank<A, B, Hook: drop, P>(
+    public fun prepare_bank_for_pending_withdraw<A, B, Hook: drop, P>(
         bank_a: &mut Bank<P, A>,
         bank_b: &mut Bank<P, B>,
         lending_market: &mut LendingMarket<P>,
@@ -550,14 +549,14 @@ module slamm::pool {
         ctx: &mut TxContext,
     ) {
         if (intent.quote.a2b()) {
-            bank_b.provision(
+            bank_b.prepare_bank_for_pending_withdraw(
                 lending_market,
                 intent.quote.amount_out_net_of_pool_fees(), // output amount - pool fees
                 clock,
                 ctx
             );
         } else {
-            bank_a.provision(
+            bank_a.prepare_bank_for_pending_withdraw(
                 lending_market,
                 intent.quote.amount_out_net_of_pool_fees(),
                 clock,
@@ -725,15 +724,12 @@ module slamm::pool {
 
     fun deposit<P, T>(reserve: &mut ReserveAmount<T>, bank: &mut Bank<P, T>, balance: Balance<T>) {
         reserve.0 = reserve.0 + balance.value();
-
-        bank.reserve_mut().join(balance);
+        bank.deposit(balance);
     }
     
     fun withdraw<P, T>(reserve: &mut ReserveAmount<T>, bank: &mut Bank<P, T>, amount: u64): Balance<T> {
-        assert!(amount <= bank.reserve().value(), EInsufficientFundsInBank);
-
         reserve.0 = reserve.0 - amount;
-        bank.reserve_mut().split(amount)
+        bank.withdraw(amount)
     }
 
     fun swap_inner<In, Out, P>(

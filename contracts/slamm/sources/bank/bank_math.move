@@ -7,57 +7,48 @@ module slamm::bank_math {
     
     // Only computes recall if needed, else returns zero
     public(package) fun compute_recall_amount(
-        reserve: u64,
-        amount: u64,
-        lent: u64,
+        funds_available: u64,
+        withdraw_amount: u64,
+        funds_deployed: u64,
         target_utilisation: u64,
         buffer: u64,
     ): u64 {
-        assert_output(reserve, lent, amount);
+        assert_output(funds_available, funds_deployed, withdraw_amount);
         
-        let needs_recall = if (amount > reserve) { true } else {
-            let post_utilisation_ratio = compute_utilisation_rate(reserve - amount, lent) as u64;
+        let needs_recall = if (withdraw_amount > funds_available) { true } else {
+            let post_utilisation_ratio = compute_utilisation_rate(funds_available - withdraw_amount, funds_deployed) as u64;
 
             post_utilisation_ratio > target_utilisation + buffer
         };
 
         if (needs_recall) {
-            return compute_recall_with_amount(
-                reserve,
-                amount,
-                lent,
+            return compute_amount_to_recall(
+                funds_available,
+                withdraw_amount,
+                funds_deployed,
                 target_utilisation,
             )
         } else { 0 }
     }
     
     public(package) fun compute_utilisation_rate(
-        liquid_reserve: u64,
-        lent: u64,
+        funds_available: u64,
+        funds_deployed: u64,
     ): u64 {
-        assert!(liquid_reserve + lent > 0, EEmptyBank);
-        10_000 - ( (liquid_reserve * 10_000) / (liquid_reserve + lent) )
+        assert!(funds_available + funds_deployed > 0, EEmptyBank);
+        (funds_deployed * 10_000) / (funds_available + funds_deployed)
     }
-
-    // only called when the ratio is above... otherwise fails
-    public(package) fun compute_recall(
-        reserve: u64,
-        lent: u64,
-        target_utilisation: u64,
-    ): u64 {
-        compute_recall_with_amount(reserve, 0, lent, target_utilisation)
-    }
-    
 
     // (1 - utilisation ratio) * (R + Lent - Out) + (Out * 10_000) - (R * 10_000)
-    public(package) fun compute_recall_with_amount(
-        reserve: u64,
-        output: u64,
-        lent: u64,
+    // Computes amount to recall
+    public(package) fun compute_amount_to_recall(
+        funds_available: u64,
+        withdraw_amount: u64,
+        funds_deployed: u64,
         target_utilisation: u64,
     ): u64 {
         (
-            (10_000 - target_utilisation) * (reserve + lent - output) + (output * 10_000) - (reserve * 10_000)
+            (10_000 - target_utilisation) * (funds_available + funds_deployed - withdraw_amount) + (withdraw_amount * 10_000) - (funds_available * 10_000)
         ) / 10_000
     }
     
@@ -67,12 +58,13 @@ module slamm::bank_math {
     // (effective_liquidity - target_liquidity) * total_reserves
     // [liquid / (liquid + iliquid) - target] * (liquid + iliquid)
     // liquid - target * (liquid + iliquid)
-    public(package) fun compute_lend(
-        reserve_t1: u64,
-        lent: u64,
+    // Computes amount to deploy/lend
+    public(package) fun compute_amount_to_deploy(
+        funds_available: u64,
+        funds_deployed: u64,
         target_utilisation: u64,
     ): u64 {
-        reserve_t1 - ((10_000 - target_utilisation) * (reserve_t1 + lent) / 10_000)
+        funds_available - ((10_000 - target_utilisation) * (funds_available + funds_deployed) / 10_000)
     }
 
     public(package) fun assert_output(
@@ -91,9 +83,9 @@ module slamm::bank_math {
     #[test]
     fun test_compute_recall() {
         // Reserve, Lent, Utilisation Ratio
-        assert_eq(compute_recall(2_000, 8_000, 8_000), 0);
-        assert_eq(compute_recall(1_000, 9_000, 8_000), 1000);
-        assert_eq(compute_recall(0, 10_000, 8_000), 2000);
+        assert_eq(compute_amount_to_recall(2_000, 0, 8_000, 8_000), 0);
+        assert_eq(compute_amount_to_recall(1_000, 0, 9_000, 8_000), 1000);
+        assert_eq(compute_amount_to_recall(0, 0, 10_000, 8_000), 2000);
     }
     
     #[test]
@@ -130,9 +122,9 @@ module slamm::bank_math {
     #[test]
     fun test_compute_lend() {
         // Reserve, Lent, Utilisation Ratio
-        assert_eq(compute_lend(2_000, 8_000, 8_000), 0);
-        assert_eq(compute_lend(3_000, 8_000, 8_000), 800);
-        assert_eq(compute_lend(4_000, 8_000, 8_000), 1600);
+        assert_eq(compute_amount_to_deploy(2_000, 8_000, 8_000), 0);
+        assert_eq(compute_amount_to_deploy(3_000, 8_000, 8_000), 800);
+        assert_eq(compute_amount_to_deploy(4_000, 8_000, 8_000), 1600);
     }
     
     #[test]

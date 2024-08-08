@@ -86,9 +86,9 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
-        assert_eq(bank_a.lent(), 400_000); // 500_000 * 80%
-        assert_eq(bank_a.reserve().value(), 100_000); // 500_000 * 20%
-        assert_eq(bank_b.reserve().value(), 500_000);
+        assert_eq(bank_a.funds_deployed(), 400_000); // 500_000 * 80%
+        assert_eq(bank_a.funds_available().value(), 100_000); // 500_000 * 20%
+        assert_eq(bank_b.funds_available().value(), 500_000);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -170,9 +170,9 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
-        assert_eq(bank_a.lent(), 400_000); // 500_000 * 80%
-        assert_eq(bank_a.reserve().value(), 100_000); // 500_000 * 20%
-        assert_eq(bank_b.reserve().value(), 500_000);
+        assert_eq(bank_a.funds_deployed(), 400_000); // 500_000 * 80%
+        assert_eq(bank_a.funds_available().value(), 100_000); // 500_000 * 20%
+        assert_eq(bank_b.funds_available().value(), 500_000);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -202,9 +202,9 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 10);
         assert_eq(reserve_b, 10);
 
-        assert_eq(bank_a.lent(), 8); // 10 * 80%
-        assert_eq(bank_a.reserve().value(), 2); // 10 * 20%
-        assert_eq(bank_b.reserve().value(), 10);
+        assert_eq(bank_a.funds_deployed(), 8); // 10 * 80%
+        assert_eq(bank_a.funds_available().value(), 2); // 10 * 20%
+        assert_eq(bank_b.funds_available().value(), 10);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -285,8 +285,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
-        assert_eq(bank_a.lent(), 400_000); // 500_000 * 80%
-        assert_eq(bank_a.reserve().value(), 100_000); // 500_000 * 20%
+        assert_eq(bank_a.funds_deployed(), 400_000); // 500_000 * 80%
+        assert_eq(bank_a.funds_available().value(), 100_000); // 500_000 * 20%
 
         destroy(coin_a);
         destroy(coin_b);
@@ -310,9 +310,9 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 550_000);
         assert_eq(reserve_b, 454_910);
 
-        assert_eq(bank_a.lent(), 400_000);
-        assert_eq(bank_a.reserve().value(), 150_000);
-        assert_eq(bank_b.reserve().value(), 454_910);
+        assert_eq(bank_a.funds_deployed(), 400_000);
+        assert_eq(bank_a.funds_available().value(), 150_000);
+        assert_eq(bank_b.funds_available().value(), 454_910);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -402,10 +402,10 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
-        assert_eq(bank_a.lent(), 400_000); // 500_000 * 80%
-        assert_eq(bank_a.reserve().value(), 100_000); // 500_000 * 20%
-        assert_eq(bank_b.lent(), 400_000); // 500_000 * 80%
-        assert_eq(bank_b.reserve().value(), 100_000); // 500_000 * 20%
+        assert_eq(bank_a.funds_deployed(), 400_000); // 500_000 * 80%
+        assert_eq(bank_a.funds_available().value(), 100_000); // 500_000 * 20%
+        assert_eq(bank_b.funds_deployed(), 400_000); // 500_000 * 80%
+        assert_eq(bank_b.funds_available().value(), 100_000); // 500_000 * 20%
 
         destroy(coin_a);
         destroy(coin_b);
@@ -495,10 +495,10 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
-        assert_eq(bank_a.lent(), 400_000); // 500_000 * 80%
-        assert_eq(bank_a.reserve().value(), 100_000); // 500_000 * 20%
-        assert_eq(bank_b.lent(), 400_000); // 500_000 * 80%
-        assert_eq(bank_b.reserve().value(), 100_000); // 500_000 * 20%
+        assert_eq(bank_a.funds_deployed(), 400_000); // 500_000 * 80%
+        assert_eq(bank_a.funds_available().value(), 100_000); // 500_000 * 20%
+        assert_eq(bank_b.funds_deployed(), 400_000); // 500_000 * 80%
+        assert_eq(bank_b.funds_available().value(), 100_000); // 500_000 * 20%
 
         destroy(coin_a);
         destroy(coin_b);
@@ -611,10 +611,10 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
-        assert_eq(bank_a.lent(), 400_000); // 500_000 * 80%
-        assert_eq(bank_a.reserve().value(), 100_000); // 500_000 * 20%
-        assert_eq(bank_b.lent(), 400_000); // 500_000 * 80%
-        assert_eq(bank_b.reserve().value(), 100_000); // 500_000 * 20%
+        assert_eq(bank_a.funds_deployed(), 400_000); // 500_000 * 80%
+        assert_eq(bank_a.funds_available().value(), 100_000); // 500_000 * 20%
+        assert_eq(bank_b.funds_deployed(), 400_000); // 500_000 * 80%
+        assert_eq(bank_b.funds_available().value(), 100_000); // 500_000 * 20%
 
         destroy(coin_a);
         destroy(coin_b);
@@ -643,11 +643,11 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 550_000);
         assert_eq(reserve_b, 454_910);
 
-        assert_eq(bank_a.lent(), 400_000);
-        assert_eq(bank_a.reserve().value(), 150_000);
+        assert_eq(bank_a.funds_deployed(), 400_000);
+        assert_eq(bank_a.funds_available().value(), 150_000);
         
-        assert_eq(bank_b.lent(), 400_000);
-        assert_eq(bank_b.reserve().value(), 54_910);
+        assert_eq(bank_b.funds_deployed(), 400_000);
+        assert_eq(bank_b.funds_available().value(), 54_910);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -737,10 +737,10 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
-        assert_eq(bank_a.lent(), 400_000); // 500_000 * 80%
-        assert_eq(bank_a.reserve().value(), 100_000); // 500_000 * 20%
-        assert_eq(bank_b.lent(), 400_000); // 500_000 * 80%
-        assert_eq(bank_b.reserve().value(), 100_000); // 500_000 * 20%
+        assert_eq(bank_a.funds_deployed(), 400_000); // 500_000 * 80%
+        assert_eq(bank_a.funds_available().value(), 100_000); // 500_000 * 20%
+        assert_eq(bank_b.funds_deployed(), 400_000); // 500_000 * 80%
+        assert_eq(bank_b.funds_available().value(), 100_000); // 500_000 * 20%
 
         destroy(coin_a);
         destroy(coin_b);
@@ -754,7 +754,7 @@ module slamm::lend_tests {
             true, // a2b
         );
 
-        pool::sync_bank(
+        pool::prepare_bank_for_pending_withdraw(
             &mut bank_a,
             &mut bank_b,
             &mut lending_market,
@@ -778,11 +778,11 @@ module slamm::lend_tests {
         assert_eq(reserve_b, 358_286);
         assert_eq(reserve_b + pool.trading_data().protocol_fees_b(), 358_572);
 
-        assert_eq(bank_a.lent(), 400_000);
-        assert_eq(bank_a.reserve().value(), 300_000);
+        assert_eq(bank_a.funds_deployed(), 400_000);
+        assert_eq(bank_a.funds_available().value(), 300_000);
         
-        assert_eq(bank_b.lent(), 286_629);
-        assert_eq(bank_b.reserve().value(), 71_657);
+        assert_eq(bank_b.funds_deployed(), 286_629);
+        assert_eq(bank_b.funds_available().value(), 71_657);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -859,9 +859,9 @@ module slamm::lend_tests {
         assert_eq(pool.trading_data().pool_fees_a(), 0);
         assert_eq(pool.trading_data().pool_fees_b(), 0);
 
-        assert_eq(bank_a.lent(), 80_000); // 100_000 * 80%
-        assert_eq(bank_a.reserve().value(), 20_000); // 500_000 * 20%
-        assert_eq(bank_b.reserve().value(), 100_000);
+        assert_eq(bank_a.funds_deployed(), 80_000); // 100_000 * 80%
+        assert_eq(bank_a.funds_available().value(), 20_000); // 500_000 * 20%
+        assert_eq(bank_b.funds_available().value(), 100_000);
         
         assert_eq(bank_a.effective_utilisation_rate(), 8000); // 80% target liquidity
         assert!(bank_a.compute_lending_action().is_none(), 0);
@@ -894,9 +894,9 @@ module slamm::lend_tests {
         assert_eq(reserve_b, 105_000);
         assert_eq(lp_coins.value(), 5_000); // newly minted lp tokens
         
-        assert_eq(bank_a.lent(), 80_000); // 100_000 * 80%
-        assert_eq(bank_a.reserve().value(), 25_000); // 100_000 * 20% + 5_000
-        assert_eq(bank_b.reserve().value(), 105_000);
+        assert_eq(bank_a.funds_deployed(), 80_000); // 100_000 * 80%
+        assert_eq(bank_a.funds_available().value(), 25_000); // 100_000 * 20% + 5_000
+        assert_eq(bank_b.funds_available().value(), 105_000);
         
         assert!(bank_a.effective_utilisation_rate() < bank_a.target_utilisation_rate(), 0);
         assert!(bank_a.effective_utilisation_rate() > bank_a.target_utilisation_rate() -  bank_a.utilisation_buffer(), 0);
@@ -930,9 +930,9 @@ module slamm::lend_tests {
         assert_eq(reserve_b, 5_105_000);
         assert_eq(lp_coins.value(), 5_000_000); // newly minted lp tokens
         
-        assert_eq(bank_a.lent(), 4_084_000); // 5_105_000 * 80%
-        assert_eq(bank_a.reserve().value(), 1_021_000); // 5_125_000 * 20%
-        assert_eq(bank_b.reserve().value(), 5_105_000);
+        assert_eq(bank_a.funds_deployed(), 4_084_000); // 5_105_000 * 80%
+        assert_eq(bank_a.funds_available().value(), 1_021_000); // 5_125_000 * 20%
+        assert_eq(bank_b.funds_available().value(), 5_105_000);
         
         assert_eq(bank_a.effective_utilisation_rate(), 8000); // 80% target liquidity
         assert!(bank_a.compute_lending_action().is_none(), 0);
@@ -1033,7 +1033,9 @@ module slamm::lend_tests {
                 ctx,
             );
 
-            assert_eq(bank_a.effective_utilisation_rate(), 8000); // 80% target liquidity
+            assert!(
+                bank_a.effective_utilisation_rate().max(8000) - bank_a.effective_utilisation_rate().min(8000) <= 1
+            ); // 80% target liquidity (with 0.001% deviation from rounding err)
             assert!(bank_a.compute_lending_action().is_none(), 0);
 
             destroy(coin_a);
@@ -1115,9 +1117,9 @@ module slamm::lend_tests {
         assert_eq(pool.trading_data().pool_fees_a(), 0);
         assert_eq(pool.trading_data().pool_fees_b(), 0);
 
-        assert_eq(bank_a.lent(), 80_000); // 100_000 * 80%
-        assert_eq(bank_a.reserve().value(), 20_000); // 100_000 * 20%
-        assert_eq(bank_b.reserve().value(), 100_000);
+        assert_eq(bank_a.funds_deployed(), 80_000); // 100_000 * 80%
+        assert_eq(bank_a.funds_available().value(), 20_000); // 100_000 * 20%
+        assert_eq(bank_b.funds_available().value(), 100_000);
         
         assert_eq(bank_a.effective_utilisation_rate(), 8000); // 80% target liquidity
         assert!(bank_a.compute_lending_action().is_none(), 0);
@@ -1130,22 +1132,22 @@ module slamm::lend_tests {
             &mut lending_market,
             &mut bank_a,
             &mut bank_b,
-            lp_coins.split(10, ctx),
-            10,
-            10,
+            lp_coins.split(100, ctx),
+            100,
+            100,
             &clock,
             ctx,
         );
 
         let (reserve_a, reserve_b) = pool.reserves();
-        assert_eq(pool.lp_supply_val(), 100_000 - 10);
-        assert_eq(reserve_a, 100_000 - 10);
-        assert_eq(reserve_b, 100_000 - 10);
-        assert_eq(lp_coins.value(), 100_000 - 10 - 10); // extra 10 is minimum_liquidity
+        assert_eq(pool.lp_supply_val(), 100_000 - 100);
+        assert_eq(reserve_a, 100_000 - 100);
+        assert_eq(reserve_b, 100_000 - 100);
+        assert_eq(lp_coins.value(), 100_000 - 100 - 10); // extra 10 is minimum_liquidity
         
-        assert_eq(bank_a.lent(), 80_000); // amount lent does not change
-        assert_eq(bank_a.reserve().value(), 19_990); // 100_000 * 20% - 10
-        assert_eq(bank_b.reserve().value(), 100_000 - 10);
+        assert_eq(bank_a.funds_deployed(), 80_000); // amount lent does not change
+        assert_eq(bank_a.funds_available().value(), 19_900); // 100_000 * 20% - 100
+        assert_eq(bank_b.funds_available().value(), 100_000 - 100);
         
         assert!(bank_a.effective_utilisation_rate() > bank_a.target_utilisation_rate(), 0);
         assert!(bank_a.effective_utilisation_rate() < bank_a.target_utilisation_rate() + bank_a.utilisation_buffer(), 0);
@@ -1167,14 +1169,14 @@ module slamm::lend_tests {
         );
 
         let (reserve_a, reserve_b) = pool.reserves();
-        assert_eq(pool.lp_supply_val(), 100_000 - 10 - 50_000);
-        assert_eq(reserve_a, 100_000 - 10 - 50_000);
-        assert_eq(reserve_b, 100_000 - 10 - 50_000);
-        assert_eq(lp_coins.value(), 100_000 - 10 - 50_000 - 10); // extra 10 is minimum_liquidity
+        assert_eq(pool.lp_supply_val(), 100_000 - 100 - 50_000);
+        assert_eq(reserve_a, 100_000 - 100 - 50_000);
+        assert_eq(reserve_b, 100_000 - 100 - 50_000);
+        assert_eq(lp_coins.value(), 100_000 - 100 - 50_000 - 10); // extra 10 is minimum_liquidity
 
-        assert_eq(bank_a.lent(), (100_000 - 10 - 50_000) * 80 / 100);
-        assert_eq(bank_a.reserve().value(), (100_000 - 10 - 50_000) * 20 / 100);
-        assert_eq(bank_b.reserve().value(), 100_000 - 10 - 50_000);
+        assert_eq(bank_a.funds_deployed(), (100_000 - 100 - 50_000) * 80 / 100);
+        assert_eq(bank_a.funds_available().value(), (100_000 - 100 - 50_000) * 20 / 100);
+        assert_eq(bank_b.funds_available().value(), 100_000 - 100 - 50_000);
         
         assert!(bank_a.effective_utilisation_rate() == bank_a.target_utilisation_rate(), 0);
         assert!(bank_a.compute_lending_action().is_none(), 0);
@@ -1196,6 +1198,8 @@ module slamm::lend_tests {
         destroy(clock);
         test_scenario::end(scenario);
     }
+
+    use std::debug::print;
     
     #[test]
     fun test_lend_amm_swap_small_swap_scenarios() {
@@ -1351,7 +1355,7 @@ module slamm::lend_tests {
             false, // a2b
         );
 
-        pool::sync_bank(
+        pool::prepare_bank_for_pending_withdraw(
             &mut bank_a,
             &mut bank_b,
             &mut lending_market,
@@ -1451,7 +1455,7 @@ module slamm::lend_tests {
             false, // a2b
         );
 
-        pool::sync_bank(
+        pool::prepare_bank_for_pending_withdraw(
             &mut bank_a,
             &mut bank_b,
             &mut lending_market,
@@ -1553,7 +1557,7 @@ module slamm::lend_tests {
             false, // a2b
         );
 
-        pool::sync_bank(
+        pool::prepare_bank_for_pending_withdraw(
             &mut bank_a,
             &mut bank_b,
             &mut lending_market,
@@ -1577,9 +1581,9 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 100_000 - 30_000);
         assert_eq(reserve_b, 100_000 + 30_000);
 
-        assert_eq(bank_a.lent(), (100_000 - 30_000) * 80 / 100);
-        assert_eq(bank_a.reserve().value(), (100_000 - 30_000) * 20 / 100);
-        assert_eq(bank_b.reserve().value(), 100_000 + 30_000);
+        assert_eq(bank_a.funds_deployed(), (100_000 - 30_000) * 80 / 100);
+        assert_eq(bank_a.funds_available().value(), (100_000 - 30_000) * 20 / 100);
+        assert_eq(bank_b.funds_available().value(), 100_000 + 30_000);
         
         assert!(bank_a.effective_utilisation_rate() == bank_a.target_utilisation_rate(), 0);
         assert!(bank_a.compute_lending_action().is_none(), 0);
