@@ -62,8 +62,8 @@ module slamm::bank_tests {
         bank.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -93,16 +93,16 @@ module slamm::bank_tests {
         bank.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
         
         bank.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -118,8 +118,8 @@ module slamm::bank_tests {
     }
 
     #[test]
-    #[expected_failure(abort_code = bank::ELiquidityRangeAboveHundredPercent)]
-    fun test_invalid_target_liquidity_above_100() {
+    #[expected_failure(abort_code = bank::EUtilisationRangeAboveHundredPercent)]
+    fun test_invalid_utilisation_liquidity_above_100() {
         let mut scenario = test_scenario::begin(@0x0);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
@@ -133,8 +133,8 @@ module slamm::bank_tests {
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            10_001, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
+            10_001, // utilisation_rate
+            1_000, // buffer
             ctx(&mut scenario),
         );
 
@@ -150,7 +150,7 @@ module slamm::bank_tests {
     }
     
     #[test]
-    #[expected_failure(abort_code = bank::ELiquidityRangeBelowHundredPercent)]
+    #[expected_failure(abort_code = bank::EUtilisationRangeBelowHundredPercent)]
     fun test_invalid_target_liquidity_below_100() {
         let mut scenario = test_scenario::begin(@0x0);
 
@@ -165,8 +165,8 @@ module slamm::bank_tests {
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            1_000, // liquidity_ratio_bps
-            1_001, // liquidity_buffer_bps
+            1_000, // utilisation_rate
+            1_001, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -197,12 +197,12 @@ module slamm::bank_tests {
         bank.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            500, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            500, // utilisation_buffer
             ctx(&mut scenario),
         );
 
-        bank.assert_liquidity();
+        bank.assert_utilisation();
 
         destroy(bank);
         destroy(registry);
@@ -216,8 +216,8 @@ module slamm::bank_tests {
     }
     
     #[test]
-    #[expected_failure(abort_code = bank::ELiquidityRatioOffTarget)]
-    fun test_fail_assert_liquidity_ratio() {
+    #[expected_failure(abort_code = bank::EUtilisationRateOffTarget)]
+    fun test_fail_assert_utilisation_rate() {
         let mut scenario = test_scenario::begin(@0x0);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
@@ -231,14 +231,14 @@ module slamm::bank_tests {
         bank.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            500, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            500, // utilisation_buffer
             ctx(&mut scenario),
         );
 
         bank.mock_amount_lent(1_000);
 
-        bank.assert_liquidity();
+        bank.assert_utilisation();
 
         destroy(bank);
         destroy(registry);

@@ -38,8 +38,8 @@ module slamm::lend_tests {
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -122,8 +122,8 @@ module slamm::lend_tests {
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -237,8 +237,8 @@ module slamm::lend_tests {
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -346,16 +346,16 @@ module slamm::lend_tests {
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario)
         );
         
         bank_b.init_lending<LENDING_MARKET, TEST_SUI>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -439,16 +439,16 @@ module slamm::lend_tests {
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
         
         bank_b.init_lending<LENDING_MARKET, TEST_SUI>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -555,16 +555,16 @@ module slamm::lend_tests {
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
         
         bank_b.init_lending<LENDING_MARKET, TEST_SUI>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -681,16 +681,16 @@ module slamm::lend_tests {
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
         
         bank_b.init_lending<LENDING_MARKET, TEST_SUI>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -817,8 +817,8 @@ module slamm::lend_tests {
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            500, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            500, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -863,7 +863,7 @@ module slamm::lend_tests {
         assert_eq(bank_a.reserve().value(), 20_000); // 500_000 * 20%
         assert_eq(bank_b.reserve().value(), 100_000);
         
-        assert_eq(bank_a.effective_liquidity_ratio_bps(), 2000); // 20% target liquidity
+        assert_eq(bank_a.effective_utilisation_rate(), 8000); // 80% target liquidity
         assert!(bank_a.compute_lending_action().is_none(), 0);
 
         destroy(coin_a);
@@ -898,8 +898,8 @@ module slamm::lend_tests {
         assert_eq(bank_a.reserve().value(), 25_000); // 100_000 * 20% + 5_000
         assert_eq(bank_b.reserve().value(), 105_000);
         
-        assert!(bank_a.effective_liquidity_ratio_bps() > bank_a.target_liquidity_ratio_bps(), 0);
-        assert!(bank_a.effective_liquidity_ratio_bps() < bank_a.target_liquidity_ratio_bps() + bank_a.liquidity_buffer_bps(), 0);
+        assert!(bank_a.effective_utilisation_rate() < bank_a.target_utilisation_rate(), 0);
+        assert!(bank_a.effective_utilisation_rate() > bank_a.target_utilisation_rate() -  bank_a.utilisation_buffer(), 0);
         assert!(bank_a.compute_lending_action().is_none(), 0);
 
         destroy(coin_a);
@@ -934,7 +934,7 @@ module slamm::lend_tests {
         assert_eq(bank_a.reserve().value(), 1_021_000); // 5_125_000 * 20%
         assert_eq(bank_b.reserve().value(), 5_105_000);
         
-        assert_eq(bank_a.effective_liquidity_ratio_bps(), 2000); // 20% target liquidity
+        assert_eq(bank_a.effective_utilisation_rate(), 8000); // 80% target liquidity
         assert!(bank_a.compute_lending_action().is_none(), 0);
 
         destroy(coin_a);
@@ -971,8 +971,8 @@ module slamm::lend_tests {
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            500, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            500, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -1033,7 +1033,7 @@ module slamm::lend_tests {
                 ctx,
             );
 
-            assert_eq(bank_a.effective_liquidity_ratio_bps(), 2000); // 20% target liquidity
+            assert_eq(bank_a.effective_utilisation_rate(), 8000); // 80% target liquidity
             assert!(bank_a.compute_lending_action().is_none(), 0);
 
             destroy(coin_a);
@@ -1073,8 +1073,8 @@ module slamm::lend_tests {
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            500, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            500, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -1119,7 +1119,7 @@ module slamm::lend_tests {
         assert_eq(bank_a.reserve().value(), 20_000); // 100_000 * 20%
         assert_eq(bank_b.reserve().value(), 100_000);
         
-        assert_eq(bank_a.effective_liquidity_ratio_bps(), 2000); // 20% target liquidity
+        assert_eq(bank_a.effective_utilisation_rate(), 8000); // 80% target liquidity
         assert!(bank_a.compute_lending_action().is_none(), 0);
 
         destroy(coin_a);
@@ -1147,8 +1147,8 @@ module slamm::lend_tests {
         assert_eq(bank_a.reserve().value(), 19_990); // 100_000 * 20% - 10
         assert_eq(bank_b.reserve().value(), 100_000 - 10);
         
-        assert!(bank_a.effective_liquidity_ratio_bps() < bank_a.target_liquidity_ratio_bps(), 0);
-        assert!(bank_a.effective_liquidity_ratio_bps() > bank_a.target_liquidity_ratio_bps() - bank_a.liquidity_buffer_bps(), 0);
+        assert!(bank_a.effective_utilisation_rate() > bank_a.target_utilisation_rate(), 0);
+        assert!(bank_a.effective_utilisation_rate() < bank_a.target_utilisation_rate() + bank_a.utilisation_buffer(), 0);
         assert!(bank_a.compute_lending_action().is_none(), 0);
 
         destroy(coin_a);
@@ -1176,7 +1176,7 @@ module slamm::lend_tests {
         assert_eq(bank_a.reserve().value(), (100_000 - 10 - 50_000) * 20 / 100);
         assert_eq(bank_b.reserve().value(), 100_000 - 10 - 50_000);
         
-        assert!(bank_a.effective_liquidity_ratio_bps() == bank_a.target_liquidity_ratio_bps(), 0);
+        assert!(bank_a.effective_utilisation_rate() == bank_a.target_utilisation_rate(), 0);
         assert!(bank_a.compute_lending_action().is_none(), 0);
 
         destroy(coin_a);
@@ -1213,8 +1213,8 @@ module slamm::lend_tests {
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            500, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            500, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -1304,8 +1304,8 @@ module slamm::lend_tests {
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            500, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            500, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -1404,8 +1404,8 @@ module slamm::lend_tests {
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            500, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            500, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -1471,7 +1471,7 @@ module slamm::lend_tests {
             ctx,
         );
 
-        assert!(bank_a.effective_liquidity_ratio_bps() == bank_a.target_liquidity_ratio_bps(), 0);
+        assert!(bank_a.effective_utilisation_rate() == bank_a.target_utilisation_rate(), 0);
         
         destroy(coin_a);
         destroy(coin_b);
@@ -1506,8 +1506,8 @@ module slamm::lend_tests {
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            500, // liquidity_buffer_bps
+            8_000, // utilisation_rate
+            500, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -1581,7 +1581,7 @@ module slamm::lend_tests {
         assert_eq(bank_a.reserve().value(), (100_000 - 30_000) * 20 / 100);
         assert_eq(bank_b.reserve().value(), 100_000 + 30_000);
         
-        assert!(bank_a.effective_liquidity_ratio_bps() == bank_a.target_liquidity_ratio_bps(), 0);
+        assert!(bank_a.effective_utilisation_rate() == bank_a.target_utilisation_rate(), 0);
         assert!(bank_a.compute_lending_action().is_none(), 0);
         
         destroy(coin_a);

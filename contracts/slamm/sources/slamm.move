@@ -318,8 +318,8 @@ module slamm::pool {
             a2b: quote.a2b(),
         };
 
-        bank_a.assert_liquidity();
-        bank_b.assert_liquidity();
+        bank_a.assert_utilisation();
+        bank_b.assert_utilisation();
 
         emit_event(result);
 
