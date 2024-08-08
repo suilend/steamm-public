@@ -5,6 +5,7 @@ module slamm::bank_tests {
         test_utils::destroy,
     };
     use slamm::{
+        bank_math,
         bank,
         registry,
         global_admin,
@@ -182,7 +183,7 @@ module slamm::bank_tests {
     }
     
     #[test]
-    #[expected_failure(abort_code = bank::EEmptyBank)]
+    #[expected_failure(abort_code = bank_math::EEmptyBank)]
     fun test_fail_assert_empty_bank() {
         let mut scenario = test_scenario::begin(@0x0);
 
