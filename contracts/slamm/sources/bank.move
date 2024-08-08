@@ -95,7 +95,6 @@ module slamm::bank {
         lending_market: &mut LendingMarket<P>,
         target_liquidity_ratio_bps: u16,
         liquidity_buffer_bps: u16,
-        reserve_array_index: u64,
         ctx: &mut TxContext,
     ) {
         self.version.assert_version_and_upgrade(CURRENT_VERSION);
@@ -104,6 +103,7 @@ module slamm::bank {
         assert!(target_liquidity_ratio_bps > liquidity_buffer_bps, ELiquidityRangeBelowHundredPercent);
 
         let obligation_cap = lending_market.create_obligation(ctx);
+        let reserve_array_index = lending_market.reserve_array_index<P, T>();
 
         self.lending.fill(Lending {
             lending_market: object::id(lending_market),
@@ -111,7 +111,7 @@ module slamm::bank {
             ctokens: 0,
             target_liquidity_ratio_bps: target_liquidity_ratio_bps,
             liquidity_buffer_bps: liquidity_buffer_bps,
-            reserve_array_index: reserve_array_index,
+            reserve_array_index,
             obligation_cap,
         })
     }

@@ -64,7 +64,6 @@ module slamm::bank_tests {
             &mut lending_market,
             2_000, // liquidity_ratio_bps
             1_000, // liquidity_buffer_bps
-            0, // reserve_array_index
             ctx(&mut scenario),
         );
 
@@ -96,7 +95,6 @@ module slamm::bank_tests {
             &mut lending_market,
             2_000, // liquidity_ratio_bps
             1_000, // liquidity_buffer_bps
-            0, // reserve_array_index
             ctx(&mut scenario),
         );
         
@@ -105,7 +103,6 @@ module slamm::bank_tests {
             &mut lending_market,
             2_000, // liquidity_ratio_bps
             1_000, // liquidity_buffer_bps
-            0, // reserve_array_index
             ctx(&mut scenario),
         );
 
@@ -138,7 +135,6 @@ module slamm::bank_tests {
             &mut lending_market,
             10_001, // liquidity_ratio_bps
             1_000, // liquidity_buffer_bps
-            0, // reserve_array_index
             ctx(&mut scenario),
         );
 
@@ -171,7 +167,6 @@ module slamm::bank_tests {
             &mut lending_market,
             1_000, // liquidity_ratio_bps
             1_001, // liquidity_buffer_bps
-            0, // reserve_array_index
             ctx(&mut scenario),
         );
 
@@ -204,7 +199,6 @@ module slamm::bank_tests {
             &mut lending_market,
             2_000, // liquidity_ratio_bps
             500, // liquidity_buffer_bps
-            0, // reserve_array_index
             ctx(&mut scenario),
         );
 
@@ -239,7 +233,6 @@ module slamm::bank_tests {
             &mut lending_market,
             2_000, // liquidity_ratio_bps
             500, // liquidity_buffer_bps
-            0, // reserve_array_index
             ctx(&mut scenario),
         );
 
