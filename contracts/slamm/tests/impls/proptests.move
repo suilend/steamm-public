@@ -10,7 +10,7 @@ module slamm::proptests {
     use sui::random;
     use sui::coin::{Self};
     use sui::test_utils::{destroy};
-    use suilend::lending_market;
+    use suilend::lending_market::{Self, LENDING_MARKET};
 
     const ADMIN: address = @0x10;
     const POOL_CREATOR: address = @0x11;
@@ -42,8 +42,8 @@ module slamm::proptests {
             ctx,
         );
 
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let mut coin_a = coin::mint_for_testing<SUI>(e9(100_000), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(e9(100_000), ctx);
@@ -130,8 +130,8 @@ module slamm::proptests {
             ctx,
         );
 
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let mut coin_a = coin::mint_for_testing<SUI>(e9(100_000), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(e9(100_000), ctx);
@@ -221,8 +221,8 @@ module slamm::proptests {
             ctx,
         );
 
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let mut coin_a = coin::mint_for_testing<SUI>(10_000_000_000_000_000_000, ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(10_000_000_000_000_000_000, ctx);

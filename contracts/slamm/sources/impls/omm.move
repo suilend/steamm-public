@@ -1,21 +1,25 @@
 /// Oracle AMM Hook implementation
 module slamm::omm {
-    // use std::debug::print;
     use sui::coin::Coin;
     use sui::clock::{Self, Clock};
-    use slamm::global_admin::GlobalAdmin;
-    use slamm::registry::{Registry};
-    use slamm::math::safe_mul_div_up;
-    use slamm::quote::SwapQuote;
-    use slamm::bank::Bank;
-    use slamm::cpmm;
-    use slamm::pool::{Self, Pool, PoolCap, SwapResult, Intent};
-    use slamm::version::{Self, Version};
-    use pyth::price_info::{PriceInfoObject};
-    use suilend::decimal::{Self, Decimal};
-    use suilend::oracles;
-    use pyth::price_identifier::{PriceIdentifier};
-    // use pyth::price::Price;
+    use slamm::{
+        global_admin::GlobalAdmin,
+        registry::{Registry},
+        math::safe_mul_div_up,
+        quote::SwapQuote,
+        bank::Bank,
+        cpmm,
+        pool::{Self, Pool, PoolCap, SwapResult, Intent},
+        version::{Self, Version},
+    };
+    use suilend::{
+        decimal::{Self, Decimal},
+        oracles,
+    };
+    use pyth::{
+        price_info::{PriceInfoObject},
+        price_identifier::{PriceIdentifier},
+    };
 
     // ===== Constants =====
 
@@ -85,7 +89,7 @@ module slamm::omm {
         max_vol_accumulated_bps: u64,
         clock: &Clock,
         ctx: &mut TxContext,
-    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>>) {
+    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>, State>) {
         let price_info_a = from_price_feed(price_feed_a, clock);
         let price_info_b = from_price_feed(price_feed_b, clock);
         let reference_price = new_instant_price_oracle_(&price_info_a, &price_info_b);
@@ -118,10 +122,10 @@ module slamm::omm {
         (pool, pool_cap)
     }
 
-    public fun swap<A, B, W: drop>(
+    public fun swap<A, B, W: drop, P>(
         self: &mut Pool<A, B, Hook<W>, State>,
-        bank_a: &mut Bank<A>,
-        bank_b: &mut Bank<B>,
+        bank_a: &mut Bank<P, A>,
+        bank_b: &mut Bank<P, B>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
         amount_in: u64,
@@ -174,10 +178,10 @@ module slamm::omm {
         quote.as_intent(self)
     }
 
-    public fun execute_swap<A, B, W: drop>(
+    public fun execute_swap<A, B, W: drop, P>(
         self: &mut Pool<A, B, Hook<W>, State>,
-        bank_a: &mut Bank<A>,
-        bank_b: &mut Bank<B>,
+        bank_a: &mut Bank<P, A>,
+        bank_b: &mut Bank<P, B>,
         intent: Intent<A, B, Hook<W>>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
@@ -346,7 +350,7 @@ module slamm::omm {
     
     entry fun migrate<A, B, W>(
         self: &mut Pool<A, B, Hook<W>, State>,
-        _cap: &PoolCap<A, B, Hook<W>>,
+        _cap: &PoolCap<A, B, Hook<W>, State>,
     ) {
         migrate_(self);
     }

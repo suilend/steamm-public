@@ -13,7 +13,7 @@ module slamm::test_utils {
     use std::type_name;
     use suilend::test_usdc::{TEST_USDC};
     use suilend::test_sui::{TEST_SUI};
-    use suilend::lending_market;
+    use suilend::lending_market::{Self, LENDING_MARKET};
     use pyth::price_info::{Self, PriceInfoObject};
     use pyth::price_feed;
     use pyth::price_identifier;
@@ -52,7 +52,7 @@ module slamm::test_utils {
         reserve_b: u64,
         lp_supply: u64,
         swap_fee_bps: u64,
-    ): (Pool<SUI, COIN, CpmmHook<PoolWit>, CpmmState>, Bank<SUI>, Bank<COIN>) {
+    ): (Pool<SUI, COIN, CpmmHook<PoolWit>, CpmmState>, Bank<LENDING_MARKET, SUI>, Bank<LENDING_MARKET, COIN>) {
         let mut scenario = test_scenario::begin(@0x0);
         let ctx = ctx(&mut scenario);
 
@@ -65,8 +65,8 @@ module slamm::test_utils {
             ctx,
         );
 
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         pool.mut_reserve_a(&mut bank_a, reserve_a, true);
         pool.mut_reserve_b(&mut bank_b, reserve_b, true);

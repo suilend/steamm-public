@@ -256,28 +256,6 @@ module slamm::deposit_redeem {
         assert_eq(delta_b, 656376366);
         assert_eq(lp_tokens, 251342775123);
     }
-    
-    #[test]
-    #[expected_failure(abort_code = pool::EDepositRatioLeadsToZeroB)]
-    fun test_fail_deposit_ratio_leads_to_zero() {
-        let (pool, bank_a, bank_b) = test_utils::new_for_testing(
-            5,
-            0,
-            sqrt_u128(5 as u128) as u64,
-            0,
-        );
-
-        let _quote = pool.quote_deposit_impl_test(
-            5, // max_base
-            5, // max_quote,
-            0, // min_a
-            0, // min_b
-        );
-
-        destroy(pool);
-        destroy(bank_a);
-        destroy(bank_b);
-    }
 
     #[test]
     #[expected_failure(abort_code = pool::EDepositMaxParamsCantBeZero)]

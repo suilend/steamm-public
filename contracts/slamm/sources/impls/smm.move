@@ -1,12 +1,14 @@
 /// Fixed Range Constant-Sum AMM Hook implementation
 module slamm::smm {
     use sui::coin::Coin;
-    use slamm::global_admin::GlobalAdmin;
-    use slamm::registry::{Registry};
-    use slamm::quote::SwapQuote;
-    use slamm::bank::Bank;
-    use slamm::pool::{Self, Pool, PoolCap, SwapResult, Intent};
-    use slamm::version::{Self, Version};
+    use slamm::{
+        global_admin::GlobalAdmin,
+        registry::{Registry},
+        quote::SwapQuote,
+        bank::Bank,
+        pool::{Self, Pool, PoolCap, SwapResult, Intent},
+        version::{Self, Version},
+    };
     use suilend::decimal::{Self, Decimal};
 
     // ===== Constants =====
@@ -47,7 +49,7 @@ module slamm::smm {
         upper_reserve_ratio_bps: u64,
         lower_reserve_ratio_bps: u64,
         ctx: &mut TxContext,
-    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>>) {
+    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>, State>) {
         let inner = State {
             version: version::new(CURRENT_VERSION),
             upper_reserve_ratio: decimal::from(upper_reserve_ratio_bps).div(decimal::from(10_000)),
@@ -65,10 +67,10 @@ module slamm::smm {
         (pool, pool_cap)
     }
 
-    public fun swap<A, B, W: drop>(
+    public fun swap<A, B, W: drop, P>(
         self: &mut Pool<A, B, Hook<W>, State>,
-        bank_a: &mut Bank<A>,
-        bank_b: &mut Bank<B>,
+        bank_a: &mut Bank<P, A>,
+        bank_b: &mut Bank<P, B>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
         amount_in: u64,
@@ -109,10 +111,10 @@ module slamm::smm {
         quote.as_intent(self)
     }
 
-    public fun execute_swap<A, B, W: drop>(
+    public fun execute_swap<A, B, W: drop, P>(
         self: &mut Pool<A, B, Hook<W>, State>,
-        bank_a: &mut Bank<A>,
-        bank_b: &mut Bank<B>,
+        bank_a: &mut Bank<P, A>,
+        bank_b: &mut Bank<P, B>,
         intent: Intent<A, B, Hook<W>>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
@@ -179,14 +181,14 @@ module slamm::smm {
     
     public fun k<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>): u128 {
         let (reserve_a, reserve_b) = self.reserves();
-        ((reserve_a as u128) * (reserve_b as u128))
+        ((reserve_a as u128) + (reserve_b as u128))
     }
 
     // ===== Versioning =====
     
     entry fun migrate<A, B, W>(
         self: &mut Pool<A, B, Hook<W>, State>,
-        _cap: &PoolCap<A, B, Hook<W>>,
+        _cap: &PoolCap<A, B, Hook<W>, State>,
     ) {
         migrate_(self);
     }

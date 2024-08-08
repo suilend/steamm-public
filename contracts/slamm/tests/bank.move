@@ -24,7 +24,7 @@ module slamm::bank_tests {
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
 
         // Create amm bank
-        let bank = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let bank = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         destroy(bank);
         destroy(registry);
@@ -39,8 +39,8 @@ module slamm::bank_tests {
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
 
         // Create bank
-        let bank_1 = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
-        let bank_2 = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let bank_1 = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
+        let bank_2 = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         destroy(bank_1);
         destroy(bank_2);
@@ -56,15 +56,14 @@ module slamm::bank_tests {
         let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
 
         // Create bank
-        let mut bank = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
         bank.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
-            0, // reserve_array_index
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -88,24 +87,22 @@ module slamm::bank_tests {
         let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
 
         // Create bank
-        let mut bank = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
         bank.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
-            0, // reserve_array_index
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
         
         bank.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
-            0, // reserve_array_index
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -121,8 +118,8 @@ module slamm::bank_tests {
     }
 
     #[test]
-    #[expected_failure(abort_code = bank::ELiquidityRangeAboveHundredPercent)]
-    fun test_invalid_target_liquidity_above_100() {
+    #[expected_failure(abort_code = bank::EUtilisationRangeAboveHundredPercent)]
+    fun test_invalid_utilisation_liquidity_above_100() {
         let mut scenario = test_scenario::begin(@0x0);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
@@ -131,14 +128,13 @@ module slamm::bank_tests {
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            10_001, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
-            0, // reserve_array_index
+            10_001, // utilisation_rate
+            1_000, // buffer
             ctx(&mut scenario),
         );
 
@@ -154,7 +150,7 @@ module slamm::bank_tests {
     }
     
     #[test]
-    #[expected_failure(abort_code = bank::ELiquidityRangeBelowHundredPercent)]
+    #[expected_failure(abort_code = bank::EUtilisationRangeBelowHundredPercent)]
     fun test_invalid_target_liquidity_below_100() {
         let mut scenario = test_scenario::begin(@0x0);
 
@@ -164,53 +160,17 @@ module slamm::bank_tests {
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            1_000, // liquidity_ratio_bps
-            1_001, // liquidity_buffer_bps
-            0, // reserve_array_index
+            1_000, // utilisation_rate
+            1_001, // utilisation_buffer
             ctx(&mut scenario),
         );
 
         destroy(bank_a);
-        destroy(registry);
-        destroy(global_admin);
-        destroy(lending_market);
-        destroy(lend_cap);
-        destroy(prices);
-        destroy(bag);
-        destroy(clock);
-        test_scenario::end(scenario);
-    }
-    
-    #[test]
-    #[expected_failure(abort_code = bank::ELendingMarketTypeMismatch)]
-    fun test_assert_wrong_bank_ptype() {
-        let mut scenario = test_scenario::begin(@0x0);
-
-        let mut registry = registry::init_for_testing(ctx(&mut scenario));
-
-        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
-        // Create amm bank
-        let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
-
-        let mut bank = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-
-        bank.init_lending<LENDING_MARKET, TEST_USDC>(
-            &global_admin,
-            &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            500, // liquidity_buffer_bps
-            0, // reserve_array_index
-            ctx(&mut scenario),
-        );
-
-        bank.assert_p_type<FAKE_LENDING, TEST_USDC>();
-
-        destroy(bank);
         destroy(registry);
         destroy(global_admin);
         destroy(lending_market);
@@ -232,18 +192,17 @@ module slamm::bank_tests {
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-        let mut bank = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
 
         bank.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            500, // liquidity_buffer_bps
-            0, // reserve_array_index
+            8_000, // utilisation_rate
+            500, // utilisation_buffer
             ctx(&mut scenario),
         );
 
-        bank.assert_liquidity();
+        bank.assert_utilisation();
 
         destroy(bank);
         destroy(registry);
@@ -257,8 +216,8 @@ module slamm::bank_tests {
     }
     
     #[test]
-    #[expected_failure(abort_code = bank::ELiquidityRatioOffTarget)]
-    fun test_fail_assert_liquidity_ratio() {
+    #[expected_failure(abort_code = bank::EUtilisationRateOffTarget)]
+    fun test_fail_assert_utilisation_rate() {
         let mut scenario = test_scenario::begin(@0x0);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
@@ -267,20 +226,19 @@ module slamm::bank_tests {
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-        let mut bank = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
 
         bank.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            500, // liquidity_buffer_bps
-            0, // reserve_array_index
+            8_000, // utilisation_rate
+            500, // utilisation_buffer
             ctx(&mut scenario),
         );
 
         bank.mock_amount_lent(1_000);
 
-        bank.assert_liquidity();
+        bank.assert_utilisation();
 
         destroy(bank);
         destroy(registry);

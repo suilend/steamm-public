@@ -32,15 +32,14 @@ module slamm::lend_tests {
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
-            0, // reserve_array_index
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -80,8 +79,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 500_000);
@@ -117,15 +116,14 @@ module slamm::lend_tests {
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
-            0, // reserve_array_index
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -165,8 +163,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 500_000);
@@ -197,8 +195,8 @@ module slamm::lend_tests {
         assert_eq(pool.lp_supply_val(), 10);
         assert_eq(reserve_a, 10);
         assert_eq(reserve_b, 10);
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 10);
@@ -233,15 +231,14 @@ module slamm::lend_tests {
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
-            0, // reserve_array_index
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -281,8 +278,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 500_000);
@@ -343,24 +340,22 @@ module slamm::lend_tests {
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<TEST_SUI>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
-            0, // reserve_array_index
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario)
         );
         
         bank_b.init_lending<LENDING_MARKET, TEST_SUI>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
-            1, // reserve_array_index
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -400,8 +395,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 500_000);
@@ -438,24 +433,22 @@ module slamm::lend_tests {
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<TEST_SUI>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
-            0, // reserve_array_index
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
         
         bank_b.init_lending<LENDING_MARKET, TEST_SUI>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
-            1, // reserve_array_index
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -495,8 +488,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 500_000);
@@ -528,8 +521,8 @@ module slamm::lend_tests {
         assert_eq(pool.lp_supply_val(), 10);
         assert_eq(reserve_a, 10);
         assert_eq(reserve_b, 10);
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -556,24 +549,22 @@ module slamm::lend_tests {
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<TEST_SUI>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
-            0, // reserve_array_index
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
         
         bank_b.init_lending<LENDING_MARKET, TEST_SUI>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
-            1, // reserve_array_index
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -613,8 +604,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 500_000);
@@ -684,24 +675,22 @@ module slamm::lend_tests {
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<TEST_SUI>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
-            0, // reserve_array_index
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
         
         bank_b.init_lending<LENDING_MARKET, TEST_SUI>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            1_000, // liquidity_buffer_bps
-            1, // reserve_array_index
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -741,8 +730,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 500_000);
@@ -787,7 +776,7 @@ module slamm::lend_tests {
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 700_000);
         assert_eq(reserve_b, 358_286);
-        assert_eq(reserve_b + pool.protocol_fees().fee_b().acc_fees(), 358_572);
+        assert_eq(reserve_b + pool.trading_data().protocol_fees_b(), 358_572);
 
         assert_eq(bank_a.lent(), 400_000);
         assert_eq(bank_a.reserve().value(), 300_000);
@@ -822,15 +811,14 @@ module slamm::lend_tests {
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            500, // liquidity_buffer_bps
-            0, // reserve_array_index
+            8_000, // utilisation_rate
+            500, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -868,14 +856,14 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 100_000);
         assert_eq(reserve_b, 100_000);
         assert_eq(lp_coins.value(), 100_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         assert_eq(bank_a.lent(), 80_000); // 100_000 * 80%
         assert_eq(bank_a.reserve().value(), 20_000); // 500_000 * 20%
         assert_eq(bank_b.reserve().value(), 100_000);
         
-        assert_eq(bank_a.effective_liquidity_ratio_bps(), 2000); // 20% target liquidity
+        assert_eq(bank_a.effective_utilisation_rate(), 8000); // 80% target liquidity
         assert!(bank_a.compute_lending_action().is_none(), 0);
 
         destroy(coin_a);
@@ -910,8 +898,8 @@ module slamm::lend_tests {
         assert_eq(bank_a.reserve().value(), 25_000); // 100_000 * 20% + 5_000
         assert_eq(bank_b.reserve().value(), 105_000);
         
-        assert!(bank_a.effective_liquidity_ratio_bps() > bank_a.target_liquidity_ratio_bps(), 0);
-        assert!(bank_a.effective_liquidity_ratio_bps() < bank_a.target_liquidity_ratio_bps() + bank_a.liquidity_buffer_bps(), 0);
+        assert!(bank_a.effective_utilisation_rate() < bank_a.target_utilisation_rate(), 0);
+        assert!(bank_a.effective_utilisation_rate() > bank_a.target_utilisation_rate() -  bank_a.utilisation_buffer(), 0);
         assert!(bank_a.compute_lending_action().is_none(), 0);
 
         destroy(coin_a);
@@ -946,7 +934,7 @@ module slamm::lend_tests {
         assert_eq(bank_a.reserve().value(), 1_021_000); // 5_125_000 * 20%
         assert_eq(bank_b.reserve().value(), 5_105_000);
         
-        assert_eq(bank_a.effective_liquidity_ratio_bps(), 2000); // 20% target liquidity
+        assert_eq(bank_a.effective_utilisation_rate(), 8000); // 80% target liquidity
         assert!(bank_a.compute_lending_action().is_none(), 0);
 
         destroy(coin_a);
@@ -977,15 +965,14 @@ module slamm::lend_tests {
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            500, // liquidity_buffer_bps
-            0, // reserve_array_index
+            8_000, // utilisation_rate
+            500, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -1046,7 +1033,7 @@ module slamm::lend_tests {
                 ctx,
             );
 
-            assert_eq(bank_a.effective_liquidity_ratio_bps(), 2000); // 20% target liquidity
+            assert_eq(bank_a.effective_utilisation_rate(), 8000); // 80% target liquidity
             assert!(bank_a.compute_lending_action().is_none(), 0);
 
             destroy(coin_a);
@@ -1080,15 +1067,14 @@ module slamm::lend_tests {
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            500, // liquidity_buffer_bps
-            0, // reserve_array_index
+            8_000, // utilisation_rate
+            500, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -1126,14 +1112,14 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 100_000);
         assert_eq(reserve_b, 100_000);
         assert_eq(lp_coins.value(), 100_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         assert_eq(bank_a.lent(), 80_000); // 100_000 * 80%
         assert_eq(bank_a.reserve().value(), 20_000); // 100_000 * 20%
         assert_eq(bank_b.reserve().value(), 100_000);
         
-        assert_eq(bank_a.effective_liquidity_ratio_bps(), 2000); // 20% target liquidity
+        assert_eq(bank_a.effective_utilisation_rate(), 8000); // 80% target liquidity
         assert!(bank_a.compute_lending_action().is_none(), 0);
 
         destroy(coin_a);
@@ -1161,8 +1147,8 @@ module slamm::lend_tests {
         assert_eq(bank_a.reserve().value(), 19_990); // 100_000 * 20% - 10
         assert_eq(bank_b.reserve().value(), 100_000 - 10);
         
-        assert!(bank_a.effective_liquidity_ratio_bps() < bank_a.target_liquidity_ratio_bps(), 0);
-        assert!(bank_a.effective_liquidity_ratio_bps() > bank_a.target_liquidity_ratio_bps() - bank_a.liquidity_buffer_bps(), 0);
+        assert!(bank_a.effective_utilisation_rate() > bank_a.target_utilisation_rate(), 0);
+        assert!(bank_a.effective_utilisation_rate() < bank_a.target_utilisation_rate() + bank_a.utilisation_buffer(), 0);
         assert!(bank_a.compute_lending_action().is_none(), 0);
 
         destroy(coin_a);
@@ -1190,7 +1176,7 @@ module slamm::lend_tests {
         assert_eq(bank_a.reserve().value(), (100_000 - 10 - 50_000) * 20 / 100);
         assert_eq(bank_b.reserve().value(), 100_000 - 10 - 50_000);
         
-        assert!(bank_a.effective_liquidity_ratio_bps() == bank_a.target_liquidity_ratio_bps(), 0);
+        assert!(bank_a.effective_utilisation_rate() == bank_a.target_utilisation_rate(), 0);
         assert!(bank_a.compute_lending_action().is_none(), 0);
 
         destroy(coin_a);
@@ -1221,15 +1207,14 @@ module slamm::lend_tests {
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            500, // liquidity_buffer_bps
-            0, // reserve_array_index
+            8_000, // utilisation_rate
+            500, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -1313,15 +1298,14 @@ module slamm::lend_tests {
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            500, // liquidity_buffer_bps
-            0, // reserve_array_index
+            8_000, // utilisation_rate
+            500, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -1414,15 +1398,14 @@ module slamm::lend_tests {
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            500, // liquidity_buffer_bps
-            0, // reserve_array_index
+            8_000, // utilisation_rate
+            500, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -1488,7 +1471,7 @@ module slamm::lend_tests {
             ctx,
         );
 
-        assert!(bank_a.effective_liquidity_ratio_bps() == bank_a.target_liquidity_ratio_bps(), 0);
+        assert!(bank_a.effective_utilisation_rate() == bank_a.target_utilisation_rate(), 0);
         
         destroy(coin_a);
         destroy(coin_b);
@@ -1517,15 +1500,14 @@ module slamm::lend_tests {
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-        let mut bank_a = bank::create_bank<TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            2_000, // liquidity_ratio_bps
-            500, // liquidity_buffer_bps
-            0, // reserve_array_index
+            8_000, // utilisation_rate
+            500, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -1599,7 +1581,7 @@ module slamm::lend_tests {
         assert_eq(bank_a.reserve().value(), (100_000 - 30_000) * 20 / 100);
         assert_eq(bank_b.reserve().value(), 100_000 + 30_000);
         
-        assert!(bank_a.effective_liquidity_ratio_bps() == bank_a.target_liquidity_ratio_bps(), 0);
+        assert!(bank_a.effective_utilisation_rate() == bank_a.target_utilisation_rate(), 0);
         assert!(bank_a.compute_lending_action().is_none(), 0);
         
         destroy(coin_a);

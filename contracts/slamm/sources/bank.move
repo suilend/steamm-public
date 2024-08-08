@@ -2,7 +2,6 @@
 module slamm::bank {
     use std::{
         option::{none, some},
-        type_name::{Self, TypeName},
         // debug::print,
     };
     use sui::{
@@ -20,7 +19,7 @@ module slamm::bank {
     use suilend::{
         decimal,
         reserve::CToken,
-        lending_market::LendingMarket,
+        lending_market::{LendingMarket, ObligationOwnerCap},
     };
 
     // ===== Constants =====
@@ -29,30 +28,29 @@ module slamm::bank {
 
     // ===== Errors =====
 
-    const ELiquidityRangeAboveHundredPercent: u64 = 1;
-    const ELiquidityRangeBelowHundredPercent: u64 = 2;
-    const ELendingMarketTypeMismatch: u64 = 3;
-    const EOutputExceedsTotalBankReserves: u64 = 4;
-    const ELiquidityRatioOffTarget: u64 = 5;
-    const ELendingAlreadyActive: u64 = 6;
-    const EEmptyBank: u64 = 7;
+    const EUtilisationRangeAboveHundredPercent: u64 = 1;
+    const EUtilisationRangeBelowHundredPercent: u64 = 2;
+    const EOutputExceedsTotalBankReserves: u64 = 3;
+    const EUtilisationRateOffTarget: u64 = 4;
+    const ELendingAlreadyActive: u64 = 5;
+    const EEmptyBank: u64 = 6;
 
-    public struct Bank<phantom T> has key {
+    public struct Bank<phantom P, phantom T> has key {
         id: UID,
         reserve: Balance<T>,
-        lending: Option<Lending>,
+        lending: Option<Lending<P>>,
         fields: Bag,
         version: Version,
     }
 
-    public struct Lending has store {
+    public struct Lending<phantom P> has store {
         lending_market: ID,
-        p_type: TypeName,
         lent: u64,
         ctokens: u64,
-        target_liquidity_ratio_bps: u16,
-        liquidity_buffer_bps: u16,
+        target_utilisation: u16,
+        utilisation_buffer: u16,
         reserve_array_index: u64,
+        obligation_cap: ObligationOwnerCap<P>,
     }
     
     public struct LendingAction has copy, store, drop {
@@ -60,27 +58,25 @@ module slamm::bank {
         is_lend: bool,
     }
 
-    public struct ObligationCapKey<phantom P, phantom T> has copy, store, drop {}
-
     // ====== Entry Functions =====
 
-    public entry fun create_bank_and_share<T>(
+    public entry fun create_bank_and_share<P, T>(
         registry: &mut Registry,
         ctx: &mut TxContext,
     ) {
-        let bank = create_bank<T>(registry, ctx);
+        let bank = create_bank<P, T>(registry, ctx);
         share_object(bank);
     }
     
     // ====== Public Functions =====
 
-    public fun create_bank<T>(
+    public fun create_bank<P, T>(
         registry: &mut Registry,
         ctx: &mut TxContext,
-    ): Bank<T> {
+    ): Bank<P, T> {
         let fields = bag::new(ctx);
 
-        let bank = Bank<T> {
+        let bank = Bank<P, T> {
             id: object::new(ctx),
             reserve: balance::zero(),
             lending: none(),
@@ -94,36 +90,34 @@ module slamm::bank {
     }
     
     public fun init_lending<P, T>(
-        self: &mut Bank<T>,
+        self: &mut Bank<P, T>,
         _: &GlobalAdmin,
         lending_market: &mut LendingMarket<P>,
-        target_liquidity_ratio_bps: u16,
-        liquidity_buffer_bps: u16,
-        reserve_array_index: u64,
+        target_utilisation: u16,
+        utilisation_buffer: u16,
         ctx: &mut TxContext,
     ) {
         self.version.assert_version_and_upgrade(CURRENT_VERSION);
         assert!(self.lending.is_none(), ELendingAlreadyActive);
-        assert!(target_liquidity_ratio_bps + liquidity_buffer_bps < 10_000, ELiquidityRangeAboveHundredPercent);
-        assert!(target_liquidity_ratio_bps > liquidity_buffer_bps, ELiquidityRangeBelowHundredPercent);
+        assert!(target_utilisation + utilisation_buffer < 10_000, EUtilisationRangeAboveHundredPercent);
+        assert!(target_utilisation > utilisation_buffer, EUtilisationRangeBelowHundredPercent);
 
         let obligation_cap = lending_market.create_obligation(ctx);
-
-        self.fields.add(ObligationCapKey<P, T> {}, obligation_cap);
+        let reserve_array_index = lending_market.reserve_array_index<P, T>();
 
         self.lending.fill(Lending {
             lending_market: object::id(lending_market),
-            p_type: type_name::get<P>(),
             lent: 0,
             ctokens: 0,
-            target_liquidity_ratio_bps: target_liquidity_ratio_bps,
-            liquidity_buffer_bps: liquidity_buffer_bps,
-            reserve_array_index: reserve_array_index,
+            target_utilisation,
+            utilisation_buffer,
+            reserve_array_index,
+            obligation_cap,
         })
     }
     
     public fun rebalance<P, T>(
-        bank: &mut Bank<T>,
+        bank: &mut Bank<P, T>,
         lending_market: &mut LendingMarket<P>,
         clock: &Clock,
         ctx: &mut TxContext,
@@ -134,20 +128,18 @@ module slamm::bank {
             return
         };
 
-        bank.assert_p_type<P, T>();
+        let effective_utilisation = bank.effective_utilisation_rate();
+        let target_utilisation = bank.target_utilisation_rate_unchecked();
+        let buffer = bank.utilisation_buffer();
 
-        let effective_liquidity = bank.effective_liquidity_ratio_bps();
-        let target_liquidity = bank.target_liquidity_ratio_bps();
-        let liquidity_buffer = bank.liquidity_buffer_bps();
-
-        if (effective_liquidity > target_liquidity + liquidity_buffer) {
+        if (effective_utilisation < target_utilisation - buffer) {
             let amount = compute_lend(
                 bank.reserve.value(),
                 bank.lent(),
-                bank.target_liquidity_ratio_bps(),
+                target_utilisation,
             );
 
-            bank.lend(
+            bank.deploy(
                 lending_market,
                 amount,
                 clock,
@@ -155,11 +147,11 @@ module slamm::bank {
             );
         };
 
-        if (effective_liquidity < target_liquidity - liquidity_buffer) {
+        if (effective_utilisation > target_utilisation + buffer) {
             let amount = compute_recall(
                 bank.reserve.value(),
                 bank.lent(),
-                bank.target_liquidity_ratio_bps(),
+                target_utilisation,
             );
 
             bank.recall(
@@ -171,8 +163,8 @@ module slamm::bank {
         };
     }
 
-    public fun compute_lending_action_with_amount<T>(
-        bank: &Bank<T>,
+    public fun compute_lending_action_with_amount<P, T>(
+        bank: &Bank<P, T>,
         amount: u64,
         is_input: bool,
     ): Option<LendingAction> {
@@ -187,13 +179,13 @@ module slamm::bank {
             amount,
             is_input,
             lending.lent,
-            lending.target_liquidity_ratio_bps as u64,
-            lending.liquidity_buffer_bps as u64,
+            lending.target_utilisation as u64,
+            lending.utilisation_buffer as u64,
         )
     }
     
-    public fun compute_lending_action<T>(
-        bank: &Bank<T>,
+    public fun compute_lending_action<P, T>(
+        bank: &Bank<P, T>,
     ): Option<LendingAction> {
         if (bank.lending.is_none()) {
             return none()
@@ -204,50 +196,41 @@ module slamm::bank {
         compute_lending_action_(
             bank.reserve.value(),
             lending.lent,
-            lending.target_liquidity_ratio_bps as u64,
-            lending.liquidity_buffer_bps as u64,
+            lending.target_utilisation as u64,
+            lending.utilisation_buffer as u64,
         )
     }
 
-    public fun liquidity_ratio(
-        liquid_reserve: u64,
-        iliquid_reserve: u64,
-    ): u16 {
-        ((liquid_reserve * 10_000) / (liquid_reserve + iliquid_reserve)) as u16
-    }
-
     public fun ctoken_amount<P, T>(
-        bank: &Bank<T>,
+        bank: &Bank<P, T>,
         lending_market: &LendingMarket<P>,
         amount: u64,
     ): u64 {
-        bank.assert_p_type<P, T>();
         bank.ctoken_amount_(lending_market, amount)
     }
 
-
     // We only check lower bound
-    public(package) fun assert_liquidity<T>(
-        bank: &Bank<T>,
+    public(package) fun assert_utilisation<P, T>(
+        bank: &Bank<P, T>,
     ) {
         if (bank.lending.is_none()) {
             return
         };
 
-        let effective_liquidity = bank.effective_liquidity_ratio_bps();
-        let target_liquidity = bank.target_liquidity_ratio_bps();
-        let liquidity_buffer = bank.liquidity_buffer_bps();
+        let effective_utilisation = bank.effective_utilisation_rate();
+        let target_utilisation = bank.target_utilisation_rate_unchecked();
+        let buffer = bank.utilisation_buffer_unchecked();
 
         assert!(
-            effective_liquidity >= target_liquidity - liquidity_buffer,
-            ELiquidityRatioOffTarget
+            effective_utilisation <= target_utilisation + buffer,
+            EUtilisationRateOffTarget
         );
     }
 
     // ====== Admin Functions =====
     
-    entry fun migrate_as_global_admin<T>(
-        self: &mut Bank<T>,
+    entry fun migrate_as_global_admin<P, T>(
+        self: &mut Bank<P, T>,
         _admin: &GlobalAdmin,
     ) {
         self.version.migrate_(CURRENT_VERSION);
@@ -256,7 +239,7 @@ module slamm::bank {
     // ====== Package Functions =====
 
     public(package) fun provision<P, T>(
-        bank: &mut Bank<T>,
+        bank: &mut Bank<P, T>,
         lending_market: &mut LendingMarket<P>,
         required_output: u64,
         clock: &Clock,
@@ -268,8 +251,6 @@ module slamm::bank {
             return
         };
 
-        bank.assert_p_type<P, T>();
-
         let amount = {
             let lending = bank.lending.borrow();
             
@@ -277,8 +258,8 @@ module slamm::bank {
                 bank.reserve.value(),
                 required_output,
                 lending.lent,
-                lending.target_liquidity_ratio_bps as u64,
-                lending.liquidity_buffer_bps as u64,
+                lending.target_utilisation as u64,
+                lending.utilisation_buffer as u64,
             )
         };
 
@@ -290,24 +271,16 @@ module slamm::bank {
         );
     }
 
-    public(package) fun assert_p_type<P, T>(
-        bank: &Bank<T>,
-    ) {
-        let lending = bank.lending.borrow();
-
-        assert!(type_name::get<P>() == lending.p_type, ELendingMarketTypeMismatch);
-    }
-
-    public(package) fun reserve_mut<T>(
-        bank: &mut Bank<T>,
+    public(package) fun reserve_mut<P, T>(
+        bank: &mut Bank<P, T>,
     ): &mut Balance<T> {
         &mut bank.reserve
     }
 
     // ====== Private Functions =====
 
-    fun lend<P, T>(
-        bank: &mut Bank<T>,
+    fun deploy<P, T>(
+        bank: &mut Bank<P, T>,
         lending_market: &mut LendingMarket<P>,
         amount: u64,
         clock: &Clock,
@@ -329,11 +302,10 @@ module slamm::bank {
         );
 
         let ctoken_amount = c_tokens.value();
-        let obligation_cap = bank.fields.borrow_mut(ObligationCapKey<P, T> {});
 
         lending_market.deposit_ctokens_into_obligation(
             lending.reserve_array_index,
-            obligation_cap,
+            &lending.obligation_cap,
             clock,
             c_tokens,
             ctx,
@@ -345,7 +317,7 @@ module slamm::bank {
     }
 
     fun recall<P, T>(
-        bank: &mut Bank<T>,
+        bank: &mut Bank<P, T>,
         lending_market: &mut LendingMarket<P>,
         amount: u64,
         clock: &Clock,
@@ -358,11 +330,11 @@ module slamm::bank {
         };
 
         let mut ctoken_amount = bank.ctoken_amount_(lending_market, amount);
-        let obligation_cap = bank.fields.borrow_mut(ObligationCapKey<P, T> {});
+        // let obligation_cap = bank.fields.borrow_mut(ObligationCapKey<P, T> {});
 
         let ctokens: Coin<CToken<P, T>> = lending_market.withdraw_ctokens(
             lending.reserve_array_index,
-            obligation_cap,
+            &lending.obligation_cap,
             clock,
             ctoken_amount,
             ctx,
@@ -398,8 +370,8 @@ module slamm::bank {
         amount: u64,
         is_input: bool,
         lent: u64,
-        liquidity_ratio_bps: u64,
-        liquidity_buffer_bps: u64,
+        target_utilisation: u64,
+        buffer: u64,
     ): Option<LendingAction> {
         if (!is_input) {
             assert_output_(reserve, lent, amount);
@@ -413,7 +385,7 @@ module slamm::bank {
                         reserve,
                         amount,
                         lent,
-                        liquidity_ratio_bps,
+                        target_utilisation,
                     )
                 })
             }
@@ -425,39 +397,37 @@ module slamm::bank {
         compute_lending_action_(
             final_reserve,
             lent,
-            liquidity_ratio_bps,
-            liquidity_buffer_bps
+            target_utilisation,
+            buffer,
         )
     }
     
     fun compute_lending_action_(
         reserve: u64,
         lent: u64,
-        liquidity_ratio_bps: u64,
-        liquidity_buffer_bps: u64,
+        target_utilisation: u64,
+        buffer: u64,
     ): Option<LendingAction> {
-        let liquidity_ratio = liquidity_ratio(reserve, lent) as u64;
+        let effective_utilisation = compute_utilisation_rate(reserve, lent);
 
-        if (liquidity_ratio > liquidity_ratio_bps + liquidity_buffer_bps) {
+        if (effective_utilisation < target_utilisation - buffer) {
             return some(LendingAction {
                 is_lend: true,
                 amount: compute_lend(
                     reserve,
                     lent,
-                    liquidity_ratio_bps,
+                    target_utilisation,
                 )
             })
         };
 
-        let liquidity_ratio = liquidity_ratio(reserve, lent) as u64;
-
-        if (liquidity_ratio < liquidity_ratio_bps - liquidity_buffer_bps) {
+        if (effective_utilisation > target_utilisation + buffer) {
             return some(LendingAction {
                 is_lend: false,
                 amount: compute_recall(
                     reserve,
                     lent,
-                    liquidity_ratio_bps,
+                    target_utilisation,
                 )
             })
         };
@@ -470,14 +440,15 @@ module slamm::bank {
         reserve: u64,
         amount: u64,
         lent: u64,
-        liquidity_ratio_bps: u64,
-        liquidity_buffer_bps: u64,
+        target_utilisation: u64,
+        buffer: u64,
     ): u64 {
         assert_output_(reserve, lent, amount);
         
         let needs_recall = if (amount > reserve) { true } else {
-            let post_liquidity_ratio = liquidity_ratio(reserve - amount, lent) as u64;
-            post_liquidity_ratio < liquidity_ratio_bps - liquidity_buffer_bps
+            let post_utilisation_ratio = compute_utilisation_rate(reserve - amount, lent) as u64;
+
+            post_utilisation_ratio > target_utilisation + buffer
         };
 
         if (needs_recall) {
@@ -485,36 +456,38 @@ module slamm::bank {
                 reserve,
                 amount,
                 lent,
-                liquidity_ratio_bps,
+                target_utilisation,
             )
         } else { 0 }
     }
     
-    fun compute_liquidity_ratio(
-        reserve: u64,
+    fun compute_utilisation_rate(
+        liquid_reserve: u64,
         lent: u64,
     ): u64 {
-        assert!(reserve + lent > 0, EEmptyBank);
-        (reserve * 10_000) / (reserve + lent)
+        assert!(liquid_reserve + lent > 0, EEmptyBank);
+        10_000 - ( (liquid_reserve * 10_000) / (liquid_reserve + lent) )
     }
 
     // only called when the ratio is above... otherwise fails
     fun compute_recall(
         reserve: u64,
         lent: u64,
-        liquidity_ratio_bps: u64,
+        target_utilisation: u64,
     ): u64 {
-        compute_recall_with_amount(reserve, 0, lent, liquidity_ratio_bps)
+        compute_recall_with_amount(reserve, 0, lent, target_utilisation)
     }
     
+
+    // (1 - utilisation ratio) * (R + Lent - Out) + (Out * 10_000) - (R * 10_000)
     fun compute_recall_with_amount(
         reserve: u64,
         output: u64,
         lent: u64,
-        liquidity_ratio_bps: u64,
+        target_utilisation: u64,
     ): u64 {
         (
-            liquidity_ratio_bps * (reserve + lent - output) + (output * 10_000) - (reserve * 10_000)
+            (10_000 - target_utilisation) * (reserve + lent - output) + (output * 10_000) - (reserve * 10_000)
         ) / 10_000
     }
     
@@ -527,13 +500,13 @@ module slamm::bank {
     fun compute_lend(
         reserve_t1: u64,
         lent: u64,
-        liquidity_ratio_bps: u64,
+        target_utilisation: u64,
     ): u64 {
-        reserve_t1 - (liquidity_ratio_bps * (reserve_t1 + lent) / 10_000)
+        reserve_t1 - ((10_000 - target_utilisation) * (reserve_t1 + lent) / 10_000)
     }
 
     fun ctoken_amount_<P, T>(
-        bank: &Bank<T>,
+        bank: &Bank<P, T>,
         lending_market: &LendingMarket<P>,
         amount: u64,
     ): u64 {
@@ -549,46 +522,45 @@ module slamm::bank {
 
     // ====== Getters Functions =====
 
-    public fun lending<T>(self: &Bank<T>): &Option<Lending> { &self.lending }
+    public fun lending<P, T>(self: &Bank<P, T>): &Option<Lending<P>> { &self.lending }
     
-    public fun total_reserve<T>(self: &Bank<T>): u64 {
+    public fun total_reserve<P, T>(self: &Bank<P, T>): u64 {
         self.reserve.value() + self.lent()
     }
-    
-    public fun effective_liquidity_ratio_bps<T>(self: &Bank<T>): u64 { 
-        compute_liquidity_ratio(self.reserve.value(), self.lent())
+
+    public fun effective_utilisation_rate<P, T>(self: &Bank<P, T>): u64 { 
+        compute_utilisation_rate(self.reserve.value(), self.lent())
     }
     
-    public fun lent<T>(self: &Bank<T>): u64 {
+    public fun lent<P, T>(self: &Bank<P, T>): u64 {
         if (self.lending.is_some()) {
             self.lent_unchecked()
         } else { 0 }
     }
     
-    public fun target_liquidity_ratio_bps<T>(self: &Bank<T>): u64 {
+    public fun target_utilisation_rate<P, T>(self: &Bank<P, T>): u64 {
         if (self.lending.is_some()) {
-            self.liquidity_ratio_bps_unchecked()
+            self.target_utilisation_rate_unchecked()
         } else { 0 }
     }
     
-    public fun liquidity_buffer_bps<T>(self: &Bank<T>): u64 {
+    public fun utilisation_buffer<P, T>(self: &Bank<P, T>): u64 {
         if (self.lending.is_some()) {
-            self.liquidity_buffer_bps_unchecked()
+            self.utilisation_buffer_unchecked()
         } else { 0 }
     }
     
-    public fun lending_market<T>(self: &Bank<T>): ID { self.lending.borrow().lending_market }
-    public fun p_type<T>(self: &Bank<T>): TypeName { self.lending.borrow().p_type }
-    public fun reserve<T>(self: &Bank<T>): &Balance<T> { &self.reserve }
-    public fun lent_unchecked<T>(self: &Bank<T>): u64 { self.lending.borrow().lent }
-    public fun liquidity_ratio_bps_unchecked<T>(self: &Bank<T>): u64 { self.lending.borrow().target_liquidity_ratio_bps as u64}
-    public fun liquidity_buffer_bps_unchecked<T>(self: &Bank<T>): u64 { self.lending.borrow().liquidity_buffer_bps as u64 }
-    public fun reserve_array_index<T>(self: &Bank<T>): u64 { self.lending.borrow().reserve_array_index }
+    public fun lending_market<P, T>(self: &Bank<P, T>): ID { self.lending.borrow().lending_market }
+    public fun reserve<P, T>(self: &Bank<P, T>): &Balance<T> { &self.reserve }
+    public fun lent_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().lent }
+    public fun target_utilisation_rate_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().target_utilisation as u64}
+    public fun utilisation_buffer_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().utilisation_buffer as u64 }
+    public fun reserve_array_index<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().reserve_array_index }
 
     // ===== Test-Only Functions =====
     
     #[test_only]
-    public fun mock_amount_lent<T>(self: &mut Bank<T>, amount: u64){ self.lending.borrow_mut().lent = amount; }
+    public fun mock_amount_lent<P, T>(self: &mut Bank<P, T>, amount: u64){ self.lending.borrow_mut().lent = amount; }
 
     // ===== Tests =====
 
@@ -597,30 +569,29 @@ module slamm::bank {
     
     #[test]
     fun test_compute_recall() {
-        // Reserve, Lent, Liquidity Ratio
-        assert_eq(compute_recall(2_000, 8_000, 2_000), 0);
-        assert_eq(compute_recall(1_000, 9_000, 2_000), 1000);
-        assert_eq(compute_recall(0, 10_000, 2_000), 2000);
+        // Reserve, Lent, Utilisation Ratio
+        assert_eq(compute_recall(2_000, 8_000, 8_000), 0);
+        assert_eq(compute_recall(1_000, 9_000, 8_000), 1000);
+        assert_eq(compute_recall(0, 10_000, 8_000), 2000);
     }
     
     #[test]
     fun test_compute_recall_amount() {
-
         assert_eq(
-            compute_recall_amount(2_000, 0, 8_000, 2_000, 500), 0
+            compute_recall_amount(2_000, 0, 8_000, 8_000, 500), 0
         );
         
         assert_eq(
-            compute_recall_amount(2_000, 1_000, 8_000, 2_000, 500), 800
+            compute_recall_amount(2_000, 1_000, 8_000, 8_000, 500), 800
         );
         
         assert_eq(
-            compute_recall_amount(2_000, 2_000, 8_000, 2_000, 500), 1_600
+            compute_recall_amount(2_000, 2_000, 8_000, 8_000, 500), 1_600
         );
         
         // Does not need recall as it does not change liq. ratio beyond the bands
         assert_eq(
-            compute_recall_amount(2_000, 100, 8_000, 2_000, 500), 0
+            compute_recall_amount(2_000, 100, 8_000, 8_000, 500), 0
         );
     }
     
@@ -643,41 +614,41 @@ module slamm::bank {
 
     #[test]
     fun test_compute_lend() {
-        // Reserve, Lent, Liquidity Ratio
-        assert_eq(compute_lend(2_000, 8_000, 2_000), 0);
-        assert_eq(compute_lend(3_000, 8_000, 2_000), 800);
-        assert_eq(compute_lend(4_000, 8_000, 2_000), 1600);
+        // Reserve, Lent, Utilisation Ratio
+        assert_eq(compute_lend(2_000, 8_000, 8_000), 0);
+        assert_eq(compute_lend(3_000, 8_000, 8_000), 800);
+        assert_eq(compute_lend(4_000, 8_000, 8_000), 1600);
     }
     
     #[test]
-    fun test_compute_liquidity_ratio() {
-        // Reserve, Lent, Liquidity Ratio
-        assert_eq(compute_liquidity_ratio(10_000, 0), 10_000); // 100%
-        assert_eq(compute_liquidity_ratio(7_000, 3_000), 7_000); // 70%
-        assert_eq(compute_liquidity_ratio(5_000, 5_000), 5_000); // 50%
-        assert_eq(compute_liquidity_ratio(3_000, 7_000), 3_000); // 30%
-        assert_eq(compute_liquidity_ratio(0, 10_000), 0); // 0%
+    fun test_compute_utilisation_rate() {
+        // Reserve, Lent, Utilisation Ratio
+        assert_eq(compute_utilisation_rate(10_000, 0), 0); // 100%
+        assert_eq(compute_utilisation_rate(7_000, 3_000), 3_000); // 70%
+        assert_eq(compute_utilisation_rate(5_000, 5_000), 5_000); // 50%
+        assert_eq(compute_utilisation_rate(3_000, 7_000), 7_000); // 30%
+        assert_eq(compute_utilisation_rate(0, 10_000), 10_000); // 0%
     }
     
     #[test]
     fun test_compute_lending_action() {
-        // Reserve, Lent, Liquidity Ratio
-        assert_eq(compute_lending_action_(0, 8_000, 2_000, 500), some(LendingAction { amount: 1_600, is_lend: false }));
-        assert_eq(compute_lending_action_(500, 8_000, 2_000, 500), some(LendingAction { amount: 1_200, is_lend: false }));
-        assert_eq(compute_lending_action_(1_000, 8_000, 2_000, 500), some(LendingAction { amount: 800, is_lend: false }));
-        assert_eq(compute_lending_action_(1_500, 8_000, 2_000, 500), none());
-        assert_eq(compute_lending_action_(2_000, 8_000, 2_000, 500), none());
-        assert_eq(compute_lending_action_(2_500, 8_000, 2_000, 500), none());
-        assert_eq(compute_lending_action_(3_000, 8_000, 2_000, 500), some(LendingAction { amount: 800, is_lend: true }));
-        assert_eq(compute_lending_action_(3_500, 8_000, 2_000, 500), some(LendingAction { amount: 1_200, is_lend: true }));
-        assert_eq(compute_lending_action_(4_000, 8_000, 2_000, 500), some(LendingAction { amount: 1_600, is_lend: true }));
-        assert_eq(compute_lending_action_(4_500, 8_000, 2_000, 500), some(LendingAction { amount: 2_000, is_lend: true }));
-        assert_eq(compute_lending_action_(5_000, 8_000, 2_000, 500), some(LendingAction { amount: 2_400, is_lend: true }));
-        assert_eq(compute_lending_action_(5_500, 8_000, 2_000, 500), some(LendingAction { amount: 2_800, is_lend: true }));
-        assert_eq(compute_lending_action_(6_000, 8_000, 2_000, 500), some(LendingAction { amount: 3_200, is_lend: true }));
-        assert_eq(compute_lending_action_(6_500, 8_000, 2_000, 500), some(LendingAction { amount: 3_600, is_lend: true }));
-        assert_eq(compute_lending_action_(7_000, 8_000, 2_000, 500), some(LendingAction { amount: 4_000, is_lend: true }));
-        assert_eq(compute_lending_action_(7_500, 8_000, 2_000, 500), some(LendingAction { amount: 4_400, is_lend: true }));
-        assert_eq(compute_lending_action_(8_000, 8_000, 2_000, 500), some(LendingAction { amount: 4_800, is_lend: true }));
+        // Reserve, Lent, Utilisation Ratio
+        assert_eq(compute_lending_action_(0, 8_000, 8_000, 500), some(LendingAction { amount: 1_600, is_lend: false }));
+        assert_eq(compute_lending_action_(500, 8_000, 8_000, 500), some(LendingAction { amount: 1_200, is_lend: false }));
+        assert_eq(compute_lending_action_(1_000, 8_000, 8_000, 500), some(LendingAction { amount: 800, is_lend: false }));
+        assert_eq(compute_lending_action_(1_500, 8_000, 8_000, 500), none());
+        assert_eq(compute_lending_action_(2_000, 8_000, 8_000, 500), none());
+        assert_eq(compute_lending_action_(2_500, 8_000, 8_000, 500), none());
+        assert_eq(compute_lending_action_(3_000, 8_000, 8_000, 500), some(LendingAction { amount: 800, is_lend: true }));
+        assert_eq(compute_lending_action_(3_500, 8_000, 8_000, 500), some(LendingAction { amount: 1_200, is_lend: true }));
+        assert_eq(compute_lending_action_(4_000, 8_000, 8_000, 500), some(LendingAction { amount: 1_600, is_lend: true }));
+        assert_eq(compute_lending_action_(4_500, 8_000, 8_000, 500), some(LendingAction { amount: 2_000, is_lend: true }));
+        assert_eq(compute_lending_action_(5_000, 8_000, 8_000, 500), some(LendingAction { amount: 2_400, is_lend: true }));
+        assert_eq(compute_lending_action_(5_500, 8_000, 8_000, 500), some(LendingAction { amount: 2_800, is_lend: true }));
+        assert_eq(compute_lending_action_(6_000, 8_000, 8_000, 500), some(LendingAction { amount: 3_200, is_lend: true }));
+        assert_eq(compute_lending_action_(6_500, 8_000, 8_000, 500), some(LendingAction { amount: 3_600, is_lend: true }));
+        assert_eq(compute_lending_action_(7_000, 8_000, 8_000, 500), some(LendingAction { amount: 4_000, is_lend: true }));
+        assert_eq(compute_lending_action_(7_500, 8_000, 8_000, 500), some(LendingAction { amount: 4_400, is_lend: true }));
+        assert_eq(compute_lending_action_(8_000, 8_000, 8_000, 500), some(LendingAction { amount: 4_800, is_lend: true }));
     }
 }

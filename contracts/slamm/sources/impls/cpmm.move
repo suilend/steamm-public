@@ -1,13 +1,15 @@
 /// Constant-Product AMM Hook implementation
 module slamm::cpmm {
     use sui::coin::Coin;
-    use slamm::global_admin::GlobalAdmin;
-    use slamm::registry::{Registry};
-    use slamm::math::safe_mul_div;
-    use slamm::quote::SwapQuote;
-    use slamm::bank::Bank;
-    use slamm::pool::{Self, Pool, PoolCap, SwapResult, Intent};
-    use slamm::version::{Self, Version};
+    use slamm::{
+        global_admin::GlobalAdmin,
+        registry::{Registry},
+        math::safe_mul_div,
+        quote::SwapQuote,
+        bank::Bank,
+        pool::{Self, Pool, PoolCap, SwapResult, Intent},
+        version::{Self, Version},
+    };
 
     // ===== Constants =====
 
@@ -46,7 +48,7 @@ module slamm::cpmm {
         offset_a: u64,
         offset_b: u64,
         ctx: &mut TxContext,
-    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>>) {
+    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>, State>) {
         let inner = State { version: version::new(CURRENT_VERSION), offset_a, offset_b };
 
         let (pool, pool_cap) = pool::new<A, B, Hook<W>, State>(
@@ -65,7 +67,7 @@ module slamm::cpmm {
         registry: &mut Registry,
         swap_fee_bps: u64,
         ctx: &mut TxContext,
-    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>>) {
+    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>, State>) {
         new_with_offset(
             witness,
             registry,
@@ -76,10 +78,10 @@ module slamm::cpmm {
         )
     }
 
-    public fun swap<A, B, W: drop>(
+    public fun swap<A, B, W: drop, P>(
         self: &mut Pool<A, B, Hook<W>, State>,
-        bank_a: &mut Bank<A>,
-        bank_b: &mut Bank<B>,
+        bank_a: &mut Bank<P, A>,
+        bank_b: &mut Bank<P, B>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
         amount_in: u64,
@@ -120,10 +122,10 @@ module slamm::cpmm {
         quote.as_intent(self)
     }
 
-    public fun execute_swap<A, B, W: drop>(
+    public fun execute_swap<A, B, W: drop, P>(
         self: &mut Pool<A, B, Hook<W>, State>,
-        bank_a: &mut Bank<A>,
-        bank_b: &mut Bank<B>,
+        bank_a: &mut Bank<P, A>,
+        bank_b: &mut Bank<P, B>,
         intent: Intent<A, B, Hook<W>>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
@@ -231,7 +233,7 @@ module slamm::cpmm {
     
     entry fun migrate<A, B, W>(
         self: &mut Pool<A, B, Hook<W>, State>,
-        _cap: &PoolCap<A, B, Hook<W>>,
+        _cap: &PoolCap<A, B, Hook<W>, State>,
     ) {
         migrate_(self);
     }

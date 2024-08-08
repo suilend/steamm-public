@@ -1,8 +1,8 @@
 /// Top level object that tracks all AMM pools. 
 /// Ensures that there is only one AMM pool of each type.
 module slamm::registry {
-    use sui::table::{Self, Table};
     use std::type_name::{Self, TypeName};
+    use sui::table::{Self, Table};
     use slamm::global_admin::GlobalAdmin;
 
     // ===== Constants =====
