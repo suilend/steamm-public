@@ -89,7 +89,7 @@ module slamm::omm {
         max_vol_accumulated_bps: u64,
         clock: &Clock,
         ctx: &mut TxContext,
-    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>>) {
+    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>, State>) {
         let price_info_a = from_price_feed(price_feed_a, clock);
         let price_info_b = from_price_feed(price_feed_b, clock);
         let reference_price = new_instant_price_oracle_(&price_info_a, &price_info_b);
@@ -349,7 +349,7 @@ module slamm::omm {
     
     entry fun migrate<A, B, W>(
         self: &mut Pool<A, B, Hook<W>, State>,
-        _cap: &PoolCap<A, B, Hook<W>>,
+        _cap: &PoolCap<A, B, Hook<W>, State>,
     ) {
         migrate_(self);
     }

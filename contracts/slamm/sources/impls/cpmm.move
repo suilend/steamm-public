@@ -46,7 +46,7 @@ module slamm::cpmm {
         swap_fee_bps: u64,
         offset: u64,
         ctx: &mut TxContext,
-    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>>) {
+    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>, State>) {
         let inner = State { version: version::new(CURRENT_VERSION), offset };
 
         let (pool, pool_cap) = pool::new<A, B, Hook<W>, State>(
@@ -65,7 +65,7 @@ module slamm::cpmm {
         registry: &mut Registry,
         swap_fee_bps: u64,
         ctx: &mut TxContext,
-    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>>) {
+    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>, State>) {
         new_with_offset(
             witness,
             registry,
@@ -213,7 +213,7 @@ module slamm::cpmm {
     
     entry fun migrate<A, B, W>(
         self: &mut Pool<A, B, Hook<W>, State>,
-        _cap: &PoolCap<A, B, Hook<W>>,
+        _cap: &PoolCap<A, B, Hook<W>, State>,
     ) {
         migrate_(self);
     }

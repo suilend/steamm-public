@@ -101,7 +101,7 @@ module slamm::pool {
     public struct LP<phantom A, phantom B, phantom Hook: drop> has copy, drop {}
 
     /// Capability object given to the pool creator
-    public struct PoolCap<phantom A, phantom B, phantom Hook: drop> has key {
+    public struct PoolCap<phantom A, phantom B, phantom Hook: drop, phantom State: store> has key {
         id: UID,
         pool_id: ID,
     }
@@ -182,7 +182,7 @@ module slamm::pool {
         swap_fee_bps: u64,
         inner: State,
         ctx: &mut TxContext,
-    ): (Pool<A, B, Hook, State>, PoolCap<A, B, Hook>) {
+    ): (Pool<A, B, Hook, State>, PoolCap<A, B, Hook, State>) {
         assert!(swap_fee_bps < SWAP_FEE_DENOMINATOR, EFeeAbove100Percent);
 
         let lp_supply = balance::create_supply(LP<A, B, Hook>{});
@@ -719,7 +719,7 @@ module slamm::pool {
     
     entry fun migrate<A, B, Hook: drop, State: store>(
         self: &mut Pool<A, B, Hook, State>,
-        _cap: &PoolCap<A, B, Hook>,
+        _cap: &PoolCap<A, B, Hook, State>,
     ) {
         self.version.migrate_(CURRENT_VERSION);
     }

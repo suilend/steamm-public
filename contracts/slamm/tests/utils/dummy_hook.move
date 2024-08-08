@@ -16,7 +16,7 @@ module slamm::dummy_hook {
         registry: &mut Registry,
         swap_fee_bps: u64,
         ctx: &mut TxContext,
-    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>>) {
+    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>, State>) {
         let inner = State {};
 
         let (mut pool, pool_cap) = pool::new<A, B, Hook<W>, State>(
@@ -37,7 +37,7 @@ module slamm::dummy_hook {
         registry: &mut Registry,
         swap_fee_bps: u64,
         ctx: &mut TxContext,
-    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>>) {
+    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>, State>) {
         let inner = State {};
 
         let (pool, pool_cap) = pool::new<A, B, Hook<W>, State>(
