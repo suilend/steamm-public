@@ -63,7 +63,8 @@ module slamm::bank_math {
         funds_deployed: u64,
         target_utilisation: u64,
     ): u64 {
-        funds_available - ((10_000 - target_utilisation) * (funds_available + funds_deployed) / 10_000)
+        let optimal_funds_deployed = target_utilisation * (funds_available + funds_deployed) / 10_000;
+        optimal_funds_deployed - funds_deployed
     }
 
     public(package) fun assert_output(
