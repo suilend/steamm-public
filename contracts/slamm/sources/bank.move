@@ -147,7 +147,7 @@ module slamm::bank {
                 bank.target_liquidity_ratio_bps(),
             );
 
-            bank.lend(
+            bank.deploy(
                 lending_market,
                 amount,
                 clock,
@@ -306,7 +306,7 @@ module slamm::bank {
 
     // ====== Private Functions =====
 
-    fun lend<P, T>(
+    fun deploy<P, T>(
         bank: &mut Bank<T>,
         lending_market: &mut LendingMarket<P>,
         amount: u64,
@@ -491,11 +491,11 @@ module slamm::bank {
     }
     
     fun compute_liquidity_ratio(
-        reserve: u64,
+        liquid_reserve: u64,
         lent: u64,
     ): u64 {
-        assert!(reserve + lent > 0, EEmptyBank);
-        (reserve * 10_000) / (reserve + lent)
+        assert!(liquid_reserve + lent > 0, EEmptyBank);
+        (liquid_reserve * 10_000) / (liquid_reserve + lent)
     }
 
     // only called when the ratio is above... otherwise fails
