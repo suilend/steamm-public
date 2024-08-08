@@ -864,7 +864,7 @@ module slamm::lend_tests {
         assert_eq(bank_b.funds_available().value(), 100_000);
         
         assert_eq(bank_a.effective_utilisation_rate(), 8000); // 80% target liquidity
-        assert!(bank_a.compute_lending_action().is_none(), 0);
+        assert!(bank_a.needs_lending_action(0, true) == false, 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -900,7 +900,7 @@ module slamm::lend_tests {
         
         assert!(bank_a.effective_utilisation_rate() < bank_a.target_utilisation_rate(), 0);
         assert!(bank_a.effective_utilisation_rate() > bank_a.target_utilisation_rate() -  bank_a.utilisation_buffer(), 0);
-        assert!(bank_a.compute_lending_action().is_none(), 0);
+        assert!(bank_a.needs_lending_action(0, true) == false, 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -935,7 +935,7 @@ module slamm::lend_tests {
         assert_eq(bank_b.funds_available().value(), 5_105_000);
         
         assert_eq(bank_a.effective_utilisation_rate(), 8000); // 80% target liquidity
-        assert!(bank_a.compute_lending_action().is_none(), 0);
+        assert!(bank_a.needs_lending_action(0, true) == false, 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -1036,7 +1036,7 @@ module slamm::lend_tests {
             assert!(
                 bank_a.effective_utilisation_rate().max(8000) - bank_a.effective_utilisation_rate().min(8000) <= 1
             ); // 80% target liquidity (with 0.001% deviation from rounding err)
-            assert!(bank_a.compute_lending_action().is_none(), 0);
+            assert!(bank_a.needs_lending_action(0, true) == false, 0);
 
             destroy(coin_a);
             destroy(coin_b);
@@ -1122,7 +1122,7 @@ module slamm::lend_tests {
         assert_eq(bank_b.funds_available().value(), 100_000);
         
         assert_eq(bank_a.effective_utilisation_rate(), 8000); // 80% target liquidity
-        assert!(bank_a.compute_lending_action().is_none(), 0);
+        assert!(bank_a.needs_lending_action(0, true) == false, 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -1151,7 +1151,7 @@ module slamm::lend_tests {
         
         assert!(bank_a.effective_utilisation_rate() > bank_a.target_utilisation_rate(), 0);
         assert!(bank_a.effective_utilisation_rate() < bank_a.target_utilisation_rate() + bank_a.utilisation_buffer(), 0);
-        assert!(bank_a.compute_lending_action().is_none(), 0);
+        assert!(bank_a.needs_lending_action(0, true) == false, 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -1179,7 +1179,7 @@ module slamm::lend_tests {
         assert_eq(bank_b.funds_available().value(), 100_000 - 100 - 50_000);
         
         assert!(bank_a.effective_utilisation_rate() == bank_a.target_utilisation_rate(), 0);
-        assert!(bank_a.compute_lending_action().is_none(), 0);
+        assert!(bank_a.needs_lending_action(0, true) == false, 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -1586,7 +1586,7 @@ module slamm::lend_tests {
         assert_eq(bank_b.funds_available().value(), 100_000 + 30_000);
         
         assert!(bank_a.effective_utilisation_rate() == bank_a.target_utilisation_rate(), 0);
-        assert!(bank_a.compute_lending_action().is_none(), 0);
+        assert!(bank_a.needs_lending_action(0, true) == false, 0);
         
         destroy(coin_a);
         destroy(coin_b);

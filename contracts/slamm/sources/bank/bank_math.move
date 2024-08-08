@@ -6,7 +6,7 @@ module slamm::bank_math {
     const EEmptyBank: u64 = 2;
     
     // Only computes recall if needed, else returns zero
-    public(package) fun compute_recall_amount(
+    public(package) fun compute_recall_for_pending_withdraw(
         funds_available: u64,
         withdraw_amount: u64,
         funds_deployed: u64,
@@ -91,20 +91,20 @@ module slamm::bank_math {
     #[test]
     fun test_compute_recall_amount() {
         assert_eq(
-            compute_recall_amount(2_000, 0, 8_000, 8_000, 500), 0
+            compute_recall_for_pending_withdraw(2_000, 0, 8_000, 8_000, 500), 0
         );
         
         assert_eq(
-            compute_recall_amount(2_000, 1_000, 8_000, 8_000, 500), 800
+            compute_recall_for_pending_withdraw(2_000, 1_000, 8_000, 8_000, 500), 800
         );
         
         assert_eq(
-            compute_recall_amount(2_000, 2_000, 8_000, 8_000, 500), 1_600
+            compute_recall_for_pending_withdraw(2_000, 2_000, 8_000, 8_000, 500), 1_600
         );
         
         // Does not need recall as it does not change liq. ratio beyond the bands
         assert_eq(
-            compute_recall_amount(2_000, 100, 8_000, 8_000, 500), 0
+            compute_recall_for_pending_withdraw(2_000, 100, 8_000, 8_000, 500), 0
         );
     }
     

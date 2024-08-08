@@ -565,6 +565,40 @@ module slamm::pool {
         };
     }
 
+    public fun needs_lending_action_on_swap<A, B, Hook: drop, State: store, P>(
+        _self: &Pool<A, B, Hook, State>,
+        bank_a: &mut Bank<P, A>,
+        bank_b: &mut Bank<P, B>,
+        quote: SwapQuote,
+    ): bool {
+        if (quote.a2b()) {
+            needs_lending_action_on_swap_(
+                bank_a,
+                bank_b,
+                quote.amount_in(),
+                quote.amount_out_net_of_protocol_fees(),
+            )
+        } else {
+            needs_lending_action_on_swap_(
+                bank_b,
+                bank_a,
+                quote.amount_in(),
+                quote.amount_out_net_of_protocol_fees(),
+            )
+        }
+    }
+    
+    fun needs_lending_action_on_swap_<In, Out, P>(
+        bank_in: &mut Bank<P, In>,
+        bank_out: &mut Bank<P, Out>,
+        amount_in: u64,
+        amount_out: u64,
+    ): bool {
+        bank_in.needs_lending_action(amount_in, true)
+        || 
+        bank_out.needs_lending_action(amount_out, false)
+    }
+
     // ===== View & Getters =====
     
     public fun reserves<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>): (u64, u64) {
