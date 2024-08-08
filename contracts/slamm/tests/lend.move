@@ -79,8 +79,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 500_000);
@@ -163,8 +163,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 500_000);
@@ -195,8 +195,8 @@ module slamm::lend_tests {
         assert_eq(pool.lp_supply_val(), 10);
         assert_eq(reserve_a, 10);
         assert_eq(reserve_b, 10);
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 10);
@@ -278,8 +278,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 500_000);
@@ -395,8 +395,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 500_000);
@@ -488,8 +488,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 500_000);
@@ -521,8 +521,8 @@ module slamm::lend_tests {
         assert_eq(pool.lp_supply_val(), 10);
         assert_eq(reserve_a, 10);
         assert_eq(reserve_b, 10);
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -604,8 +604,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 500_000);
@@ -730,8 +730,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 500_000);
@@ -776,7 +776,7 @@ module slamm::lend_tests {
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 700_000);
         assert_eq(reserve_b, 358_286);
-        assert_eq(reserve_b + pool.protocol_fees().fee_b().acc_fees(), 358_572);
+        assert_eq(reserve_b + pool.trading_data().protocol_fees_b(), 358_572);
 
         assert_eq(bank_a.lent(), 400_000);
         assert_eq(bank_a.reserve().value(), 300_000);
@@ -856,8 +856,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 100_000);
         assert_eq(reserve_b, 100_000);
         assert_eq(lp_coins.value(), 100_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         assert_eq(bank_a.lent(), 80_000); // 100_000 * 80%
         assert_eq(bank_a.reserve().value(), 20_000); // 500_000 * 20%
@@ -1112,8 +1112,8 @@ module slamm::lend_tests {
         assert_eq(reserve_a, 100_000);
         assert_eq(reserve_b, 100_000);
         assert_eq(lp_coins.value(), 100_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         assert_eq(bank_a.lent(), 80_000); // 100_000 * 80%
         assert_eq(bank_a.reserve().value(), 20_000); // 100_000 * 20%
