@@ -1,8 +1,8 @@
 /// Top level object that tracks all AMM pools. 
 /// Ensures that there is only one AMM pool of each type.
 module slamm::registry {
-    use sui::table::{Self, Table};
     use std::type_name::{Self, TypeName};
+    use sui::table::{Self, Table};
     use slamm::global_admin::GlobalAdmin;
 
     // ===== Constants =====
@@ -46,7 +46,7 @@ module slamm::registry {
         registry.assert_version_and_upgrade();
         
         let bank_type = type_name::get<BANK>();
-        assert!(!table::contains(&registry.amms, bank_type), EDuplicatedBankType);
+        assert!(!table::contains(&registry.banks, bank_type), EDuplicatedBankType);
 
         table::add(&mut registry.banks, bank_type, object::id(bank));
     }

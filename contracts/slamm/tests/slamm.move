@@ -1,16 +1,22 @@
 #[test_only]
 module slamm::slamm_tests {
-    use slamm::pool::{Self, minimum_liquidity};
-    use slamm::registry;
-    use slamm::global_admin;
-    use slamm::bank;
-    use slamm::cpmm::{Self};
-    use slamm::test_utils::{COIN, reserve_args};
-    use sui::test_scenario::{Self, ctx};
-    use sui::sui::SUI;
-    use sui::coin::{Self};
-    use sui::test_utils::{destroy, assert_eq};
-    use suilend::lending_market;
+    use sui::{
+        sui::SUI,
+        coin::{Self},
+        test_utils::{destroy, assert_eq},
+        test_scenario::{Self, ctx},
+    };
+    use slamm::{
+        quote,
+        pool_math,
+        pool::{Self, minimum_liquidity},
+        registry,
+        global_admin,
+        bank,
+        test_utils::{e9, COIN, reserve_args},
+        dummy_hook::{Self, swap, intent_swap, execute_swap, quote_swap},
+    };
+    use suilend::lending_market::{Self, LENDING_MARKET};
 
     const ADMIN: address = @0x10;
     const POOL_CREATOR: address = @0x11;
@@ -20,8 +26,166 @@ module slamm::slamm_tests {
     public struct Wit has drop {}
     public struct Wit2 has drop {}
 
-    fun e9(amt: u64): u64 {
-        1_000_000_000 * amt
+    #[test]
+    fun test_slamm_deposit_redeem_swap() {
+        let mut scenario = test_scenario::begin(ADMIN);
+
+        // Init Pool
+        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        
+        let ctx = ctx(&mut scenario);
+
+        let (mut pool, pool_cap) = dummy_hook::new<SUI, COIN, Wit>(
+            Wit {},
+            &mut registry,
+            100, // admin fees BPS
+            ctx,
+        );
+
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
+
+        let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000), ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
+
+        let (lp_coins, _) = pool.deposit_liquidity(
+            &mut lending_market,
+            &mut bank_a,
+            &mut bank_b,
+            &mut coin_a,
+            &mut coin_b,
+            e9(1_000),
+            e9(500_000),
+            0,
+            0,
+            &clock,
+            ctx,
+        );
+
+        let (reserve_a, reserve_b) = pool.reserves();
+        let (bank_reserve_a, bank_reserve_b) = (bank_a.reserve().value(), bank_b.reserve().value());
+        let reserve_ratio_0 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
+
+        assert_eq(pool.cpmm_k(), 500000000000000000000000000);
+        assert_eq(pool.lp_supply_val(), 22360679774997);
+        assert_eq(reserve_a, bank_reserve_a);
+        assert_eq(reserve_b, bank_reserve_b);
+        assert_eq(reserve_b, e9(500_000));
+        assert_eq(lp_coins.value(), 22360679774997 - minimum_liquidity());
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
+
+        destroy(coin_a);
+        destroy(coin_b);
+
+        // Deposit liquidity
+        test_scenario::next_tx(&mut scenario, LP_PROVIDER);
+        let ctx = ctx(&mut scenario);
+
+        let mut coin_a = coin::mint_for_testing<SUI>(e9(10), ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(e9(10), ctx);
+
+        let (lp_coins_2, _) = pool.deposit_liquidity(
+            &mut lending_market,
+            &mut bank_a,
+            &mut bank_b,
+            &mut coin_a,
+            &mut coin_b,
+            e9(10), // max_a
+            e9(10), // max_b
+            0,
+            0,
+            &clock,
+            ctx,
+        );
+
+        assert_eq(coin_a.value(), e9(10) - 20_000_000);
+        assert_eq(coin_b.value(), 0);
+        assert_eq(lp_coins_2.value(), 447213595);
+
+        let (reserve_a, reserve_b) = pool.reserves();
+        let reserve_ratio_1 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
+        assert_eq(reserve_ratio_0, reserve_ratio_1);
+
+        destroy(coin_a);
+        destroy(coin_b);
+
+        // Redeem liquidity
+        test_scenario::next_tx(&mut scenario, LP_PROVIDER);
+        let ctx = ctx(&mut scenario);
+
+        let (coin_a, coin_b, _) = pool.redeem_liquidity(
+            &mut lending_market,
+            &mut bank_a,
+            &mut bank_b,
+            lp_coins_2,
+            0,
+            0,
+            &clock,
+            ctx,
+        );
+
+        // Guarantees that roundings are in favour of the pool
+        assert_eq(coin_a.value(), 20_000_000 - 1); // -1 for the rounddown
+        assert_eq(coin_b.value(), e9(10) - 12); // double rounddown: inital lp tokens minted + redeed
+
+        let (reserve_a, reserve_b) = pool.reserves();
+        let (bank_reserve_a, bank_reserve_b) = (bank_a.reserve().value(), bank_b.reserve().value());
+        assert_eq(reserve_a, bank_reserve_a);
+        assert_eq(reserve_b, bank_reserve_b);
+
+        let reserve_ratio_2 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
+        assert_eq(reserve_ratio_0, reserve_ratio_2);
+
+        destroy(coin_a);
+        destroy(coin_b);
+
+        // Swap
+        test_scenario::next_tx(&mut scenario, TRADER);
+        let ctx = ctx(&mut scenario);
+
+        let mut coin_a = coin::mint_for_testing<SUI>(e9(200), ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
+
+        let swap_result = swap(
+            &mut pool,
+            &mut bank_a,
+            &mut bank_b,
+            &mut coin_a,
+            &mut coin_b,
+            e9(200),
+            0,
+            true, // a2b
+            ctx,
+        );
+
+        let (reserve_a, reserve_b) = pool.reserves();
+        let (bank_reserve_a, bank_reserve_b) = (bank_a.reserve().value(), bank_b.reserve().value());
+        assert_eq(reserve_a, bank_reserve_a);
+        assert_eq(reserve_b, bank_reserve_b);
+
+        assert_eq(swap_result.a2b(), true);
+        assert_eq(swap_result.amount_out(), 200000000000);
+        assert_eq(swap_result.pool_fees(), 1600000000);
+        assert_eq(swap_result.protocol_fees(), 400000000);
+
+        destroy(registry);
+        destroy(coin_a);
+        destroy(coin_b);
+        destroy(bank_a);
+        destroy(bank_b);
+        destroy(pool);
+        destroy(lp_coins);
+        destroy(pool_cap);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(clock);
+        destroy(bag);
+        destroy(lending_market);
+        test_scenario::end(scenario);
     }
 
     #[test]
@@ -36,7 +200,7 @@ module slamm::slamm_tests {
         
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+        let (mut pool, pool_cap) = dummy_hook::new<SUI, COIN, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
@@ -46,8 +210,8 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(500_000, ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
 
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
             &mut lending_market,
@@ -71,8 +235,8 @@ module slamm::slamm_tests {
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -143,7 +307,8 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(200), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        let swap_result = pool.cpmm_swap(
+        let swap_result = swap(
+            &mut pool,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -155,9 +320,9 @@ module slamm::slamm_tests {
         );
 
         assert_eq(swap_result.a2b(), true);
-        assert_eq(swap_result.input_pool_fees(), 400);
-        assert_eq(swap_result.input_protocol_fees(), 100);
-        assert_eq(swap_result.amount_out(), 45040);
+        assert_eq(swap_result.pool_fees(), 400);
+        assert_eq(swap_result.protocol_fees(), 100);
+        assert_eq(swap_result.amount_out(), 50_000);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -180,8 +345,8 @@ module slamm::slamm_tests {
         let (reserve_a, reserve_b) = pool.reserves();
 
         // Guarantees that roundings are in favour of the pool
-        assert_eq(coin_a.value(), 549_889);
-        assert_eq(coin_b.value(), 454_950);
+        assert_eq(coin_a.value(), 549_989);
+        assert_eq(coin_b.value(), 450_390);
         assert_eq(reserve_a, 11);
         assert_eq(reserve_b, 10);
         assert_eq(pool.lp_supply_val(), minimum_liquidity());
@@ -193,15 +358,15 @@ module slamm::slamm_tests {
         let global_admin = global_admin::init_for_testing(ctx);
         let (coin_a, coin_b) = pool.collect_protocol_fees(&global_admin, ctx);
 
-        assert_eq(coin_a.value(), 100);
-        assert_eq(coin_b.value(), 0);
-        assert_eq(pool.protocol_fees().fee_a().acc_fees(), 100);
-        assert_eq(pool.protocol_fees().fee_b().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 400);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(coin_a.value(), 0);
+        assert_eq(coin_b.value(), 100);
+        assert_eq(pool.trading_data().protocol_fees_a(), 0);
+        assert_eq(pool.trading_data().protocol_fees_b(), 100);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 400);
         
         assert_eq(pool.trading_data().total_swap_a_in_amount(), 50_000);
-        assert_eq(pool.trading_data().total_swap_b_out_amount(), 45040);
+        assert_eq(pool.trading_data().total_swap_b_out_amount(), 50_000);
         assert_eq(pool.trading_data().total_swap_a_out_amount(), 0);
         assert_eq(pool.trading_data().total_swap_b_in_amount(), 0);
 
@@ -221,318 +386,8 @@ module slamm::slamm_tests {
         test_scenario::end(scenario);
     }
     
-    
     #[test]
-    fun test_slamm() {
-        let mut scenario = test_scenario::begin(ADMIN);
-
-        // Init Pool
-        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-
-        let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
-        
-        let ctx = ctx(&mut scenario);
-
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
-            Wit {},
-            &mut registry,
-            100, // admin fees BPS
-            ctx,
-        );
-
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
-
-        let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000), ctx);
-        let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
-
-        let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
-            &mut bank_a,
-            &mut bank_b,
-            &mut coin_a,
-            &mut coin_b,
-            e9(1_000),
-            e9(500_000),
-            0,
-            0,
-            &clock,
-            ctx,
-        );
-
-        let (reserve_a, reserve_b) = pool.reserves();
-        let reserve_ratio_0 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
-
-        assert_eq(pool.cpmm_k(), 500000000000000000000000000);
-        assert_eq(pool.lp_supply_val(), 22360679774997);
-        assert_eq(reserve_a, e9(1_000));
-        assert_eq(reserve_b, e9(500_000));
-        assert_eq(lp_coins.value(), 22360679774997 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
-
-        destroy(coin_a);
-        destroy(coin_b);
-
-        // Deposit liquidity
-        test_scenario::next_tx(&mut scenario, LP_PROVIDER);
-        let ctx = ctx(&mut scenario);
-
-        let mut coin_a = coin::mint_for_testing<SUI>(e9(10), ctx);
-        let mut coin_b = coin::mint_for_testing<COIN>(e9(10), ctx);
-
-        let (lp_coins_2, _) = pool.deposit_liquidity(
-            &mut lending_market,
-            &mut bank_a,
-            &mut bank_b,
-            &mut coin_a,
-            &mut coin_b,
-            e9(10), // max_a
-            e9(10), // max_b
-            0,
-            0,
-            &clock,
-            ctx,
-        );
-
-        assert_eq(coin_a.value(), e9(10) - 20_000_000);
-        assert_eq(coin_b.value(), 0);
-        assert_eq(lp_coins_2.value(), 447213595);
-
-        let (reserve_a, reserve_b) = pool.reserves();
-        let reserve_ratio_1 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
-        assert_eq(reserve_ratio_0, reserve_ratio_1);
-
-        destroy(coin_a);
-        destroy(coin_b);
-
-        // Redeem liquidity
-        test_scenario::next_tx(&mut scenario, LP_PROVIDER);
-        let ctx = ctx(&mut scenario);
-
-        let (coin_a, coin_b, _) = pool.redeem_liquidity(
-            &mut lending_market,
-            &mut bank_a,
-            &mut bank_b,
-            lp_coins_2,
-            0,
-            0,
-            &clock,
-            ctx,
-        );
-
-        // Guarantees that roundings are in favour of the pool
-        assert_eq(coin_a.value(), 20_000_000 - 1); // -1 for the rounddown
-        assert_eq(coin_b.value(), e9(10) - 12); // double rounddown: inital lp tokens minted + redeed
-
-        let (reserve_a, reserve_b) = pool.reserves();
-        let reserve_ratio_2 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
-        assert_eq(reserve_ratio_0, reserve_ratio_2);
-
-        destroy(coin_a);
-        destroy(coin_b);
-
-        // Swap
-        test_scenario::next_tx(&mut scenario, TRADER);
-        let ctx = ctx(&mut scenario);
-
-        let mut coin_a = coin::mint_for_testing<SUI>(e9(200), ctx);
-        let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
-
-        let swap_result = pool.cpmm_swap(
-            &mut bank_a,
-            &mut bank_b,
-            &mut coin_a,
-            &mut coin_b,
-            e9(200),
-            0,
-            true, // a2b
-            ctx,
-        );
-
-        assert_eq(swap_result.a2b(), true);
-        assert_eq(swap_result.input_pool_fees(), 1600000000);
-        assert_eq(swap_result.input_protocol_fees(), 400000000);
-        assert_eq(swap_result.amount_out(), 82637729549181);
-
-        destroy(registry);
-        destroy(coin_a);
-        destroy(coin_b);
-        destroy(bank_a);
-        destroy(bank_b);
-        destroy(pool);
-        destroy(lp_coins);
-        destroy(pool_cap);
-        destroy(lend_cap);
-        destroy(prices);
-        destroy(clock);
-        destroy(bag);
-        destroy(lending_market);
-        test_scenario::end(scenario);
-    }
-
-    #[test]
-    #[expected_failure(abort_code = pool::ESwapOutputAmountIsZero)]
-    fun test_fail_handle_full_precision_loss_from_highly_imbalanced_pool() {
-        let mut scenario = test_scenario::begin(ADMIN);
-
-        // Init Pool
-        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-
-        let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
-        
-        let ctx = ctx(&mut scenario);
-
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
-            Wit {},
-            &mut registry,
-            100, // admin fees BPS
-            ctx,
-        );
-
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
-
-        let mut coin_a = coin::mint_for_testing<SUI>(500_000_000_000_000, ctx);
-        let mut coin_b = coin::mint_for_testing<COIN>(1, ctx);
-
-        let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
-            &mut bank_a,
-            &mut bank_b,
-            &mut coin_a,
-            &mut coin_b,
-            500_000_000_000_000,
-            1,
-            0,
-            0,
-            &clock,
-            ctx,
-        );
-
-        destroy(coin_a);
-        destroy(coin_b);
-
-        // // Swap
-        test_scenario::next_tx(&mut scenario, TRADER);
-        let ctx = ctx(&mut scenario);
-
-        let mut coin_a = coin::mint_for_testing<SUI>(50_000, ctx);
-        let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
-
-        let _swap_result = pool.cpmm_swap(
-            &mut bank_a,
-            &mut bank_b,
-            &mut coin_a,
-            &mut coin_b,
-            50_000,
-            0,
-            true, // a2b
-            ctx,
-        );
-
-        destroy(coin_a);
-        destroy(coin_b);
-        destroy(bank_a);
-        destroy(bank_b);
-        destroy(registry);
-        destroy(lp_coins);
-        destroy(pool);
-        destroy(pool_cap);
-        destroy(lend_cap);
-        destroy(prices);
-        destroy(clock);
-        destroy(bag);
-        destroy(lending_market);
-        test_scenario::end(scenario);
-    }
-    
-    #[test]
-    fun test_trade_that_balances_highly_imbalanced_pool() {
-        let mut scenario = test_scenario::begin(ADMIN);
-
-        // Init Pool
-        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-
-        let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
-        
-        let ctx = ctx(&mut scenario);
-
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
-            Wit {},
-            &mut registry,
-            100, // admin fees BPS
-            ctx,
-        );
-
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
-
-        let mut coin_a = coin::mint_for_testing<SUI>(500_000_000_000_000, ctx);
-        let mut coin_b = coin::mint_for_testing<COIN>(1, ctx);
-
-        let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
-            &mut bank_a,
-            &mut bank_b,
-            &mut coin_a,
-            &mut coin_b,
-            500_000_000_000_000,
-            1,
-            0,
-            0,
-            &clock,
-            ctx,
-        );
-
-        destroy(coin_a);
-        destroy(coin_b);
-
-        // Swap
-        test_scenario::next_tx(&mut scenario, TRADER);
-        let ctx = ctx(&mut scenario);
-
-        let mut coin_a = coin::mint_for_testing<SUI>(0, ctx);
-        let mut coin_b = coin::mint_for_testing<COIN>(10_000_000_000_000, ctx);
-
-        let swap_result = pool.cpmm_swap(
-            &mut bank_a,
-            &mut bank_b,
-            &mut coin_a,
-            &mut coin_b,
-            10_000_000_000_000,
-            0,
-            false, // a2b
-            ctx,
-        );
-
-        assert_eq(swap_result.amount_out(), 499999999999949);
-        assert_eq(swap_result.amount_in(), 10000000000000);
-        assert_eq(swap_result.input_protocol_fees(), 20000000000);
-        assert_eq(swap_result.input_pool_fees(), 80000000000);
-        assert_eq(swap_result.a2b(), false);
-
-        destroy(coin_a);
-        destroy(coin_b);
-        destroy(bank_a);
-        destroy(bank_b);
-        destroy(registry);
-        destroy(lp_coins);
-        destroy(pool);
-        destroy(pool_cap);
-        destroy(lend_cap);
-        destroy(prices);
-        destroy(clock);
-        destroy(bag);
-        destroy(lending_market);
-        test_scenario::end(scenario);
-    }
-    
-    #[test]
-    #[expected_failure(abort_code = pool::EInsufficientDepositA)]
+    #[expected_failure(abort_code = pool_math::EInsufficientDepositA)]
     fun test_fail_deposit_slippage_a() {
         let mut scenario = test_scenario::begin(ADMIN);
 
@@ -544,15 +399,15 @@ module slamm::slamm_tests {
         
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+        let (mut pool, pool_cap) = dummy_hook::new<SUI, COIN, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
             ctx,
         );
 
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
@@ -580,8 +435,8 @@ module slamm::slamm_tests {
         assert_eq(reserve_a, e9(1_000));
         assert_eq(reserve_b, e9(500_000));
         assert_eq(lp_coins.value(), 22360679774997 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -638,7 +493,7 @@ module slamm::slamm_tests {
     }
     
     #[test]
-    #[expected_failure(abort_code = pool::EInsufficientDepositB)]
+    #[expected_failure(abort_code = pool_math::EInsufficientDepositB)]
     fun test_fail_deposit_slippage_b() {
         let mut scenario = test_scenario::begin(ADMIN);
 
@@ -650,15 +505,15 @@ module slamm::slamm_tests {
         
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+        let (mut pool, pool_cap) = dummy_hook::new<SUI, COIN, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
             ctx,
         );
 
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
@@ -686,8 +541,8 @@ module slamm::slamm_tests {
         assert_eq(reserve_a, e9(1_000));
         assert_eq(reserve_b, e9(1_000));
         assert_eq(lp_coins.value(), 1000000000000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -756,15 +611,15 @@ module slamm::slamm_tests {
         
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+        let (mut pool, pool_cap) = dummy_hook::new<SUI, COIN, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
             ctx,
         );
 
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
@@ -790,8 +645,8 @@ module slamm::slamm_tests {
         assert_eq(reserve_a, e9(1_000));
         assert_eq(reserve_b, e9(500_000));
         assert_eq(lp_coins.value(), 22360679774997 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -803,12 +658,14 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(200), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        let swap_result = pool.cpmm_quote_swap(
+        let swap_result = quote_swap(
+            &pool,
             e9(200),
             true, // a2b
         );
 
-        let _ = pool.cpmm_swap(
+        let _ = swap(
+            &mut pool,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -848,15 +705,15 @@ module slamm::slamm_tests {
         
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+        let (mut pool, pool_cap) = dummy_hook::new<SUI, COIN, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
             ctx,
         );
 
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
@@ -882,8 +739,8 @@ module slamm::slamm_tests {
         assert_eq(reserve_a, e9(1_000));
         assert_eq(reserve_b, e9(500_000));
         assert_eq(lp_coins.value(), 22360679774997 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -895,7 +752,8 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(199), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        let _ = pool.cpmm_swap(
+        let _ = swap(
+            &mut pool,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -923,7 +781,7 @@ module slamm::slamm_tests {
     }
 
     #[test]
-    #[expected_failure(abort_code = pool::ERedeemSlippageAExceeded)]
+    #[expected_failure(abort_code = pool_math::ERedeemSlippageAExceeded)]
     fun test_fail_redeem_slippage_a() {
         let mut scenario = test_scenario::begin(ADMIN);
 
@@ -935,15 +793,15 @@ module slamm::slamm_tests {
         
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+        let (mut pool, pool_cap) = dummy_hook::new<SUI, COIN, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
             ctx,
         );
 
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
@@ -970,8 +828,8 @@ module slamm::slamm_tests {
         assert_eq(reserve_a, e9(1_000));
         assert_eq(reserve_b, e9(500_000));
         assert_eq(lp_coins.value(), 22360679774997 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -1044,7 +902,7 @@ module slamm::slamm_tests {
     }
     
     #[test]
-    #[expected_failure(abort_code = pool::ERedeemSlippageBExceeded)]
+    #[expected_failure(abort_code = pool_math::ERedeemSlippageBExceeded)]
     fun test_fail_redeem_slippage_b() {
         let mut scenario = test_scenario::begin(ADMIN);
 
@@ -1056,15 +914,15 @@ module slamm::slamm_tests {
         
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+        let (mut pool, pool_cap) = dummy_hook::new<SUI, COIN, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
             ctx,
         );
 
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(e9(500_000), ctx);
@@ -1091,8 +949,8 @@ module slamm::slamm_tests {
         assert_eq(reserve_a, e9(1_000));
         assert_eq(reserve_b, e9(1_000));
         assert_eq(lp_coins.value(), 1000000000000 - minimum_liquidity());
-        assert_eq(pool.pool_fees().fee_a().acc_fees(), 0);
-        assert_eq(pool.pool_fees().fee_b().acc_fees(), 0);
+        assert_eq(pool.trading_data().pool_fees_a(), 0);
+        assert_eq(pool.trading_data().pool_fees_b(), 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -1177,7 +1035,7 @@ module slamm::slamm_tests {
         
         let ctx = ctx(&mut scenario);
 
-        let (pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+        let (pool, pool_cap) = dummy_hook::new<SUI, COIN, Wit>(
             Wit {},
             &mut registry,
             10_000 + 1, // admin fees BPS
@@ -1208,14 +1066,14 @@ module slamm::slamm_tests {
         
         let ctx = ctx(&mut scenario);
 
-        let (pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+        let (pool, pool_cap) = dummy_hook::new<SUI, COIN, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
             ctx,
         );
         
-        let (pool_2, pool_cap_2) = cpmm::new<SUI, COIN, Wit>(
+        let (pool_2, pool_cap_2) = dummy_hook::new<SUI, COIN, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
@@ -1247,22 +1105,22 @@ module slamm::slamm_tests {
         
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+        let (mut pool, pool_cap) = dummy_hook::new<SUI, COIN, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
             ctx,
         );
         
-        let (mut pool_2, pool_cap_2) = cpmm::new<SUI, COIN, Wit2>(
+        let (mut pool_2, pool_cap_2) = dummy_hook::new<SUI, COIN, Wit2>(
             Wit2 {},
             &mut registry,
             100, // admin fees BPS
             ctx,
         );
 
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx);
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let mut coin_a = coin::mint_for_testing<SUI>(e9(200_000_000), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(e9(200_000_000), ctx);
@@ -1308,7 +1166,8 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000_000), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        let swap_result = pool.cpmm_swap(
+        let swap_result = swap(
+            &mut pool,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -1320,8 +1179,8 @@ module slamm::slamm_tests {
         );
 
         assert_eq(swap_result.a2b(), true);
-        assert_eq(swap_result.input_pool_fees(), expected_pool_fees);
-        assert_eq(swap_result.input_protocol_fees(), expected_protocol_fees);
+        assert_eq(swap_result.pool_fees(), expected_pool_fees);
+        assert_eq(swap_result.protocol_fees(), expected_protocol_fees);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -1333,31 +1192,34 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000_000), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        let mut len = 100;
+        let mut len = 1000;
 
         let mut acc_protocol_fees = 0;
         let mut acc_pool_fees = 0;
 
         while (len > 0) {
-            let swap_result = pool_2.cpmm_swap(
+            let swap_result = swap(
+                &mut pool_2,
                 &mut bank_a,
                 &mut bank_b,
                 &mut coin_a,
                 &mut coin_b,
-                e9(10_000),
+                e9(10_00),
                 0,
                 true, // a2b
                 ctx,
             );
 
-            acc_protocol_fees = acc_protocol_fees + swap_result.input_protocol_fees();
-            acc_pool_fees = acc_pool_fees + swap_result.input_pool_fees();
+            acc_protocol_fees = acc_protocol_fees + swap_result.protocol_fees();
+            acc_pool_fees = acc_pool_fees + swap_result.pool_fees();
 
             len = len - 1;
         };
 
-        assert_eq(acc_protocol_fees, expected_protocol_fees);
-        assert_eq(acc_pool_fees, expected_pool_fees);
+        // Assert that cumulative fees from small swaps are not smaller
+        // than a bigger swap
+        assert!(acc_protocol_fees >= expected_protocol_fees, 0);
+        assert!(acc_pool_fees >= expected_pool_fees, 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -1417,14 +1279,14 @@ module slamm::slamm_tests {
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         // Init Pool
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+        let (mut pool, pool_cap) = dummy_hook::new<SUI, COIN, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
@@ -1456,17 +1318,20 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(50_000, ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        let swap_intent = pool.cpmm_intent_swap(
+        let swap_intent = intent_swap(
+            &mut pool,
             50_000,
             true, // a2b
         );
         
-        let swap_intent_2 = pool.cpmm_intent_swap(
+        let swap_intent_2 = intent_swap(
+            &mut pool,
             50_000,
             true, // a2b
         );
 
-        pool.cpmm_execute_swap(
+        execute_swap(
+            &mut pool,
             &mut bank_a,
             &mut bank_b,
             swap_intent,
@@ -1476,7 +1341,8 @@ module slamm::slamm_tests {
             ctx,
         );
         
-        pool.cpmm_execute_swap(
+        execute_swap(
+            &mut pool,
             &mut bank_a,
             &mut bank_b,
             swap_intent_2,
@@ -1513,14 +1379,14 @@ module slamm::slamm_tests {
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         // Init Pool
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+        let (mut pool, pool_cap) = dummy_hook::new<SUI, COIN, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
@@ -1550,7 +1416,8 @@ module slamm::slamm_tests {
         destroy(lp_coins);
 
         // Swap
-        let swap_intent = pool.cpmm_intent_swap(
+        let swap_intent = intent_swap(
+            &mut pool,
             50_000,
             true, // a2b
         );
@@ -1578,7 +1445,8 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(50_000, ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        pool.cpmm_execute_swap(
+        execute_swap(
+            &mut pool,
             &mut bank_a,
             &mut bank_b,
             swap_intent,
@@ -1615,14 +1483,14 @@ module slamm::slamm_tests {
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let mut bank_a = bank::create_bank<SUI>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<COIN>(&mut registry, ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
 
         // Init Pool
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+        let (mut pool, pool_cap) = dummy_hook::new<SUI, COIN, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
@@ -1651,7 +1519,8 @@ module slamm::slamm_tests {
         destroy(coin_b);
 
         // Swap
-        let swap_intent = pool.cpmm_intent_swap(
+        let swap_intent = intent_swap(
+            &mut pool,
             50_000,
             true, // a2b
         );
@@ -1673,7 +1542,8 @@ module slamm::slamm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(50_000, ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        pool.cpmm_execute_swap(
+        execute_swap(
+            &mut pool,
             &mut bank_a,
             &mut bank_b,
             swap_intent,
@@ -1686,6 +1556,184 @@ module slamm::slamm_tests {
         destroy(coin_a);
         destroy(coin_b);
         destroy(registry);
+        destroy(pool);
+        destroy(pool_cap);
+        destroy(global_admin);
+        destroy(lending_market);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(bag);
+        destroy(bank_a);
+        destroy(bank_b);
+        destroy(clock);
+        test_scenario::end(scenario);
+    }
+    
+    // Note: This error cannot occur unless there is a bug in the contract.
+    // It provides an extra layer of security
+    #[test]
+    #[expected_failure(abort_code = pool::EPoolUnguarded)]
+    fun test_pool_unguarded() {
+        let mut scenario = test_scenario::begin(ADMIN);
+
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        // Create amm bank
+        let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
+
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
+
+        // Init Pool
+        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+        let ctx = ctx(&mut scenario);
+
+        let (mut pool, pool_cap) = dummy_hook::new<SUI, COIN, Wit>(
+            Wit {},
+            &mut registry,
+            100, // admin fees BPS
+            ctx,
+        );
+
+        // Deposit funds in AMM Pool
+        let mut coin_a = coin::mint_for_testing<SUI>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
+
+        let (lp_coins, _) = pool.deposit_liquidity(
+            &mut lending_market,
+            &mut bank_a,
+            &mut bank_b,
+            &mut coin_a,
+            &mut coin_b,
+            500_000,
+            500_000,
+            0,
+            0,
+            &clock,
+            ctx,
+        );
+
+        destroy(coin_a);
+        destroy(coin_b);
+
+        // create fake intent<
+        let intent = pool.intent_for_testing(
+            quote::quote_for_testing(
+                100,
+                100,
+                0,
+                0,
+                true,
+            ),
+            false
+        );
+
+        let mut coin_a = coin::mint_for_testing<SUI>(50_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
+
+        execute_swap(
+            &mut pool,
+            &mut bank_a,
+            &mut bank_b,
+            intent,
+            &mut coin_a,
+            &mut coin_b,
+            0,
+            ctx,
+        );
+        
+        destroy(coin_a);
+        destroy(coin_b);
+        destroy(registry);
+        destroy(lp_coins);
+        destroy(pool);
+        destroy(pool_cap);
+        destroy(global_admin);
+        destroy(lending_market);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(bag);
+        destroy(bank_a);
+        destroy(bank_b);
+        destroy(clock);
+        test_scenario::end(scenario);
+    }
+    
+    #[test]
+    #[expected_failure(abort_code = pool::EOutputExceedsLiquidity)]
+    fun test_output_exceeds_liquidity() {
+        let mut scenario = test_scenario::begin(ADMIN);
+
+        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        // Create amm bank
+        let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
+
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx(&mut scenario));
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
+
+        // Init Pool
+        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+        let ctx = ctx(&mut scenario);
+
+        let (mut pool, pool_cap) = dummy_hook::new<SUI, COIN, Wit>(
+            Wit {},
+            &mut registry,
+            100, // admin fees BPS
+            ctx,
+        );
+
+        // Deposit funds in AMM Pool
+        let mut coin_a = coin::mint_for_testing<SUI>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
+
+        let (lp_coins, _) = pool.deposit_liquidity(
+            &mut lending_market,
+            &mut bank_a,
+            &mut bank_b,
+            &mut coin_a,
+            &mut coin_b,
+            500_000,
+            500_000,
+            0,
+            0,
+            &clock,
+            ctx,
+        );
+
+        destroy(coin_a);
+        destroy(coin_b);
+
+        // create fake intent<
+        let intent = pool.intent_for_testing(
+            quote::quote_for_testing(
+                100,
+                500_001, // amount above available reserve
+                0,
+                0,
+                true,
+            ),
+            true
+        );
+
+        let mut coin_a = coin::mint_for_testing<SUI>(50_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
+
+        execute_swap(
+            &mut pool,
+            &mut bank_a,
+            &mut bank_b,
+            intent,
+            &mut coin_a,
+            &mut coin_b,
+            0,
+            ctx,
+        );
+        
+        destroy(coin_a);
+        destroy(coin_b);
+        destroy(registry);
+        destroy(lp_coins);
         destroy(pool);
         destroy(pool_cap);
         destroy(global_admin);

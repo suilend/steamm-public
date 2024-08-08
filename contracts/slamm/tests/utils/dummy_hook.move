@@ -11,12 +11,12 @@ module slamm::dummy_hook {
 
     // ===== Public Methods =====
 
-    public fun new<A, B, W: drop>(
+    public fun new_no_fees<A, B, W: drop>(
         _witness: W,
         registry: &mut Registry,
         swap_fee_bps: u64,
         ctx: &mut TxContext,
-    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>>) {
+    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>, State>) {
         let inner = State {};
 
         let (mut pool, pool_cap) = pool::new<A, B, Hook<W>, State>(
@@ -31,11 +31,30 @@ module slamm::dummy_hook {
 
         (pool, pool_cap)
     }
+    
+    public fun new<A, B, W: drop>(
+        _witness: W,
+        registry: &mut Registry,
+        swap_fee_bps: u64,
+        ctx: &mut TxContext,
+    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>, State>) {
+        let inner = State {};
 
-    public fun swap<A, B, W: drop>(
+        let (pool, pool_cap) = pool::new<A, B, Hook<W>, State>(
+            Hook<W> {},
+            registry,
+            swap_fee_bps,
+            inner,
+            ctx,
+        );
+
+        (pool, pool_cap)
+    }
+
+    public fun swap<A, B, W: drop, P>(
         self: &mut Pool<A, B, Hook<W>, State>,
-        bank_a: &mut Bank<A>,
-        bank_b: &mut Bank<B>,
+        bank_a: &mut Bank<P, A>,
+        bank_b: &mut Bank<P, B>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
         amount_in: u64,
@@ -73,10 +92,10 @@ module slamm::dummy_hook {
         quote.as_intent(self)
     }
 
-    public fun execute_swap<A, B, W: drop>(
+    public fun execute_swap<A, B, W: drop, P>(
         self: &mut Pool<A, B, Hook<W>, State>,
-        bank_a: &mut Bank<A>,
-        bank_b: &mut Bank<B>,
+        bank_a: &mut Bank<P, A>,
+        bank_b: &mut Bank<P, B>,
         intent: Intent<A, B, Hook<W>>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
@@ -102,12 +121,12 @@ module slamm::dummy_hook {
         amount_in: u64,
         a2b: bool,
     ): SwapQuote {
-        let inputs = self.compute_fees_on_input(amount_in);
-
         let amount_out = amount_in;
 
-        inputs.to_quote(
-            amount_out,
+        let outputs = self.compute_fees_on_output(amount_out);
+
+        outputs.to_quote(
+            amount_in,
             a2b,
         )
     }

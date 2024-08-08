@@ -1,15 +1,15 @@
-/// Constant-Product AMM Hook implementation
-module slamm::cpmm {
+/// Fixed Range Constant-Sum AMM Hook implementation
+module slamm::smm {
     use sui::coin::Coin;
     use slamm::{
         global_admin::GlobalAdmin,
         registry::{Registry},
-        math::safe_mul_div,
         quote::SwapQuote,
         bank::Bank,
         pool::{Self, Pool, PoolCap, SwapResult, Intent},
         version::{Self, Version},
     };
+    use suilend::decimal::{Self, Decimal};
 
     // ===== Constants =====
 
@@ -18,8 +18,9 @@ module slamm::cpmm {
     // ===== Errors =====
 
     const EInvariantViolation: u64 = 1;
+    const EInvalidReserveRatio: u64 = 2;
 
-    /// Hook type for the constant-product AMM implementation. Serves as both
+    /// Hook type for the constant-sum AMM implementation. Serves as both
     /// the hook's witness (authentication) as well as it wraps around the pool
     /// creator's witness.
     /// 
@@ -31,23 +32,29 @@ module slamm::cpmm {
     /// therefore making the hook extendable.
     public struct Hook<phantom W> has drop {}
 
-    /// Constant-Product AMM specific state. We do not store the invariant,
+    /// Constant-Sum AMM specific state. We do not store the invariant,
     /// instead we compute it at runtime.
     public struct State has store {
+        upper_reserve_ratio: Decimal,
+        lower_reserve_ratio: Decimal,
         version: Version,
-        offset: u64,
     }
 
     // ===== Public Methods =====
 
-    public fun new_with_offset<A, B, W: drop>(
+    public fun new<A, B, W: drop>(
         _witness: W,
         registry: &mut Registry,
         swap_fee_bps: u64,
-        offset: u64,
+        upper_reserve_ratio_bps: u64,
+        lower_reserve_ratio_bps: u64,
         ctx: &mut TxContext,
     ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>, State>) {
-        let inner = State { version: version::new(CURRENT_VERSION), offset };
+        let inner = State {
+            version: version::new(CURRENT_VERSION),
+            upper_reserve_ratio: decimal::from(upper_reserve_ratio_bps).div(decimal::from(10_000)),
+            lower_reserve_ratio: decimal::from(lower_reserve_ratio_bps).div(decimal::from(10_000)),
+        };
 
         let (pool, pool_cap) = pool::new<A, B, Hook<W>, State>(
             Hook<W> {},
@@ -58,21 +65,6 @@ module slamm::cpmm {
         );
 
         (pool, pool_cap)
-    }
-    
-    public fun new<A, B, W: drop>(
-        witness: W,
-        registry: &mut Registry,
-        swap_fee_bps: u64,
-        ctx: &mut TxContext,
-    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>, State>) {
-        new_with_offset(
-            witness,
-            registry,
-            swap_fee_bps,
-            0,
-            ctx,
-        )
     }
 
     public fun swap<A, B, W: drop, P>(
@@ -145,28 +137,18 @@ module slamm::cpmm {
         );
 
         // Recompute invariant
+        assert_reserve_ratio(self);
         assert_invariant_does_not_decrease(self, k0);
 
         response
     }
-
-    // cpmm return price, take price that's best for LPs, on top we add dynamic fee
-    // fees should always be computed on the output amount;
 
     public fun quote_swap<A, B, W: drop>(
         self: &Pool<A, B, Hook<W>, State>,
         amount_in: u64,
         a2b: bool,
     ): SwapQuote {
-        let (reserve_a, reserve_b) = self.reserves();
-
-        let amount_out = quote_swap_impl(
-            reserve_a,
-            reserve_b,
-            amount_in,
-            a2b,
-            self.inner().offset,
-        );
+        let amount_out = amount_in;
 
         let output = self.compute_fees_on_output(amount_out);
 
@@ -176,37 +158,30 @@ module slamm::cpmm {
         )
     }
     
-    public(package) fun quote_swap_impl(
-        reserve_a: u64,
-        reserve_b: u64,
-        amount_in: u64,
-        a2b: bool,
-        offset: u64,
-    ): u64 {
-        if (a2b) {
-            // IN: A && OUT: B
-            quote_swap_(
-                reserve_b, // reserve_out
-                reserve_a, // reserve_in
-                amount_in,
-                offset,
-            )
-        } else {
-            // IN: B && OUT: A
-            quote_swap_(
-                reserve_a, // reserve_out
-                reserve_b, // reserve_in
-                amount_in,
-                offset,
-            )
-        }
-    }
+    // ===== Assert Functions =====
 
+    fun check_reserve_ratio<A, B, W: drop>(
+        self: &Pool<A, B, Hook<W>, State>,
+    ): bool {
+        let a = decimal::from(self.reserve_a());
+        let b = decimal::from(self.reserve_b());
+        let ratio = a.div(b);
+
+        ratio.le(self.inner().upper_reserve_ratio) && ratio.ge(self.inner().lower_reserve_ratio)
+    }
+    
+    fun assert_reserve_ratio<A, B, W: drop>(
+        self: &Pool<A, B, Hook<W>, State>,
+    ) {
+        assert!(check_reserve_ratio(self), EInvalidReserveRatio);
+    }
+    
+    
     // ===== View Functions =====
     
     public fun k<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>): u128 {
         let (reserve_a, reserve_b) = self.reserves();
-        ((reserve_a as u128) * (reserve_b as u128))
+        ((reserve_a as u128) + (reserve_b as u128))
     }
 
     // ===== Versioning =====
@@ -230,56 +205,9 @@ module slamm::cpmm {
     ) {
         self.inner_mut().version.migrate_(CURRENT_VERSION);
     }
-
-    // ===== Private Functions =====
-
-    fun quote_swap_(
-        reserve_out: u64,
-        reserve_in: u64,
-        amount_in: u64,
-        offset: u64,
-    ): u64 {
-        let amount_in_less_offset = amount_in - offset;
-        safe_mul_div(reserve_out, amount_in_less_offset, reserve_in + amount_in_less_offset) // amount_out
-    }
     
     public(package) fun assert_invariant_does_not_decrease<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, k0: u128) {
         let k1 = k(self);
         assert!(k1 >= k0, EInvariantViolation);
-    }
-    
-    // ===== Tests =====
-
-    #[test_only]
-    use sui::test_utils::assert_eq;
-
-    #[test]
-    fun test_swap_base_for_quote() {
-        let delta_quote = quote_swap_(50000000000, 50000000000, 1000000000, 0);
-        assert_eq(delta_quote, 980392156);
-
-        let delta_quote = quote_swap_(9999005960552740, 1095387779115020, 1000000000, 0);
-        assert_eq(delta_quote, 9128271305);
-
-        let delta_quote = quote_swap_(1029168250865450, 7612534772798660, 1000000000, 0);
-        assert_eq(delta_quote, 135193880);
-        	
-        let delta_quote = quote_swap_(2768608899383570, 5686051292328860, 1000000000, 0);
-        assert_eq(delta_quote, 486912317);
-
-        let delta_quote = quote_swap_(440197283258732, 9283788821706570, 1000000000, 0);
-        assert_eq(delta_quote, 47415688);
-
-        let delta_quote = quote_swap_(7199199355268960, 9313530357314980, 1000000000, 0);
-        assert_eq(delta_quote, 772982779);
-
-        let delta_quote = quote_swap_(6273576615700410, 1630712284783210, 1000000000, 0);
-        assert_eq(delta_quote, 3847136510);
-
-        let delta_quote = quote_swap_(5196638254543900, 9284728716079420, 1000000000, 0);
-        assert_eq(delta_quote, 559697310);
-
-        let delta_quote = quote_swap_(1128134431179110, 4632243184772740, 1000000000, 0);
-        assert_eq(delta_quote, 243539499);
     }
 }
