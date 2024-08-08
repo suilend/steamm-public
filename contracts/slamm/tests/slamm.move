@@ -8,6 +8,7 @@ module slamm::slamm_tests {
     };
     use slamm::{
         quote,
+        pool_math,
         pool::{Self, minimum_liquidity},
         registry,
         global_admin,
@@ -386,7 +387,7 @@ module slamm::slamm_tests {
     }
     
     #[test]
-    #[expected_failure(abort_code = pool::EInsufficientDepositA)]
+    #[expected_failure(abort_code = pool_math::EInsufficientDepositA)]
     fun test_fail_deposit_slippage_a() {
         let mut scenario = test_scenario::begin(ADMIN);
 
@@ -492,7 +493,7 @@ module slamm::slamm_tests {
     }
     
     #[test]
-    #[expected_failure(abort_code = pool::EInsufficientDepositB)]
+    #[expected_failure(abort_code = pool_math::EInsufficientDepositB)]
     fun test_fail_deposit_slippage_b() {
         let mut scenario = test_scenario::begin(ADMIN);
 
@@ -780,7 +781,7 @@ module slamm::slamm_tests {
     }
 
     #[test]
-    #[expected_failure(abort_code = pool::ERedeemSlippageAExceeded)]
+    #[expected_failure(abort_code = pool_math::ERedeemSlippageAExceeded)]
     fun test_fail_redeem_slippage_a() {
         let mut scenario = test_scenario::begin(ADMIN);
 
@@ -901,7 +902,7 @@ module slamm::slamm_tests {
     }
     
     #[test]
-    #[expected_failure(abort_code = pool::ERedeemSlippageBExceeded)]
+    #[expected_failure(abort_code = pool_math::ERedeemSlippageBExceeded)]
     fun test_fail_redeem_slippage_b() {
         let mut scenario = test_scenario::begin(ADMIN);
 

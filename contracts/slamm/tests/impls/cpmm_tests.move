@@ -2,6 +2,7 @@
 module slamm::cpmm_tests {
     use slamm::pool::{Self, minimum_liquidity};
     use slamm::registry;
+    use slamm::pool_math;
     use slamm::global_admin;
     use slamm::bank;
     use slamm::cpmm::{Self};
@@ -528,7 +529,7 @@ module slamm::cpmm_tests {
     }
     
     #[test]
-    #[expected_failure(abort_code = pool::EInsufficientDepositA)]
+    #[expected_failure(abort_code = pool_math::EInsufficientDepositA)]
     fun test_fail_deposit_slippage_a() {
         let mut scenario = test_scenario::begin(ADMIN);
 
@@ -634,7 +635,7 @@ module slamm::cpmm_tests {
     }
     
     #[test]
-    #[expected_failure(abort_code = pool::EInsufficientDepositB)]
+    #[expected_failure(abort_code = pool_math::EInsufficientDepositB)]
     fun test_fail_deposit_slippage_b() {
         let mut scenario = test_scenario::begin(ADMIN);
 

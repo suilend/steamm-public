@@ -7,15 +7,15 @@ module slamm::pool {
         clock::Clock,
         transfer::public_transfer,
         tx_context::sender,
-        math::{sqrt_u128, min},
         coin::{Self, Coin},
         balance::{Self, Balance, Supply},
     };
     use slamm::{
+        pool_math,
         events::emit_event,
         version::{Self, Version},
         registry::{Registry},
-        math::{safe_mul_div, safe_mul_div_up},
+        math::safe_mul_div_up,
         global_admin::GlobalAdmin,
         fees::{Self, Fees, FeeConfig},
         quote::{Self, SwapQuote, SwapFee, DepositQuote, RedeemQuote, SwapOutputs, swap_outputs},
@@ -61,35 +61,17 @@ module slamm::pool {
     // When the coin output exceeds the amount of reserves
     // available
     const EOutputExceedsLiquidity: u64 = 3;
-    // When depositing leads to a coin B deposit amount lower
-    // than the min_b parameter
-    const EInsufficientDepositB: u64 = 4;
-    // When depositing leads to a coin A deposit amount lower
-    // than the min_a parameter
-    const EInsufficientDepositA: u64 = 5;
-    // When the deposit max parameter ratio is invalid
-    const EDepositRatioInvalid: u64 = 6;
-    // The amount of coin A reedemed is below the minimum set
-    const ERedeemSlippageAExceeded: u64 = 7;
-    // The amount of coin B reedemed is below the minimum set
-    const ERedeemSlippageBExceeded: u64 = 8;
     // Assert that the reserve to lp supply ratio updates
     // in favor of of the pool. This error should not occur
-    const ELpSupplyToReserveRatioViolation: u64 = 9;
+    const ELpSupplyToReserveRatioViolation: u64 = 4;
     // The swap leads to zero output amount
-    const ESwapOutputAmountIsZero: u64 = 10;
-    // When depositing the max deposit params cannot be zero
-    const EDepositMaxParamsCantBeZero: u64 = 11;
-    // The deposit ratio computed leads to a coin B deposit of zero
-    const EDepositRatioLeadsToZeroB: u64 = 12;
-    // The deposit ratio computed leads to a coin A deposit of zero
-    const EDepositRatioLeadsToZeroA: u64 = 13;
+    const ESwapOutputAmountIsZero: u64 = 5;
     // There cannot be two intents concurrently
-    const EPoolGuarded: u64 = 14;
+    const EPoolGuarded: u64 = 6;
     // Attempting to unguard pool that is already unguarded
-    const EPoolUnguarded: u64 = 15;
-    const EInsufficientFunds: u64 = 16;
-    const EInsufficientFundsInBank: u64 = 17;
+    const EPoolUnguarded: u64 = 7;
+    const EInsufficientFunds: u64 = 8;
+    const EInsufficientFundsInBank: u64 = 9;
 
     /// Marker type for the LP coins of a pool. There can only be one
     /// pool per type, albeit given the permissionless aspect of the pool
@@ -826,7 +808,7 @@ module slamm::pool {
         let (reserve_a, reserve_b) = self.reserves();
 
         // Compute token deposits and delta lp tokens
-        let (deposit_a, deposit_b, lp_tokens) = quote_deposit_(
+        let (deposit_a, deposit_b, lp_tokens) = pool_math::quote_deposit(
             reserve_a,
             reserve_b,
             self.lp_supply_val(),
@@ -844,83 +826,6 @@ module slamm::pool {
         )
     }
 
-    fun quote_deposit_(
-        reserve_a: u64,
-        reserve_b: u64,
-        lp_supply: u64,
-        max_a: u64,
-        max_b: u64,
-        min_a: u64,
-        min_b: u64
-    ): (u64, u64, u64) {
-        let (delta_a, delta_b) = tokens_to_deposit(
-            reserve_a,
-            reserve_b,
-            max_a,
-            max_b,
-            min_a,
-            min_b,
-        );
-
-        // Compute new LP Tokens
-        let delta_lp = lp_tokens_to_mint(
-            reserve_a,
-            reserve_b,
-            lp_supply,
-            delta_a,
-            delta_b,
-        );
-
-        (delta_a, delta_b, delta_lp)
-    }
-
-    fun tokens_to_deposit(
-        reserve_a: u64,
-        reserve_b: u64,
-        max_a: u64,
-        max_b: u64,
-        min_a: u64,
-        min_b: u64
-    ): (u64, u64) {
-        assert!(max_a > 0 && max_b > 0, EDepositMaxParamsCantBeZero);
-
-        if(reserve_a == 0 && reserve_b == 0) {
-            (max_a, max_b)
-        } else {
-            let b_star = safe_mul_div_up(max_a, reserve_b, reserve_a);
-            if (b_star <= max_b) {
-
-                assert!(b_star > 0, EDepositRatioLeadsToZeroB);
-                assert!(b_star >= min_b, EInsufficientDepositB);
-
-                (max_a, b_star)
-            } else {
-                let a_star = safe_mul_div_up(max_b, reserve_a, reserve_b);
-                assert!(a_star > 0, EDepositRatioLeadsToZeroA);
-                assert!(a_star <= max_a, EDepositRatioInvalid);
-                assert!(a_star >= min_a, EInsufficientDepositA);
-                (a_star, max_b)
-            } 
-        }
-    }
-
-    fun lp_tokens_to_mint(
-        reserve_a: u64,
-        reserve_b: u64,
-        lp_supply: u64,
-        amount_a: u64,
-        amount_b: u64
-    ): u64 {
-        if (lp_supply == 0) {
-            (sqrt_u128((amount_a as u128) * (amount_b as u128)) as u64)
-        } else {            
-            min(
-                safe_mul_div(amount_a, lp_supply, reserve_a),
-                safe_mul_div(amount_b, lp_supply, reserve_b)
-            )
-        }
-    }
-
     fun quote_redeem_impl<A, B, Hook: drop, State: store>(
         self: &Pool<A, B, Hook, State>,
         lp_tokens: u64,
@@ -932,7 +837,7 @@ module slamm::pool {
         let (reserve_a, reserve_b) = self.reserves();
 
         // Compute amounts to withdraw
-        let (withdraw_a, withdraw_b) = quote_redeem_(
+        let (withdraw_a, withdraw_b) = pool_math::quote_redeem(
             reserve_a,
             reserve_b,
             self.lp_supply_val(),
@@ -946,26 +851,6 @@ module slamm::pool {
             withdraw_b,
             lp_tokens,
         )
-    }
-
-    fun quote_redeem_(
-        reserve_a: u64,
-        reserve_b: u64,
-        lp_supply: u64,
-        lp_tokens: u64,
-        min_a: u64,
-        min_b: u64,
-    ): (u64, u64) {
-        // Compute the amount of tokens the user is allowed to
-        // receive for each reserve, via the lp ratio
-        let withdraw_a = safe_mul_div(reserve_a, lp_tokens, lp_supply);
-        let withdraw_b = safe_mul_div(reserve_b, lp_tokens, lp_supply);
-
-        // Assert slippage
-        assert!(withdraw_a >= min_a, ERedeemSlippageAExceeded);
-        assert!(withdraw_b >= min_b, ERedeemSlippageBExceeded);
-
-        (withdraw_a, withdraw_b)
     }
     
     fun assert_lp_supply_reserve_ratio(
@@ -1125,46 +1010,6 @@ module slamm::pool {
         self: &mut Pool<A, B, Hook, State>,
     ): &mut Fees<A, B> {
         &mut self.protocol_fees
-    }
-
-    #[test_only]
-    public(package) fun quote_deposit_test(
-        reserve_a: u64,
-        reserve_b: u64,
-        lp_supply: u64,
-        max_a: u64,
-        max_b: u64,
-        min_a: u64,
-        min_b: u64
-    ): (u64, u64, u64) {
-        quote_deposit_(
-            reserve_a,
-            reserve_b,
-            lp_supply,
-            max_a,
-            max_b,
-            min_a,
-            min_b,
-        )
-    }
-
-    #[test_only]
-    public(package) fun quote_redeem_test(
-        reserve_a: u64,
-        reserve_b: u64,
-        lp_supply: u64,
-        lp_tokens: u64,
-        min_a: u64,
-        min_b: u64,
-    ): (u64, u64) {
-        quote_redeem_(
-            reserve_a,
-            reserve_b,
-            lp_supply,
-            lp_tokens,
-            min_a,
-            min_b,
-        )
     }
 
     #[test_only]
