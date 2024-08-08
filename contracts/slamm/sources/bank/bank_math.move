@@ -47,9 +47,8 @@ module slamm::bank_math {
         funds_deployed: u64,
         target_utilisation: u64,
     ): u64 {
-        (
-            (10_000 - target_utilisation) * (funds_available + funds_deployed - withdraw_amount) + (withdraw_amount * 10_000) - (funds_available * 10_000)
-        ) / 10_000
+        let optimal_funds_deployed = target_utilisation * (funds_available + funds_deployed - withdraw_amount) / 10_000;
+        funds_deployed - optimal_funds_deployed
     }
     
     // effective_liquidity > target_liquidity + liquidity_buffer

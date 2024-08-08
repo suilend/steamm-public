@@ -781,8 +781,8 @@ module slamm::lend_tests {
         assert_eq(bank_a.funds_deployed(), 400_000);
         assert_eq(bank_a.funds_available().value(), 300_000);
         
-        assert_eq(bank_b.funds_deployed(), 286_629);
-        assert_eq(bank_b.funds_available().value(), 71_657);
+        assert_eq(bank_b.funds_deployed(), 286_628);
+        assert_eq(bank_b.funds_available().value(), 71_658);
 
         destroy(coin_a);
         destroy(coin_b);
