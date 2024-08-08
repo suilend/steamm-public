@@ -225,19 +225,6 @@ module slamm::pool {
         (pool, pool_cap)
     }
 
-    fun deposit<P, T>(reserve: &mut Reserve<T>, bank: &mut Bank<P, T>, balance: Balance<T>) {
-        reserve.0 = reserve.0 + balance.value();
-
-        bank.reserve_mut().join(balance);
-    }
-    
-    fun withdraw<P, T>(reserve: &mut Reserve<T>, bank: &mut Bank<P, T>, amount: u64): Balance<T> {
-        assert!(amount <= bank.reserve().value(), EInsufficientFundsInBank);
-
-        reserve.0 = reserve.0 - amount;
-        bank.reserve_mut().split(amount)
-    }
-
     /// Executes inner swap logic that is generalised accross all hooks. It takes
     /// care of fee handling, management of reserve inputs and outputs as well
     /// as slippage protections.
@@ -745,6 +732,19 @@ module slamm::pool {
     }
     
     // ===== Private functions =====
+
+    fun deposit<P, T>(reserve: &mut Reserve<T>, bank: &mut Bank<P, T>, balance: Balance<T>) {
+        reserve.0 = reserve.0 + balance.value();
+
+        bank.reserve_mut().join(balance);
+    }
+    
+    fun withdraw<P, T>(reserve: &mut Reserve<T>, bank: &mut Bank<P, T>, amount: u64): Balance<T> {
+        assert!(amount <= bank.reserve().value(), EInsufficientFundsInBank);
+
+        reserve.0 = reserve.0 - amount;
+        bank.reserve_mut().split(amount)
+    }
 
     fun swap_inner<In, Out, P>(
         quote: &SwapQuote,
