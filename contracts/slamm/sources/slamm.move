@@ -129,8 +129,8 @@ module slamm::pool {
     public struct Pool<phantom A, phantom B, phantom Hook: drop, State: store> has key, store {
         id: UID,
         inner: State,
-        reserve_a: Reserve<A>,
-        reserve_b: Reserve<B>,
+        reserve_a: ReserveAmount<A>,
+        reserve_b: ReserveAmount<B>,
         lp_supply: Supply<LP<A, B, Hook>>,
         protocol_fees: Fees<A, B>,
         pool_fees: Fees<A, B>,
@@ -139,7 +139,7 @@ module slamm::pool {
         version: Version,
     }
 
-    public struct Reserve<phantom T> has store (u64)
+    public struct ReserveAmount<phantom T> has store (u64)
 
     public struct TradingData has store {
         // swap a2b
@@ -190,8 +190,8 @@ module slamm::pool {
         let pool = Pool {
             id: object::new(ctx),
             inner,
-            reserve_a: Reserve(0),
-            reserve_b: Reserve(0),
+            reserve_a: ReserveAmount(0),
+            reserve_b: ReserveAmount(0),
             protocol_fees: fees::new(SWAP_FEE_NUMERATOR, SWAP_FEE_DENOMINATOR, true),
             pool_fees: fees::new(swap_fee_bps, SWAP_FEE_DENOMINATOR, false),
             lp_supply,
@@ -733,13 +733,13 @@ module slamm::pool {
     
     // ===== Private functions =====
 
-    fun deposit<P, T>(reserve: &mut Reserve<T>, bank: &mut Bank<P, T>, balance: Balance<T>) {
+    fun deposit<P, T>(reserve: &mut ReserveAmount<T>, bank: &mut Bank<P, T>, balance: Balance<T>) {
         reserve.0 = reserve.0 + balance.value();
 
         bank.reserve_mut().join(balance);
     }
     
-    fun withdraw<P, T>(reserve: &mut Reserve<T>, bank: &mut Bank<P, T>, amount: u64): Balance<T> {
+    fun withdraw<P, T>(reserve: &mut ReserveAmount<T>, bank: &mut Bank<P, T>, amount: u64): Balance<T> {
         assert!(amount <= bank.reserve().value(), EInsufficientFundsInBank);
 
         reserve.0 = reserve.0 - amount;
@@ -749,13 +749,13 @@ module slamm::pool {
     fun swap_inner<In, Out, P>(
         quote: &SwapQuote,
         bank_in: &mut Bank<P, In>,
-        reserve_in: &mut Reserve<In>,
+        reserve_in: &mut ReserveAmount<In>,
         coin_in: &mut Coin<In>,
         swap_in_amount: &mut u128,
         output_protocol_fees: &mut FeeReserve<Out>,
         output_pool_fees: &mut FeeReserve<Out>,
         bank_out: &mut Bank<P, Out>,
-        reserve_out: &mut Reserve<Out>,
+        reserve_out: &mut ReserveAmount<Out>,
         coin_out: &mut Coin<Out>,
         swap_out_amount: &mut u128,
     ) {
