@@ -86,7 +86,7 @@ module slamm::dummy_hook {
         self: &mut Pool<A, B, Hook<W>, State>,
         amount_in: u64,
         a2b: bool,
-    ): Intent<A, B, Hook<W>> {
+    ): Intent<A, B, Hook<W>, State> {
         let quote = quote_swap(self, amount_in, a2b);
 
         quote.as_intent(self)
@@ -96,7 +96,7 @@ module slamm::dummy_hook {
         self: &mut Pool<A, B, Hook<W>, State>,
         bank_a: &mut Bank<P, A>,
         bank_b: &mut Bank<P, B>,
-        intent: Intent<A, B, Hook<W>>,
+        intent: Intent<A, B, Hook<W>, State>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
         min_amount_out: u64,

@@ -52,11 +52,6 @@ module slamm::bank {
         reserve_array_index: u64,
         obligation_cap: ObligationOwnerCap<P>,
     }
-    
-    public struct LendingAction has copy, store, drop {
-        amount: u64,
-        is_lend: bool,
-    }
 
     // ====== Entry Functions =====
 
@@ -420,13 +415,13 @@ module slamm::bank {
 
     // ===== Tests =====
 
-    #[test_only]
-    use sui::test_utils::assert_eq;
+    // #[test_only]
+    // use sui::test_utils::assert_eq;
     
     // #[test] // TODO add back
     // #[expected_failure(abort_code = bank_math::EOutputExceedsTotalBankReserves)]
     // fun test_fail_compute_recall_with_output_too_big() {
-    //     compute_lending_action_with_amount_(2_000, 4001, false, 2_000, 1_000, 500);
+    //     needs_lending_action(2_000, 4001, false, 2_000, 1_000, 500);
     // }
     
     // #[test] TODO add back

@@ -137,11 +137,11 @@ module slamm::pool {
         pool_fees_b: u64,
     }
 
-    public struct Intent<phantom A, phantom B, phantom Hook> {
+    public struct Intent<phantom A, phantom B, phantom Hook: drop, phantom State: store> {
         quote: SwapQuote,
     }
 
-    public fun intent_quote<A, B, Hook>(self: &Intent<A, B, Hook>): &SwapQuote { &self.quote }
+    public fun intent_quote<A, B, Hook: drop, State: store>(self: &Intent<A, B, Hook, State>): &SwapQuote { &self.quote }
     
     // ===== Hook Methods =====
 
@@ -242,7 +242,7 @@ module slamm::pool {
         bank_b: &mut Bank<P, B>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
-        intent: Intent<A, B, Hook>,
+        intent: Intent<A, B, Hook, State>,
         min_amount_out: u64,
         ctx: &mut TxContext,
     ): SwapResult {
@@ -540,11 +540,11 @@ module slamm::pool {
 
     // ===== Public Lending functions =====
     
-    public fun prepare_bank_for_pending_withdraw<A, B, Hook: drop, P>(
+    public fun prepare_bank_for_pending_withdraw<A, B, Hook: drop, State: store, P>(
         bank_a: &mut Bank<P, A>,
         bank_b: &mut Bank<P, B>,
         lending_market: &mut LendingMarket<P>,
-        intent: &mut Intent<A, B, Hook>,
+        intent: &mut Intent<A, B, Hook, State>,
         clock: &Clock,
         ctx: &mut TxContext,
     ) {
@@ -589,8 +589,8 @@ module slamm::pool {
     }
     
     fun needs_lending_action_on_swap_<In, Out, P>(
-        bank_in: &mut Bank<P, In>,
-        bank_out: &mut Bank<P, Out>,
+        bank_in: &Bank<P, In>,
+        bank_out: &Bank<P, Out>,
         amount_in: u64,
         amount_out: u64,
     ): bool {
@@ -678,7 +678,7 @@ module slamm::pool {
     public(package) fun as_intent<A, B, Hook: drop, State: store>(
         quote: SwapQuote,
         pool: &mut Pool<A, B, Hook, State>,
-    ): Intent<A, B, Hook> {
+    ): Intent<A, B, Hook, State> {
         pool.guard();
         
         Intent {
@@ -688,7 +688,7 @@ module slamm::pool {
 
     fun consume<A, B, Hook: drop, State: store, >(
         pool: &mut Pool<A, B, Hook, State>,
-        intent: Intent<A, B, Hook>,
+        intent: Intent<A, B, Hook, State>,
     ): SwapQuote {
         pool.unguard();
 
@@ -978,7 +978,7 @@ module slamm::pool {
         self: &mut Pool<A, B, Hook, State>,
         quote: SwapQuote,
         with_guard: bool,
-    ): Intent<A, B, Hook> {
+    ): Intent<A, B, Hook, State> {
         if (with_guard) {
             self.guard();
         };

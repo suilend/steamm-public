@@ -112,7 +112,7 @@ module slamm::cpmm {
         self: &mut Pool<A, B, Hook<W>, State>,
         amount_in: u64,
         a2b: bool,
-    ): Intent<A, B, Hook<W>> {
+    ): Intent<A, B, Hook<W>, State> {
         self.inner_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
         let quote = quote_swap(self, amount_in, a2b);
 
@@ -123,7 +123,7 @@ module slamm::cpmm {
         self: &mut Pool<A, B, Hook<W>, State>,
         bank_a: &mut Bank<P, A>,
         bank_b: &mut Bank<P, B>,
-        intent: Intent<A, B, Hook<W>>,
+        intent: Intent<A, B, Hook<W>, State>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
         min_amount_out: u64,
