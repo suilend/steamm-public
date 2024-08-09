@@ -1201,8 +1201,6 @@ module slamm::lend_tests {
         destroy(clock);
         test_scenario::end(scenario);
     }
-
-    use std::debug::print;
     
     #[test]
     fun test_lend_amm_swap_small_swap_scenarios() {
