@@ -67,39 +67,6 @@ module slamm::smm {
         (pool, pool_cap)
     }
 
-    public fun swap<A, B, W: drop, P>(
-        self: &mut Pool<A, B, Hook<W>, State>,
-        bank_a: &mut Bank<P, A>,
-        bank_b: &mut Bank<P, B>,
-        coin_a: &mut Coin<A>,
-        coin_b: &mut Coin<B>,
-        amount_in: u64,
-        min_amount_out: u64,
-        a2b: bool,
-        ctx: &mut TxContext,
-    ): SwapResult {
-        self.inner_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
-
-        let intent = intent_swap(
-            self,
-            amount_in,
-            a2b,
-        );
-
-        let result = execute_swap(
-            self,
-            bank_a,
-            bank_b,
-            intent,
-            coin_a,
-            coin_b,
-            min_amount_out,
-            ctx
-        );
-
-        result
-    }
-
     public fun intent_swap<A, B, W: drop>(
         self: &mut Pool<A, B, Hook<W>, State>,
         amount_in: u64,

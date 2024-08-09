@@ -68,14 +68,19 @@ module slamm::smm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(200), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        let swap_result = pool.smm_swap(
+
+        let swap_intent = pool.smm_intent_swap(
+            50_000,
+            true, // a2b
+        );
+
+        let swap_result = pool.smm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            50_000,
             0,
-            true, // a2b
             ctx,
         );
 
@@ -151,14 +156,18 @@ module slamm::smm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(200), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        pool.smm_swap(
+        let swap_intent = pool.smm_intent_swap(
+            166_666,
+            true, // a2b
+        );
+
+        pool.smm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            166_666,
             0,
-            true, // a2b
             ctx,
         );
 
@@ -230,14 +239,18 @@ module slamm::smm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(200), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        pool.smm_swap(
+        let swap_intent = pool.smm_intent_swap(
+            166_666 + 1, // we add one here to go outside the bounds
+            true, // a2b
+        );
+
+        pool.smm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            166_666 + 1, // we add one here to go outside the bounds
             0,
-            true, // a2b
             ctx,
         );
 
@@ -308,14 +321,18 @@ module slamm::smm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(0, ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(e9(200), ctx);
 
-        pool.smm_swap(
+        let swap_intent = pool.smm_intent_swap(
+            166_666,
+            false, // a2b
+        );
+
+        pool.smm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            166_666,
             0,
-            false, // b2a
             ctx,
         );
 
@@ -387,14 +404,18 @@ module slamm::smm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(0, ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(e9(200), ctx);
 
-        pool.smm_swap(
+        let swap_intent = pool.smm_intent_swap(
+            166_666 + 1, // we add one here to go outside the bounds
+            false, // a2b
+        );
+
+        pool.smm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            166_666 + 1, // we add one here to go outside the bounds
             0,
-            false, // b2a
             ctx,
         );
 

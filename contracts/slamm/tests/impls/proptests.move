@@ -80,14 +80,18 @@ module slamm::proptests {
             let mut coin_a = coin::mint_for_testing<SUI>(if (a2b) { amount_in } else {0}, ctx);
             let mut coin_b = coin::mint_for_testing<COIN>(if (a2b) { 0 } else {amount_in}, ctx);
 
-            let _swap_result = pool.cpmm_swap(
+            let swap_intent = pool.cpmm_intent_swap(
+                amount_in,
+                a2b, // a2b
+            );
+
+            pool.cpmm_execute_swap(
                 &mut bank_a,
                 &mut bank_b,
+                swap_intent,
                 &mut coin_a,
                 &mut coin_b,
-                amount_in,
                 0,
-                a2b,
                 ctx,
             );
 

@@ -295,14 +295,18 @@ module slamm::lend_tests {
         let mut coin_a = coin::mint_for_testing<TEST_USDC>(50_000, ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        let _ = pool.cpmm_swap(
+        let swap_intent = pool.cpmm_intent_swap(
+            50_000,
+            true, // a2b
+        );
+
+        pool.cpmm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            50_000,
             0,
-            true, // a2b
             ctx,
         );
 
@@ -637,7 +641,6 @@ module slamm::lend_tests {
             0,
             ctx,
         );
-
 
         let (reserve_a, reserve_b) = pool.reserves();
         assert_eq(reserve_a, 550_000);

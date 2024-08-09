@@ -140,14 +140,18 @@ module slamm::cpmm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(200), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        let swap_result = pool.cpmm_swap(
+        let swap_intent = pool.cpmm_intent_swap(
+            50_000,
+            true, // a2b
+        );
+
+        let swap_result = pool.cpmm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            50_000,
             0,
-            true, // a2b
             ctx,
         );
 
@@ -337,14 +341,18 @@ module slamm::cpmm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(200), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        let swap_result = pool.cpmm_swap(
+        let swap_intent = pool.cpmm_intent_swap(
+            e9(200),
+            true, // a2b
+        );
+
+        let swap_result = pool.cpmm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            e9(200),
             0,
-            true, // a2b
             ctx,
         );
 
@@ -419,14 +427,18 @@ module slamm::cpmm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(50_000, ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        let _swap_result = pool.cpmm_swap(
+        let swap_intent = pool.cpmm_intent_swap(
+            50_000,
+            true, // a2b
+        );
+
+        pool.cpmm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            50_000,
             0,
-            true, // a2b
             ctx,
         );
 
@@ -495,14 +507,18 @@ module slamm::cpmm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(0, ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(10_000_000_000_000, ctx);
 
-        let swap_result = pool.cpmm_swap(
+        let swap_intent = pool.cpmm_intent_swap(
+            10_000_000_000_000,
+            false, // a2b
+        );
+
+        let swap_result = pool.cpmm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            10_000_000_000_000,
             0,
-            false, // a2b
             ctx,
         );
 
@@ -795,14 +811,18 @@ module slamm::cpmm_tests {
             true, // a2b
         );
 
-        let _ = pool.cpmm_swap(
+        let swap_intent = pool.cpmm_intent_swap(
+            e9(200),
+            true, // a2b
+        );
+
+        pool.cpmm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            e9(200),
             swap_result.amount_out() + 1,
-            true, // a2b
             ctx,
         );
 
@@ -895,14 +915,18 @@ module slamm::cpmm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(1_000_000), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        let swap_result = pool.cpmm_swap(
+        let swap_intent = pool.cpmm_intent_swap(
+            e9(1_000_000),
+            true, // a2b
+        );
+
+        let swap_result = pool.cpmm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            e9(1_000_000),
             0,
-            true, // a2b
             ctx,
         );
 
@@ -926,14 +950,18 @@ module slamm::cpmm_tests {
         let mut acc_pool_fees = 0;
 
         while (len > 0) {
-            let swap_result = pool_2.cpmm_swap(
+            let swap_intent = pool_2.cpmm_intent_swap(
+                e9(10_00),
+                true, // a2b
+            );
+
+            let swap_result = pool_2.cpmm_execute_swap(
                 &mut bank_a,
                 &mut bank_b,
+                swap_intent,
                 &mut coin_a,
                 &mut coin_b,
-                e9(10_00),
                 0,
-                true, // a2b
                 ctx,
             );
 

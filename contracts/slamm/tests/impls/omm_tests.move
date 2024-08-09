@@ -88,15 +88,19 @@ module slamm::omm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(200), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        let _swap_result = pool.omm_swap(
-            &mut bank_a,
-            &mut bank_b,
-            &mut coin_a,
-            &mut coin_b,
+        let swap_intent = pool.omm_intent_swap(
             50_000,
-            0,
             true, // a2b
             &clock,
+        );
+
+        pool.omm_execute_swap(
+            &mut bank_a,
+            &mut bank_b,
+            swap_intent,
+            &mut coin_a,
+            &mut coin_b,
+            0,
             ctx,
         );
 
@@ -634,15 +638,20 @@ module slamm::omm_tests {
             &mut clock,
         );
 
-        pool.omm_swap(
+
+        let swap_intent = pool.omm_intent_swap(
+            100_000,
+            true, // a2b
+            &clock,
+        );
+
+        pool.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            100_000,
             0,
-            true, // a2b,
-            &clock,
             ctx,
         );
 
@@ -659,15 +668,19 @@ module slamm::omm_tests {
             &mut clock,
         );
    
-        pool.omm_swap(
+        let swap_intent = pool.omm_intent_swap(
+            1_000,
+            true, // a2b
+            &clock,
+        );
+
+        pool.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            1_000,
             0,
-            true, // a2b,
-            &clock,
             ctx,
         );
 
@@ -684,15 +697,19 @@ module slamm::omm_tests {
             &mut clock,
         );
 
-        pool.omm_swap(
+        let swap_intent = pool.omm_intent_swap(
+            10_000,
+            false, // a2b
+            &clock,
+        );
+
+        pool.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            10_000,
             0,
-            false, // a2b,
-            &clock,
             ctx,
         );
 
@@ -795,15 +812,19 @@ module slamm::omm_tests {
             &mut clock,
         );
 
-        let swap_result = pool.omm_swap(
+        let swap_intent = pool.omm_intent_swap(
+            100_000,
+            true, // a2b
+            &clock,
+        );
+
+        let swap_result = pool.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            100_000,
             0,
-            true, // a2b,
-            &clock,
             ctx,
         );
 
@@ -821,16 +842,20 @@ module slamm::omm_tests {
             1,
             &mut clock,
         );
-   
-        let swap_result = pool.omm_swap(
+
+        let swap_intent = pool.omm_intent_swap(
+            1_000,
+            true, // a2b
+            &clock,
+        );
+
+        let swap_result = pool.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            1_000,
             0,
-            true, // a2b,
-            &clock,
             ctx,
         );
 
@@ -850,15 +875,19 @@ module slamm::omm_tests {
             &mut clock,
         );
 
-        let swap_result = pool.omm_swap(
+        let swap_intent = pool.omm_intent_swap(
+            10_000,
+            false, // a2b
+            &clock,
+        );
+
+        let swap_result = pool.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            10_000,
             0,
-            false, // a2b,
-            &clock,
             ctx,
         );
 
@@ -963,15 +992,19 @@ module slamm::omm_tests {
         let initial_reference_vol = pool.inner().ema().reference_val();
         let initial_accumulator = pool.inner().ema().accumulator();
 
-        pool.omm_swap(
+        let swap_intent = pool.omm_intent_swap(
+            100_000,
+            true, // a2b
+            &clock,
+        );
+
+        pool.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            100_000,
             0,
-            true, // a2b,
-            &clock,
             ctx,
         );
 
@@ -983,15 +1016,19 @@ module slamm::omm_tests {
         let mid_accumulator = pool.inner().ema().accumulator();
         assert!(mid_accumulator.gt(initial_accumulator));
 
-        pool.omm_swap(
+        let swap_intent = pool.omm_intent_swap(
+            1_000,
+            true, // a2b
+            &clock,
+        );
+
+        pool.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            1_000,
             0,
-            true, // a2b,
-            &clock,
             ctx,
         );
 
@@ -1003,15 +1040,19 @@ module slamm::omm_tests {
         assert_eq(initial_reference_vol, pool.inner().ema().reference_val());
         assert_eq(initial_reference_price, pool.inner().reference_price());
 
-        pool.omm_swap(
+        let swap_intent = pool.omm_intent_swap(
+            10_000,
+            false, // a2b
+            &clock,
+        );
+
+        pool.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            10_000,
             0,
-            false, // a2b,
-            &clock,
             ctx,
         );
 
@@ -1112,15 +1153,19 @@ module slamm::omm_tests {
         let initial_reference_vol = pool.inner().ema().reference_val();
         let initial_accumulator = pool.inner().ema().accumulator();
 
-        let swap_result = pool.omm_swap(
+        let swap_intent = pool.omm_intent_swap(
+            100_000,
+            true, // a2b
+            &clock,
+        );
+
+        let swap_result = pool.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            100_000,
             0,
-            true, // a2b,
-            &clock,
             ctx,
         );
 
@@ -1133,15 +1178,19 @@ module slamm::omm_tests {
         assert_eq(initial_reference_vol, pool.inner().ema().reference_val());
         assert!(mid_accumulator.gt(initial_accumulator));
 
-        let swap_result = pool.omm_swap(
+        let swap_intent = pool.omm_intent_swap(
+            1_000,
+            true, // a2b
+            &clock,
+        );
+
+        let swap_result = pool.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            1_000,
             0,
-            true, // a2b,
-            &clock,
             ctx,
         );
 
@@ -1155,15 +1204,19 @@ module slamm::omm_tests {
         assert!(mid_accumulator_2.gt(mid_accumulator));
         assert!(fee_rate_2.gt(fee_rate_1));
 
-        let swap_result = pool.omm_swap(
+        let swap_intent = pool.omm_intent_swap(
+            10_000,
+            false, // a2b
+            &clock,
+        );
+
+        let swap_result = pool.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            10_000,
             0,
-            false, // a2b,
-            &clock,
             ctx,
         );
 
@@ -1265,15 +1318,19 @@ module slamm::omm_tests {
 
         
         // Initial trade to create some accumulated volatility
-        pool.omm_swap(
+        let swap_intent = pool.omm_intent_swap(
+            10_000,
+            true, // a2b
+            &clock,
+        );
+
+        pool.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            10_000,
             0,
-            true, // a2b,
-            &clock,
             ctx,
         );
 
@@ -1290,15 +1347,19 @@ module slamm::omm_tests {
             &mut clock,
         );
 
-        pool.omm_swap(
+        let swap_intent = pool.omm_intent_swap(
+            100,
+            true, // a2b
+            &clock,
+        );
+
+        pool.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            100,
             0,
-            true, // a2b,
-            &clock,
             ctx,
         );
 
@@ -1318,15 +1379,19 @@ module slamm::omm_tests {
             &mut clock,
         );
 
-        pool.omm_swap(
+        let swap_intent = pool.omm_intent_swap(
+            100,
+            true, // a2b
+            &clock,
+        );
+
+        pool.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            100,
             0,
-            true, // a2b,
-            &clock,
             ctx,
         );
 
@@ -1345,15 +1410,19 @@ module slamm::omm_tests {
             &mut clock,
         );
         
-        pool.omm_swap(
+        let swap_intent = pool.omm_intent_swap(
+            100,
+            true, // a2b
+            &clock,
+        );
+
+        pool.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            100,
             0,
-            true, // a2b,
-            &clock,
             ctx,
         );
 
@@ -1374,15 +1443,19 @@ module slamm::omm_tests {
             &mut clock,
         );
         
-        pool.omm_swap(
+        let swap_intent = pool.omm_intent_swap(
+            100,
+            false, // a2b
+            &clock,
+        );
+
+        pool.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            100,
             0,
-            false, // a2b,
-            &clock,
             ctx,
         );
 
@@ -1474,15 +1547,19 @@ module slamm::omm_tests {
 
         
         // Initial trade to create some accumulated volatility
-        pool.omm_swap(
+        let swap_intent = pool.omm_intent_swap(
+            10_000,
+            true, // a2b
+            &clock,
+        );
+
+        pool.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            10_000,
             0,
-            true, // a2b,
-            &clock,
             ctx,
         );
 
@@ -1495,15 +1572,19 @@ module slamm::omm_tests {
             &mut clock,
         );
 
-        pool.omm_swap(
+        let swap_intent = pool.omm_intent_swap(
+            100,
+            true, // a2b
+            &clock,
+        );
+
+        pool.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            100,
             0,
-            true, // a2b,
-            &clock,
             ctx,
         );
 
@@ -1525,15 +1606,19 @@ module slamm::omm_tests {
             &mut clock,
         );
 
-        pool.omm_swap(
+        let swap_intent = pool.omm_intent_swap(
+            100,
+            true, // a2b
+            &clock,
+        );
+
+        pool.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            100,
             0,
-            true, // a2b,
-            &clock,
             ctx,
         );
 
@@ -1553,15 +1638,19 @@ module slamm::omm_tests {
             &mut clock,
         );
 
-        pool.omm_swap(
+        let swap_intent = pool.omm_intent_swap(
+            100,
+            true, // a2b
+            &clock,
+        );
+
+        pool.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            100,
             0,
-            true, // a2b,
-            &clock,
             ctx,
         );
 
@@ -1582,15 +1671,19 @@ module slamm::omm_tests {
             &mut clock,
         );
 
-        pool.omm_swap(
+        let swap_intent = pool.omm_intent_swap(
+            100,
+            true, // a2b
+            &clock,
+        );
+
+        pool.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            100,
             0,
-            true, // a2b,
-            &clock,
             ctx,
         );
 
@@ -1695,15 +1788,19 @@ module slamm::omm_tests {
                 &mut clock,
             );
         
-            pool.omm_swap(
+            let swap_intent = pool.omm_intent_swap(
+                100,
+                true, // a2b
+                &clock,
+            );
+
+            pool.omm_execute_swap(
                 &mut bank_a,
                 &mut bank_b,
+                swap_intent,
                 &mut coin_a,
                 &mut coin_b,
-                100,
                 0,
-                true, // a2b,
-                &clock,
                 ctx,
             );
 
@@ -1999,15 +2096,19 @@ module slamm::omm_tests {
         let mut coin_a = coin::mint_for_testing<SUI>(e9(200), ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        let _ = pool.omm_swap(
-            &mut bank_a,
-            &mut bank_b,
-            &mut coin_a,
-            &mut coin_b,
+        let swap_intent = pool.omm_intent_swap(
             50_000,
-            0,
             true, // a2b
             &clock,
+        );
+
+        pool.omm_execute_swap(
+            &mut bank_a,
+            &mut bank_b,
+            swap_intent,
+            &mut coin_a,
+            &mut coin_b,
+            0,
             ctx,
         );
 
@@ -2131,15 +2232,19 @@ module slamm::omm_tests {
 
         let price_0 = omm::new_instant_price_oracle(&pool_1);
 
-        pool_2.omm_swap(
+        let swap_intent = pool_2.omm_intent_swap(
+            100_000,
+            true, // a2b
+            &clock,
+        );
+
+        pool_2.omm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            100_000,
             0,
-            true, // a2b,
-            &clock,
             ctx,
         );
 
