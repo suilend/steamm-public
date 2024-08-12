@@ -72,7 +72,7 @@ module slamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
 
         assert_eq(pool.cpmm_k(), 500_000 * 500_000);
         assert_eq(pool.lp_supply_val(), 500_000);
@@ -82,7 +82,7 @@ module slamm::lend_tests {
         assert_eq(pool.trading_data().pool_fees_a(), 0);
         assert_eq(pool.trading_data().pool_fees_b(), 0);
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
@@ -156,7 +156,7 @@ module slamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
 
         assert_eq(pool.cpmm_k(), 500_000 * 500_000);
         assert_eq(pool.lp_supply_val(), 500_000);
@@ -166,7 +166,7 @@ module slamm::lend_tests {
         assert_eq(pool.trading_data().pool_fees_a(), 0);
         assert_eq(pool.trading_data().pool_fees_b(), 0);
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
@@ -189,7 +189,7 @@ module slamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
 
         assert_eq(pool.cpmm_k(), 10 * 10);
         assert_eq(pool.lp_supply_val(), 10);
@@ -198,7 +198,7 @@ module slamm::lend_tests {
         assert_eq(pool.trading_data().pool_fees_a(), 0);
         assert_eq(pool.trading_data().pool_fees_b(), 0);
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(reserve_a, 10);
         assert_eq(reserve_b, 10);
 
@@ -271,7 +271,7 @@ module slamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
 
         assert_eq(pool.cpmm_k(), 500_000 * 500_000);
         assert_eq(pool.lp_supply_val(), 500_000);
@@ -281,7 +281,7 @@ module slamm::lend_tests {
         assert_eq(pool.trading_data().pool_fees_a(), 0);
         assert_eq(pool.trading_data().pool_fees_b(), 0);
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
@@ -310,7 +310,7 @@ module slamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(reserve_a, 550_000);
         assert_eq(reserve_b, 454_910);
 
@@ -392,7 +392,7 @@ module slamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
 
         assert_eq(pool.cpmm_k(), 500_000 * 500_000);
         assert_eq(pool.lp_supply_val(), 500_000);
@@ -402,7 +402,7 @@ module slamm::lend_tests {
         assert_eq(pool.trading_data().pool_fees_a(), 0);
         assert_eq(pool.trading_data().pool_fees_b(), 0);
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
@@ -485,7 +485,7 @@ module slamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
 
         assert_eq(pool.cpmm_k(), 500_000 * 500_000);
         assert_eq(pool.lp_supply_val(), 500_000);
@@ -495,7 +495,7 @@ module slamm::lend_tests {
         assert_eq(pool.trading_data().pool_fees_a(), 0);
         assert_eq(pool.trading_data().pool_fees_b(), 0);
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
@@ -519,7 +519,7 @@ module slamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
 
         assert_eq(pool.cpmm_k(), 10 * 10);
         assert_eq(pool.lp_supply_val(), 10);
@@ -601,7 +601,7 @@ module slamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
 
         assert_eq(pool.cpmm_k(), 500_000 * 500_000);
         assert_eq(pool.lp_supply_val(), 500_000);
@@ -611,7 +611,7 @@ module slamm::lend_tests {
         assert_eq(pool.trading_data().pool_fees_a(), 0);
         assert_eq(pool.trading_data().pool_fees_b(), 0);
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
@@ -642,7 +642,7 @@ module slamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(reserve_a, 550_000);
         assert_eq(reserve_b, 454_910);
 
@@ -726,7 +726,7 @@ module slamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
 
         assert_eq(pool.cpmm_k(), 500_000 * 500_000);
         assert_eq(pool.lp_supply_val(), 500_000);
@@ -736,7 +736,7 @@ module slamm::lend_tests {
         assert_eq(pool.trading_data().pool_fees_a(), 0);
         assert_eq(pool.trading_data().pool_fees_b(), 0);
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
@@ -776,7 +776,7 @@ module slamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(reserve_a, 700_000);
         assert_eq(reserve_b, 358_286);
         assert_eq(reserve_b + pool.trading_data().protocol_fees_b(), 358_572);
@@ -854,7 +854,7 @@ module slamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(pool.lp_supply_val(), 100_000);
         assert_eq(reserve_a, 100_000);
         assert_eq(reserve_b, 100_000);
@@ -891,7 +891,7 @@ module slamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(pool.lp_supply_val(), 105_000);
         assert_eq(reserve_a, 105_000);
         assert_eq(reserve_b, 105_000);
@@ -927,7 +927,7 @@ module slamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(pool.lp_supply_val(), 5_105_000);
         assert_eq(reserve_a, 5_105_000);
         assert_eq(reserve_b, 5_105_000);
@@ -1112,7 +1112,7 @@ module slamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(pool.lp_supply_val(), 100_000);
         assert_eq(reserve_a, 100_000);
         assert_eq(reserve_b, 100_000);
@@ -1142,7 +1142,7 @@ module slamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(pool.lp_supply_val(), 100_000 - 100);
         assert_eq(reserve_a, 100_000 - 100);
         assert_eq(reserve_b, 100_000 - 100);
@@ -1171,7 +1171,7 @@ module slamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(pool.lp_supply_val(), 100_000 - 100 - 50_000);
         assert_eq(reserve_a, 100_000 - 100 - 50_000);
         assert_eq(reserve_b, 100_000 - 100 - 50_000);
@@ -1578,7 +1578,7 @@ module slamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(reserve_a, 100_000 - 30_000);
         assert_eq(reserve_b, 100_000 + 30_000);
 

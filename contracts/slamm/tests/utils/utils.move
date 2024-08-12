@@ -213,8 +213,8 @@ module slamm::test_utils {
 
         bump_clock(clock, clock_bump);
 
-        let a = if (a2b) {pool.reserve_a() + quote.amount_in()} else {pool.reserve_a() - quote.amount_out()};
-        let b = if (a2b) {pool.reserve_b() - quote.amount_out()} else {pool.reserve_b() + quote.amount_in()};
+        let a = if (a2b) {pool.total_funds_a() + quote.amount_in()} else {pool.total_funds_a() - quote.amount_out()};
+        let b = if (a2b) {pool.total_funds_b() - quote.amount_out()} else {pool.total_funds_b() + quote.amount_in()};
         omm::set_oracle_price_as_hypothetical_internal_reserves(
             pool,
             a,

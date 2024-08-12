@@ -50,23 +50,44 @@ module slamm::omm {
     /// instead we compute it at runtime.
     public struct State has store {
         version: Version,
+        // Object containing the price information of `A`
         price_info_a: PriceInfo,
+        // Object containing the price information of `B`
         price_info_b: PriceInfo,
+        // Reference price from which we compute the absolute price deviation
         reference_price: Decimal,
+        // Exponential Moving-Average of the absolute price deviation (instant vol)
         ema: Ema,
+        // Indicates the last time the price and vol references have been updated
         last_update_ms: u64,
+        // Indicates the period (time delta) in which the references do not get
+        // updated
         filter_period: u64,
+        // Period followin the filter period, from which the references do get updated.
+        // Indicates the period in which we apply a discount to the accumulated
+        // vol. Beyond the discount period the accumulated vol gets resetted.
         decay_period: u64,
+        // Factor applied to the fee calculation to scale the fee value.
         fee_control: Decimal,
     }
 
+    /// Object containing the Exponential Moving-Average information.
+    /// In the current implementation this object stores the information
+    /// pertaining to the instant volatility.
     public struct Ema has store {
+        // Reference value of the instant volatility, which gets periodically
+        // updated.
         reference_val: Decimal,
+        // Volatility accumulated
         accumulator: Decimal,
+        // Discount factor applied to the volatility accumulator during the
+        // decay period
         reduction_factor: Decimal,
+        // Maximum value for the accumulator
         max_accumulator: Decimal,
     }
 
+    /// Price info object with data sourced from the Pyth oracle
     public struct PriceInfo has store {
         price_identifier: PriceIdentifier,
         price: Decimal,
@@ -76,6 +97,29 @@ module slamm::omm {
 
     // ===== Public Methods =====
 
+    /// Initializes and returns a new AMM Pool along with its associated PoolCap.
+    /// The pool is initialized with zero balances for both coin types `A` and `B`,
+    /// specified protocol fees, and the provided swap fee. The pool's LP supply
+    /// object is initialized at zero supply and the pool is added to the `registry`.
+    /// 
+    /// Such the initial parameters such as:
+    /// 
+    /// - Filter period in miliseconds
+    /// - Decay period in miliseconds: cumulative over the filter period
+    /// - Fee control factor in basis points
+    /// - Reduction factor in basis points
+    /// - Max accumulated vol in basis points
+    ///
+    /// # Returns
+    ///
+    /// A tuple containing:
+    /// - `Pool<A, B, Hook, State>`: The created AMM pool object.
+    /// - `PoolCap<A, B, Hook>`: The associated pool capability object.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if `swap_fee_bps` is greater than or equal to
+    /// `SWAP_FEE_DENOMINATOR`
     public fun new<A, B, W: drop>(
         _witness: W,
         registry: &mut Registry,
@@ -184,14 +228,34 @@ module slamm::omm {
         quote_swap_(self, amount_in, a2b, current_ms)
     }
     
+    /// Computes a swap quote for a given input amount and direction
+    /// taking into account fees, price updates, and volatility:
+    /// 
+    /// - We assert that the current price data is fresh by checking against `current_ms`.
+    /// - Pull price and volatility updates based on the time elapsed since the last update.
+    /// - Compute the swap quote based on the constant-product implementation
+    /// - Compute base fees on the quote output
+    /// - Computes accumulated volatility and with it the dynamic fees
+    /// 
+    /// This function does not mutate the pool with new reference updates so that
+    /// it can be called by the swap_intent function as well as the read-only quote swap.
+    ///
+    /// # Returns
+    /// A tuple containing:
+    /// - Swap quote
+    /// - Reference price
+    /// - Reference volatility
+    /// - Accumulated volatility
+    /// - Time of last reference update (in ms)
     fun quote_swap_<A, B, W: drop>(
         self: &Pool<A, B, Hook<W>, State>,
         amount_in: u64,
         a2b: bool,
+        // The current timestamp in milliseconds.
         current_ms: u64,
     ): (SwapQuote, Decimal, Decimal, Decimal, u64) {
         self.inner().assert_price_is_fresh_(current_ms);
-        let (reserve_a, reserve_b) = self.reserves();
+        let (reserve_a, reserve_b) = self.total_funds();
 
         // Update price and vol reference depending on timespan ellapsed
         let (reference_price, reference_vol, last_update_ms) = get_updated_references(self, current_ms);
@@ -201,7 +265,6 @@ module slamm::omm {
             reserve_b,
             amount_in,
             a2b,
-            0, // TODO: confirm if offset feature should be offered in this hook
         );
 
         let swap_outputs = self.compute_fees_on_output(amount_out);
@@ -255,13 +318,13 @@ module slamm::omm {
     ): Decimal {
         let (a, b) = if (quote.a2b()) {
             (
-                self.reserve_a() + quote.amount_in(),
-                self.reserve_b() - quote.amount_out_net_of_protocol_fees()
+                self.total_funds_a() + quote.amount_in(),
+                self.total_funds_b() - quote.amount_out_net_of_protocol_fees()
             )
         } else {
             (
-                self.reserve_a() - quote.amount_out_net_of_protocol_fees(),
-                self.reserve_b() + quote.amount_in(),
+                self.total_funds_a() - quote.amount_out_net_of_protocol_fees(),
+                self.total_funds_b() + quote.amount_in(),
             )
         };
 
@@ -271,7 +334,7 @@ module slamm::omm {
     public fun instant_price_internal<A, B, W: drop>(
         self: &Pool<A, B, Hook<W>, State>,
     ): Decimal {
-        decimal::from(self.reserve_a()).div(decimal::from(self.reserve_b()))
+        decimal::from(self.total_funds_a()).div(decimal::from(self.total_funds_b()))
     }
     
     public fun new_instant_price_oracle<A, B, W: drop>(
@@ -376,6 +439,27 @@ module slamm::omm {
     
     // ===== Private Functions =====
 
+    /// Returns the reference price, reference volatility, and last update timestamp
+    /// based on the elapsed time since the last update. These can either be updated
+    /// values or carryover depending on the time elapsed.
+    ///
+    /// We first compute the time elapsed since the last update.
+    /// 
+    /// - Within the Filter Period:
+    ///     The reference values remain unchanged from their previous state.
+    /// - Within the Decay Periods:
+    ///     Sets reference vol by appltyin a reduction factor to the
+    ///     accumulated volatility and updates the reference price using
+    ///     the latest oracle data. 
+    /// - Beyond Decay Period:
+    ///     Reference volatility is reset to zero, and the reference price
+    ///     is updated using the latest oracle data.
+    /// 
+    /// # Returns
+    /// A tuple containing:
+    /// - Reference price
+    /// - Reference volatilite
+    /// - Last update in miliseconds
     fun get_updated_references<A, B, W: drop>(
         self: &Pool<A, B, Hook<W>, State>,
         current_ms: u64,
@@ -403,6 +487,17 @@ module slamm::omm {
         return (self.inner().reference_price, self.inner().ema.reference_val, state.last_update_ms)
     }
 
+    /// Computes a new volatility accumulator based on the reference price,
+    /// reference volatility, and two new price estimates (one based on the constant
+    /// product formula and another based on the the oracle feed)
+    /// 
+    /// Computes the difference between the new prices and the reference price to
+    /// determine the absolute rate of change in price.
+    /// It then updates the volatility accumulator by adding the maximum price
+    /// difference rate to the reference volatility.
+    ///
+    /// # Returns
+    /// - The updated volatility accumulator value
     fun new_volatility_accumulator(
         self: &State,
         reference_price: Decimal,
@@ -530,8 +625,8 @@ module slamm::omm {
         self: &mut Pool<A, B, Hook<W>, State>,
         clock: &Clock,
     ) {
-        let reserve_a = self.reserve_a();
-        let reserve_b = self.reserve_b();
+        let reserve_a = self.total_funds_a();
+        let reserve_b = self.total_funds_b();
         set_oracle_price_as_hypothetical_internal_reserves(self, reserve_a, reserve_b, clock)
     }
     

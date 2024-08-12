@@ -42,6 +42,24 @@ module slamm::smm {
 
     // ===== Public Methods =====
 
+    /// Initializes and returns a new AMM Pool along with its associated PoolCap.
+    /// The pool is initialized with zero balances for both coin types `A` and `B`,
+    /// specified protocol fees, and the provided swap fee. The pool's LP supply
+    /// object is initialized at zero supply and the pool is added to the `registry`.
+    /// 
+    /// It sets uo the upper and lower reserve ratio which depermines the boundaries
+    /// which the AMM offers a quote or not.
+    ///
+    /// # Returns
+    ///
+    /// A tuple containing:
+    /// - `Pool<A, B, Hook, State>`: The created AMM pool object.
+    /// - `PoolCap<A, B, Hook>`: The associated pool capability object.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if `swap_fee_bps` is greater than or equal to
+    /// `SWAP_FEE_DENOMINATOR`
     public fun new<A, B, W: drop>(
         _witness: W,
         registry: &mut Registry,
@@ -130,8 +148,8 @@ module slamm::smm {
     fun check_reserve_ratio<A, B, W: drop>(
         self: &Pool<A, B, Hook<W>, State>,
     ): bool {
-        let a = decimal::from(self.reserve_a());
-        let b = decimal::from(self.reserve_b());
+        let a = decimal::from(self.total_funds_a());
+        let b = decimal::from(self.total_funds_b());
         let ratio = a.div(b);
 
         ratio.le(self.inner().upper_reserve_ratio) && ratio.ge(self.inner().lower_reserve_ratio)
@@ -147,7 +165,7 @@ module slamm::smm {
     // ===== View Functions =====
     
     public fun k<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>): u128 {
-        let (reserve_a, reserve_b) = self.reserves();
+        let (reserve_a, reserve_b) = self.total_funds();
         ((reserve_a as u128) + (reserve_b as u128))
     }
 
