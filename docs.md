@@ -35,6 +35,55 @@ Banks are setup with a target utilisation rate. Liquidity deployed to lending ma
 
 These parameter are set by the global admin when lending is initialised, however these can be technically updated dynamically, leaving the door open to strategies that manage utilisation based on market conditions such as volatility and order flow.
 
+Utilisation rate $U$ is defined as rate between deployed liquidity $d$ and total liquidity $L$ (deployed plus available liquidity $a$):
+
+$$
+U = \frac{d}{L}
+$$
+
+where $L = d + a$
+
+When a given inflow or outflow $\Delta L$ takes place, we recompute the post utilisation rate, such that for negative flows we recall funds from the lending market if the following condition is met:
+
+$$
+\begin{gather*}
+    U < U^* - b \\
+    \iff \frac{d}{a + d - \Delta L} < U^* - b \\
+    \iff d < (U^* - b)(a + d - \Delta L) \; : \; \Delta L < a + d
+\end{gather*}
+$$
+
+Where $b$ stands for the utilisation buffer.
+
+The recall amount $\Delta a$ is then computed as follows:
+
+$$
+\begin{gather*}
+    \frac{d - \Delta a}{a + d - \Delta L} = U^* \\
+    \iff \Delta a = d - U^*(a + d - \Delta L)
+    
+\end{gather*}
+$$
+
+In the same fashion, when flows are positive we deploy funds to the lending market if the following condition is met:
+
+$$
+\begin{gather*}
+    U > U^* + b \\
+    \iff \frac{d}{a + d + \Delta L} > U^* + b \\
+    \iff d > (U^* + b)(a + d + \Delta L)
+\end{gather*}
+$$
+
+Where the deploy amount $\Delta d$ is computed as follows:
+
+$$
+\begin{gather*}
+    \frac{d + \Delta d}{a + d + \Delta L} = U^* \\
+    \iff \Delta d = U^*(a + d + \Delta L) - d
+\end{gather*}
+$$
+
 
 ### Swap model
 
@@ -65,7 +114,6 @@ When depositing liquidity, the respective banks will optionally deploy extra liq
 Conversely, when redeeming liquidity, we check if the outflows can be met and if the banks utilisation remains within the bounds defined, and if not the banks will recall the required liquidity from the lending markets.
 
 <img src="assets/withdraw-2.svg" alt="Alt text" style="width:50%;">
-
 
 
 TODO...
