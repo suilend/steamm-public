@@ -116,22 +116,128 @@ Conversely, when redeeming liquidity, we check if the outflows can be met and if
 <img src="assets/withdraw-2.svg" alt="Alt text" style="width:50%;">
 
 
-TODO...
+## Hooks
+
+### Constant Product Offset AMM
+The constant-product AMM hook uses the default constant-product function with an horizontal and vertical offset. This hook operates on the principle of preserving the product of the reserves of the two assets in the pool, ensuring that the product remains constant regardless of the trades that occur.
+
+We defined the constant-product formula is defined as:
+
+$$
+(x+x_O)(y+y_O)=k
+$$
+
+Where:
+- $x$ represents the reserve of asset 𝑋
+- $x_O$ represents an horizontal offset
+- $y$ represents the reserve of asset 𝑌
+- $y_O$ represents an vertical offset
+- $k$ is the invariant product of the reserves
+
+
+When a trader swaps one asset for another, the constant-product formula is adjusted to reflect the new reserves while maintaining the invariant $k$.
+
+Given a swap, the AMM adjusts the reserves to maintain the invariant. 
+
+Given a input $\Delta x$, the pool will return an output $\Delta y$ such that:
+
+$$y - \Delta y + y_O = \frac{k}{x + \Delta x + x_O}$$
+
+Hence:
+
+$$\Delta y = (y + y_O) - \frac{k}{x + x_O + \Delta x}$$
+
+
+Fees are then computed on the output amount $\Delta y$:
+
+$$\text{Fee} = \Delta y \times Fee Rate$$
+
+
+#### Constant-Product Offsets
+
+We introduce both an horizontal and vertical offset, which allows pool creaters to initialize a pool with one-sided liquidity. By setting the offset as a non-zero value we're shifting the constant-product curve horizontally, in the case of $x_O$, or vertically, in the case of $y_O$.
+
+For an horizontal offset, we can therefore define the point at which the curve intercepts the y axis (when $x=0$) as follows:
+
+$$
+\begin{gather*}
+    (x+x_O)(y-0) = k \\
+    \iff (0+x_O)(y-0) = k \\
+    \iff x_0 \times y = k \\
+    \iff y = k / x_0 \\
+\end{gather*}
+$$
+
+In the same logic, for a vertical offset, the point at which the curve intercepts the x axis is:
+
+$$
+x = k / y_0
+$$
+
+
+### Fixed Range Constant-Sum AMM
+TODO
+
+### Oracle AMM
+The oracle AMM hook provides a quotation mechanism with dynamic fees based on market volatility. When a trader swaps, the hook computes an exponential-moving average of the volatility based on a reference price and accumulated volatility metric.
+
+We use absolute price deviations as a proxy for volatility. We define the accumulated volatility metric as follows:
+
+$$
+V_{\lambda} = \max\left(
+    \hat{V} + \max(|P_{oracle} - \hat{P}|, |P_{internal} - \hat{P}|),
+    \text{MaxVol}
+\right)
+$$
+
+Where $P_{oracle}$ stands for the oracle price and $P_{internal}$ the internal constant-product price of the pool. The volatility accumulated metric is capped by a parameter $MaxVol$ defined by the pool.
+
+When a swap occurs, at $n+1$, we compute the reference price as well as the reference volatility:
+
+
+$$
+\hat{P}_{n+1} = 
+\begin{cases} 
+P_{oracle} & \text{, } t = 0 \\
+\hat{P}_n & \text{, } \Delta t < f \\
+P_{oracle} & \text{, } \Delta t \geq f
+\end{cases}
+$$
+
+$$
+\hat{V}_{n+1} = 
+\begin{cases}
+0 & \text{, } t = 0\\
+\hat{V}_n & \text{, } \Delta t < f \\
+V_{\lambda} \times R & \text{, } \Delta t \geq f \\
+0 & \text{, } \Delta t > d
+\end{cases}
+$$
+
+where
+$$
+\Delta t = \hat{t}_{n} - t
+$$
+
+and we update the reference time after the two previous computations such that:
+
+$$
+\hat{t}_{n+1} = 
+\begin{cases}
+t & \text{, } t = 0\\
+\hat{t}_{n} & \text{, } \Delta t < f \\
+t & \text{, } \Delta t \geq f \\
+\end{cases}
+$$
+
+The hook then provides a quotation price bsaed on the constant-product formula and adds a dynamic fee charged on the output:
+
+
+$$
+\Delta Out \times \frac{V_{\lambda}^2 \times \phi}{100}
+$$
+
+Where $\Delta Out$ represents the output amount and $\phi$ is a fee control parameter used for scaling.
 
 ### Risks and mitigations
-
-- intents function as are wright-only locks
-- swap dos when utilisation is high on the bank side and lending market side
-
-
-...
-- Instead of having denial of service if utilisation is high we could offer for the user to redeem ctokens instead of the token and let the user redeem the funds once utilisation is back to normal..
-- The SDK is responsible for composing the transaction on the swap side and therefore know if we need to sync the bank or not
-- How does the design avoid constant deposits and withdraws from the lending market, making the lending market bumpy? Two things, one is the sharing of liquidity offsets USDC demand from some pools with USDC supply from other pools and vice versa; two is that we can choose widened liquidity buffer such that effective liquidity is allowed to fluctuate within a wide range, thus requiring to touch lending market less often
-- Bug spillover risk of a pool/hook to another, funds from other pools cannot be at risk, due to separation of liquidity. If a bug makes funds from one hook drainable they can’t impact the funds from other hooks.. each pool is segregated in the amount of liquidity they can pool even though the they shared liquidity in the bank
-- We use static typing instead of dynamic typing because it is more performant
-- We avoid using dynamic fields to be more performant
-- Cpmm invariant can the hook check the invariant after the swap inner logic?
-- Responsibilities of each module, swap inner, fees, quotation logic
-- How similar is it to uniswap v4
-- Can our hooks support limit orders? Discussed limit orders from Jupyter, toxic oder flow, sudo limit order in that it only hits after, as a tail transaction
+TODO
