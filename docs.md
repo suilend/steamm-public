@@ -60,7 +60,7 @@ The recall amount $\Delta a$ is then computed as follows:
 $$
 \begin{gather*}
     \frac{d - \Delta a}{a + d - \Delta L} = U^* \\
-    \iff \Delta a = d - U^*(a + d - \Delta L)
+    \iff \Delta a = d - U^* (a + d - \Delta L)
 \end{gather*}
 $$
 
@@ -79,7 +79,7 @@ Where the deploy amount $\Delta d$ is computed as follows:
 $$
 \begin{gather*}
     \frac{d + \Delta d}{a + d + \Delta L} = U^* \\
-    \iff \Delta d = U^*(a + d + \Delta L) - d
+    \iff \Delta d = U^* (a + d + \Delta L) - d
 \end{gather*}
 $$
 
