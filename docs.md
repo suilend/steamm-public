@@ -199,7 +199,7 @@ V_{\lambda} = \max\left(
     \hat{V} + \max(|P_{oracle} - \hat{P}|, |P_{internal} - \hat{P}|),
     \text{MaxVol}
 \right)
-```´´´```
+```
 
 Where $P_{oracle}$ stands for the oracle price and $P_{internal}$ the internal constant-product price of the pool. The volatility accumulated metric is capped by a parameter $MaxVol$ defined by the pool.
 
