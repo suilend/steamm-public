@@ -61,7 +61,6 @@ $$
 \begin{gather*}
     \frac{d - \Delta a}{a + d - \Delta L} = U^* \\
     \iff \Delta a = d - U^*(a + d - \Delta L)
-    
 \end{gather*}
 $$
 
