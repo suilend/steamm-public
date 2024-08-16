@@ -176,7 +176,19 @@ $$
 
 
 ### Fixed Range Constant-Sum AMM
-TODO
+The Fixed-Range Constant Sum Hook provides a constant price formula for the purpose of trading stable coins. This hook provides a quotation for trading stables in a fixed range of reserve ratios, defined by the pool. We defined the lower reserve ratio bound $R_l$ and upper reserve ratio bound $R_u$ as follows:
+
+$$
+R_l = \frac{x_l}{y_l}
+$$
+
+Representing the lower bound of the ratio between token $X$ and token $Y$ beyond which the pool no longer offers a quotation.
+
+$$
+R_u = \frac{x_u}{y_u}
+$$
+
+Representing the upper bound of the ratio between token $X$ and token $Y$ beyond which the pool no longer offers a quotation.
 
 ### Oracle AMM
 The oracle AMM hook provides a quotation mechanism with dynamic fees based on market volatility. When a trader swaps, the hook computes an exponential-moving average of the volatility based on a reference price and accumulated volatility metric.
