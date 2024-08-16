@@ -194,28 +194,28 @@ The oracle AMM hook provides a quotation mechanism with dynamic fees based on ma
 
 We use absolute price deviations as a proxy for volatility. We define the accumulated volatility metric as follows:
 
-$$
+```math
 V_{\lambda} = \max\left(
     \hat{V} + \max(|P_{oracle} - \hat{P}|, |P_{internal} - \hat{P}|),
     \text{MaxVol}
 \right)
-$$
+```´´´```
 
 Where $P_{oracle}$ stands for the oracle price and $P_{internal}$ the internal constant-product price of the pool. The volatility accumulated metric is capped by a parameter $MaxVol$ defined by the pool.
 
 When a swap occurs, at $n+1$, we compute the reference price as well as the reference volatility:
 
 
-$$
+```math
 \hat{P}_{n+1} = 
 \begin{cases} 
 P_{oracle} & \text{, } t = 0 \\
 \hat{P}_n & \text{, } \Delta t < f \\
 P_{oracle} & \text{, } \Delta t \geq f
 \end{cases}
-$$
+```
 
-$$
+```math
 \hat{V}_{n+1} = 
 \begin{cases}
 0 & \text{, } t = 0\\
@@ -223,30 +223,30 @@ $$
 V_{\lambda} \times R & \text{, } \Delta t \geq f \\
 0 & \text{, } \Delta t > d
 \end{cases}
-$$
+```
 
 where
-$$
+```math
 \Delta t = \hat{t}_{n} - t
-$$
+```
 
 and we update the reference time after the two previous computations such that:
 
-$$
+```math
 \hat{t}_{n+1} = 
 \begin{cases}
 t & \text{, } t = 0\\
 \hat{t}_{n} & \text{, } \Delta t < f \\
 t & \text{, } \Delta t \geq f \\
 \end{cases}
-$$
+```
 
 The hook then provides a quotation price bsaed on the constant-product formula and adds a dynamic fee charged on the output:
 
 
-$$
+```math
 \Delta Out \times \frac{V_{\lambda}^2 \times \phi}{100}
-$$
+```
 
 Where $\Delta Out$ represents the output amount and $\phi$ is a fee control parameter used for scaling.
 
