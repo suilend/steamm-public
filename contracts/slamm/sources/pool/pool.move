@@ -3,7 +3,6 @@
 /// called directly. Is also exports an intializer and swap method to be
 /// called by the hook modules.
 module slamm::pool {
-    // TODO: add method to modify fees as the poolcap owner
     use sui::{
         clock::Clock,
         transfer::public_transfer,
@@ -644,6 +643,17 @@ module slamm::pool {
         bank_out.needs_lending_action(amount_out, false)
     }
 
+    // ===== Pool Cap Adming Endpoints =====
+
+    public fun set_pool_swap_fees<A, B, Hook: drop, State: store>(
+        pool: &mut Pool<A, B, Hook, State>,
+        _pool_cap: &PoolCap<A, B, Hook, State>,
+        swap_fee_bps: u64,
+    ) {
+        assert!(swap_fee_bps < BPS_DENOMINATOR, EFeeAbove100Percent);
+        pool.pool_fee_config = fees::new_config(swap_fee_bps, BPS_DENOMINATOR);
+    }
+    
     // ===== View & Getters =====
     
     public fun total_funds<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>): (u64, u64) {

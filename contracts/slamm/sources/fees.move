@@ -9,7 +9,7 @@ module slamm::fees {
         fee_b: Balance<B>,
     }
 
-    public struct FeeConfig has store {
+    public struct FeeConfig has store, copy, drop {
         fee_numerator: u64,
         fee_denominator: u64,
     }
