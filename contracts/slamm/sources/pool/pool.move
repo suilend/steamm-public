@@ -41,8 +41,10 @@ module slamm::pool {
 
     // Protocol Fee numerator in basis points
     const SWAP_FEE_NUMERATOR: u64 = 2_000;
+    // Redemption Fee numerator in basis points
+    const REDEMPTION_FEE_NUMERATOR: u64 = 10;
     // Protocol Fee denominator in basis points (100%)
-    const SWAP_FEE_DENOMINATOR: u64 = 10_000;
+    const BPS_DENOMINATOR: u64 = 10_000;
     // Minimum liquidity burned during
     // the seed depositing phase
     const MINIMUM_LIQUIDITY: u64 = 10;
@@ -120,6 +122,8 @@ module slamm::pool {
         protocol_fees: Fees<A, B>,
         // Pool fee configuration
         pool_fee_config: FeeConfig,
+        // Redemption fees
+        redemption_fees: Fees<A, B>,
         // Lifetime trading and fee data
         trading_data: TradingData,
         // Provides Write-lock style guard in the swap intent process.
@@ -142,6 +146,9 @@ module slamm::pool {
         // protocol fees
         protocol_fees_a: u64,
         protocol_fees_b: u64,
+        // Redemption fees
+        redemption_fees_a: u64,
+        redemption_fees_b: u64,
         // pool fees
         pool_fees_a: u64,
         pool_fees_b: u64,
@@ -181,7 +188,7 @@ module slamm::pool {
         inner: State,
         ctx: &mut TxContext,
     ): (Pool<A, B, Hook, State>, PoolCap<A, B, Hook, State>) {
-        assert!(swap_fee_bps < SWAP_FEE_DENOMINATOR, EFeeAbove100Percent);
+        assert!(swap_fee_bps < BPS_DENOMINATOR, EFeeAbove100Percent);
 
         let lp_supply = balance::create_supply(LP<A, B, Hook>{});
 
@@ -190,8 +197,9 @@ module slamm::pool {
             inner,
             total_funds_a: TotalFunds(0),
             total_funds_b: TotalFunds(0),
-            protocol_fees: fees::new(SWAP_FEE_NUMERATOR, SWAP_FEE_DENOMINATOR),
-            pool_fee_config: fees::new_config(swap_fee_bps, SWAP_FEE_DENOMINATOR),
+            protocol_fees: fees::new(SWAP_FEE_NUMERATOR, BPS_DENOMINATOR),
+            pool_fee_config: fees::new_config(swap_fee_bps, BPS_DENOMINATOR),
+            redemption_fees: fees::new(REDEMPTION_FEE_NUMERATOR, BPS_DENOMINATOR),
             lp_supply,
             trading_data: TradingData {
                 swap_a_in_amount: 0,
@@ -200,6 +208,8 @@ module slamm::pool {
                 swap_b_in_amount: 0,
                 protocol_fees_a: 0,
                 protocol_fees_b: 0,
+                redemption_fees_a: 0,
+                redemption_fees_b: 0,
                 pool_fees_a: 0,
                 pool_fees_b: 0,
             },
@@ -488,13 +498,27 @@ module slamm::pool {
             lp_tokens.into_balance()
         );
 
+        // Charge redemption fees
+        let mut balance_a = self.total_funds_a.withdraw(bank_a, quote.withdraw_a());
+        let mut balance_b = self.total_funds_b.withdraw(bank_b, quote.withdraw_b());
+
+        // let (fee_amount_a, fee_amount_b) = self.compute_redemption_fees_(balance_a.value(), balance_b.value());
+        let (fee_balance_a, fee_balance_b) = self.redemption_fees.balances_mut();
+
+        fee_balance_a.join(balance_a.split(quote.fees_a()));
+        fee_balance_b.join(balance_b.split(quote.fees_b()));
+        
+        // Update redemption fee data
+        self.trading_data.redemption_fees_a = self.trading_data.redemption_fees_a + quote.fees_a();
+        self.trading_data.redemption_fees_b = self.trading_data.redemption_fees_b + quote.fees_b();
+
         // Prepare tokens to send
         let tokens_a = coin::from_balance(
-            self.total_funds_a.withdraw(bank_a, quote.withdraw_a()),
+            balance_a,
             ctx,
         );
         let tokens_b = coin::from_balance(
-            self.total_funds_b.withdraw(bank_b, quote.withdraw_b()),
+            balance_b,
             ctx,
         );
 
@@ -523,6 +547,8 @@ module slamm::pool {
             pool_id: object::id(self),
             withdraw_a: quote.withdraw_a(),
             withdraw_b: quote.withdraw_b(),
+            fees_a: quote.fees_a(),
+            fees_b: quote.fees_b(),
             burn_lp: lp_burn,
         };
 
@@ -678,7 +704,7 @@ module slamm::pool {
         amount_out: u64,
         a2b: bool,
         ): SwapQuote {
-        let (protocol_fees, pool_fees) = self.compute_fees_(amount_out);
+        let (protocol_fees, pool_fees) = self.compute_swap_fees_(amount_out);
 
         quote::quote(
             amount_in,
@@ -689,7 +715,7 @@ module slamm::pool {
         )
     }
     
-    public(package) fun compute_fees_<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, amount: u64): (u64, u64) {
+    public(package) fun compute_swap_fees_<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, amount: u64): (u64, u64) {
         let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees.fee_ratio();
         let (pool_fee_num, pool_fee_denom) = self.pool_fee_config.fee_ratio();
         
@@ -698,6 +724,19 @@ module slamm::pool {
         let pool_fees = total_fees - protocol_fees;
 
         (protocol_fees, pool_fees)
+    }
+    
+    public(package) fun compute_redemption_fees_<A, B, Hook: drop, State: store>(
+        self: &Pool<A, B, Hook, State>,
+        amount_a: u64,
+        amount_b: u64,
+    ): (u64, u64) {
+        let (fee_num, fee_denom) = self.redemption_fees.fee_ratio();
+        
+        let fees_a = safe_mul_div_up(amount_a, fee_num, fee_denom);
+        let fees_b = safe_mul_div_up(amount_b, fee_num, fee_denom);
+
+        (fees_a, fees_b)
     }
     
     public(package) fun inner_mut<A, B, Hook: drop, State: store>(
@@ -897,9 +936,13 @@ module slamm::pool {
             min_b,
         );
 
+        let (fee_amount_a, fee_amount_b) = self.compute_redemption_fees_(withdraw_a, withdraw_b);
+
         quote::redeem_quote(
             withdraw_a,
             withdraw_b,
+            fee_amount_a,
+            fee_amount_b,
             lp_tokens,
         )
     }
@@ -946,6 +989,8 @@ module slamm::pool {
         pool_id: ID,
         withdraw_a: u64,
         withdraw_b: u64,
+        fees_a: u64,
+        fees_b: u64,
         burn_lp: u64,
     }
 
@@ -1014,10 +1059,18 @@ module slamm::pool {
     }
     
     #[test_only]
-    public(package) fun no_protocol_fees<A, B, Hook: drop, State: store>(
+    public(package) fun no_protocol_fees_for_testing<A, B, Hook: drop, State: store>(
         self: &mut Pool<A, B, Hook, State>,
     ) {
-        let fee_num = self.protocol_fees.config_mut().swap_fee_numerator_mut();
+        let fee_num = self.protocol_fees.config_mut().fee_numerator_mut();
+        *fee_num = 0;
+    }
+    
+    #[test_only]
+    public(package) fun no_redemption_fees_for_testing<A, B, Hook: drop, State: store>(
+        self: &mut Pool<A, B, Hook, State>,
+    ) {
+        let fee_num = self.redemption_fees.config_mut().fee_numerator_mut();
         *fee_num = 0;
     }
     

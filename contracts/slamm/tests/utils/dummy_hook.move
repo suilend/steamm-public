@@ -27,7 +27,8 @@ module slamm::dummy_hook {
             ctx,
         );
 
-        pool.no_protocol_fees();
+        pool.no_protocol_fees_for_testing();
+        pool.no_redemption_fees_for_testing();
 
         (pool, pool_cap)
     }

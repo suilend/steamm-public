@@ -4,6 +4,8 @@ module slamm::quote {
 
     public use fun slamm::pool::as_intent as SwapQuote.as_intent;
     public use fun slamm::pool::swap_inner as SwapQuote.swap_inner;
+    public use fun redemption_fee_a as RedeemQuote.fees_a;
+    public use fun redemption_fee_b as RedeemQuote.fees_b;
 
     public struct SwapQuote has store, drop {
         amount_in: u64,
@@ -27,6 +29,8 @@ module slamm::quote {
     public struct RedeemQuote has store, drop {
         withdraw_a: u64,
         withdraw_b: u64,
+        fees_a: u64,
+        fees_b: u64,
         burn_lp: u64
     }
 
@@ -67,11 +71,15 @@ module slamm::quote {
     public(package) fun redeem_quote(
         withdraw_a: u64,
         withdraw_b: u64,
+        fees_a: u64,
+        fees_b: u64,
         burn_lp: u64
     ): RedeemQuote {
         RedeemQuote {
             withdraw_a,
             withdraw_b,
+            fees_a,
+            fees_b,
             burn_lp,
         }
     }
@@ -123,6 +131,8 @@ module slamm::quote {
     
     public fun withdraw_a(self: &RedeemQuote): u64 { self.withdraw_a }
     public fun withdraw_b(self: &RedeemQuote): u64 { self.withdraw_b }
+    public fun redemption_fee_a(self: &RedeemQuote): u64 { self.fees_a }
+    public fun redemption_fee_b(self: &RedeemQuote): u64 { self.fees_b }
     public fun burn_lp(self: &RedeemQuote): u64 { self.burn_lp }
 
 

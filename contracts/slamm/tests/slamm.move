@@ -45,6 +45,8 @@ module slamm::slamm_tests {
             ctx,
         );
 
+        pool.no_redemption_fees_for_testing();
+
         let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
@@ -206,6 +208,8 @@ module slamm::slamm_tests {
             100, // admin fees BPS
             ctx,
         );
+
+        pool.no_redemption_fees_for_testing();
 
         let mut coin_a = coin::mint_for_testing<SUI>(500_000, ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
