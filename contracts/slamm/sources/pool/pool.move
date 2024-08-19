@@ -19,7 +19,7 @@ module slamm::pool {
         math::safe_mul_div_up,
         global_admin::GlobalAdmin,
         fees::{Self, Fees, FeeConfig},
-        quote::{Self, SwapQuote, SwapFee, DepositQuote, RedeemQuote, SwapOutputs, swap_outputs},
+        quote::{Self, SwapQuote, SwapFee, DepositQuote, RedeemQuote},
         bank::{Bank},
     };
 
@@ -361,7 +361,8 @@ module slamm::pool {
         );
 
         let initial_lp_supply = self.lp_supply.supply_value();
-        let initial_reserve_a = self.total_funds_a();
+        let initial_total_funds_a = self.total_funds_a();
+        let initial_total_funds_b = self.total_funds_b();
 
         let balance_a = coin_a.balance_mut().split(quote.deposit_a());
         let balance_b = coin_b.balance_mut().split(quote.deposit_b());
@@ -393,9 +394,16 @@ module slamm::pool {
         };
 
         assert_lp_supply_reserve_ratio(
-            initial_reserve_a,
+            initial_total_funds_a,
             initial_lp_supply,
             self.total_funds_a(),
+            self.lp_supply.supply_value(),
+        );
+        
+        assert_lp_supply_reserve_ratio(
+            initial_total_funds_b,
+            initial_lp_supply,
+            self.total_funds_b(),
             self.lp_supply.supply_value(),
         );
 
@@ -481,11 +489,11 @@ module slamm::pool {
         );
 
         // Prepare tokens to send
-        let base_tokens = coin::from_balance(
+        let tokens_a = coin::from_balance(
             self.total_funds_a.withdraw(bank_a, quote.withdraw_a()),
             ctx,
         );
-        let quote_tokens = coin::from_balance(
+        let tokens_b = coin::from_balance(
             self.total_funds_b.withdraw(bank_b, quote.withdraw_b()),
             ctx,
         );
@@ -520,7 +528,7 @@ module slamm::pool {
 
         emit_event(result);
 
-        (base_tokens, quote_tokens, result)
+        (tokens_a, tokens_b, result)
     }
 
     public fun quote_deposit<A, B, Hook: drop, State: store>(
@@ -664,22 +672,32 @@ module slamm::pool {
 
     // ===== Package functions =====
 
-    public(package) fun compute_fees_on_output<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, amount_out: u64): SwapOutputs {
-        let (net_amount_out, protocol_fees, pool_fees) = self.compute_fees_(amount_out);
+    public(package) fun get_quote<A, B, Hook: drop, State: store>(
+        self: &Pool<A, B, Hook, State>,
+        amount_in: u64,
+        amount_out: u64,
+        a2b: bool,
+        ): SwapQuote {
+        let (protocol_fees, pool_fees) = self.compute_fees_(amount_out);
 
-        swap_outputs(net_amount_out, protocol_fees, pool_fees)
+        quote::quote(
+            amount_in,
+            amount_out,
+            protocol_fees,
+            pool_fees,
+            a2b,
+        )
     }
     
-    public(package) fun compute_fees_<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, amount: u64): (u64, u64, u64) {
+    public(package) fun compute_fees_<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>, amount: u64): (u64, u64) {
         let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees.fee_ratio();
         let (pool_fee_num, pool_fee_denom) = self.pool_fee_config.fee_ratio();
         
         let total_fees = safe_mul_div_up(amount, pool_fee_num, pool_fee_denom);
         let protocol_fees = safe_mul_div_up(total_fees, protocol_fee_num, protocol_fee_denom);
         let pool_fees = total_fees - protocol_fees;
-        let net_amount = amount - protocol_fees - pool_fees;
 
-        (net_amount, protocol_fees, pool_fees)
+        (protocol_fees, pool_fees)
     }
     
     public(package) fun inner_mut<A, B, Hook: drop, State: store>(

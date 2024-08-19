@@ -123,11 +123,6 @@ module slamm::dummy_hook {
     ): SwapQuote {
         let amount_out = amount_in;
 
-        let outputs = self.compute_fees_on_output(amount_out);
-
-        outputs.to_quote(
-            amount_in,
-            a2b,
-        )
+        self.get_quote(amount_in, amount_out, a2b)
     }
 }

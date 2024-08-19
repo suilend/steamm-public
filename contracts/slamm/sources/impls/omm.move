@@ -267,9 +267,7 @@ module slamm::omm {
             a2b,
         );
 
-        let swap_outputs = self.compute_fees_on_output(amount_out);
-
-        let mut quote = swap_outputs.to_quote(amount_in, a2b);
+        let mut quote = self.get_quote(amount_in, amount_out, a2b);
 
         let new_instant_price_internal = new_instant_price_internal(self, &quote);
         let new_instant_price_oracle = new_instant_price_oracle(self);
@@ -289,7 +287,7 @@ module slamm::omm {
         let protocol_fees = safe_mul_div_up(total_variable_fee, protocol_fee_num, protocol_fee_denom);
         let pool_fees = total_variable_fee - protocol_fees;
 
-        quote.add_output_fees(protocol_fees, pool_fees);
+        quote.add_extra_fees(protocol_fees, pool_fees);
 
         (quote, reference_price, reference_vol, vol_accumulator, last_update_ms)
     }

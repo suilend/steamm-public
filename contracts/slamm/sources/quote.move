@@ -4,12 +4,6 @@ module slamm::quote {
 
     public use fun slamm::pool::as_intent as SwapQuote.as_intent;
     public use fun slamm::pool::swap_inner as SwapQuote.swap_inner;
-    
-    public struct SwapOutputs has drop {
-        amount_out_net: u64,
-        protocol_fees: u64,
-        pool_fees: u64,
-    }
 
     public struct SwapQuote has store, drop {
         amount_in: u64,
@@ -37,31 +31,20 @@ module slamm::quote {
     }
 
     // ===== Package Methods =====
-    
-    public(package) fun swap_outputs(
-        amount_out_net: u64,
+
+    public(package) fun quote(
+        amount_in: u64,
+        amount_out: u64,
         protocol_fees: u64,
         pool_fees: u64,
-    ): SwapOutputs {
-        SwapOutputs {
-            amount_out_net,
-            protocol_fees,
-            pool_fees,
-        }
-    }
-
-    public(package) fun to_quote(
-        swap_outputs: SwapOutputs,
-        amount_in: u64,
         a2b: bool,
     ): SwapQuote {
         SwapQuote {
-            amount_in: amount_in,
-            amount_out: swap_outputs.amount_out_net + swap_outputs.protocol_fees + swap_outputs.pool_fees,
-            // input_fees: none(),
+            amount_in,
+            amount_out,
             output_fees: SwapFee {
-                protocol_fees: swap_outputs.protocol_fees,
-                pool_fees: swap_outputs.pool_fees,
+                protocol_fees,
+                pool_fees,
             },
             a2b,
         }
@@ -93,7 +76,7 @@ module slamm::quote {
         }
     }
 
-    public(package) fun add_output_fees(
+    public(package) fun add_extra_fees(
         self: &mut SwapQuote,
         protocol_fees: u64,
         pool_fees: u64

@@ -2,7 +2,6 @@
 module slamm::bank {
     use std::{
         option::{none},
-        // debug::print,
     };
     use sui::{
         balance::{Self, Balance},
@@ -47,8 +46,8 @@ module slamm::bank {
         lending_market: ID,
         funds_deployed: u64,
         ctokens: u64,
-        target_utilisation: u16,
-        utilisation_buffer: u16,
+        target_utilisation_bps: u16,
+        utilisation_buffer_bps: u16,
         reserve_array_index: u64,
         obligation_cap: ObligationOwnerCap<P>,
     }
@@ -88,14 +87,14 @@ module slamm::bank {
         self: &mut Bank<P, T>,
         _: &GlobalAdmin,
         lending_market: &mut LendingMarket<P>,
-        target_utilisation: u16,
-        utilisation_buffer: u16,
+        target_utilisation_bps: u16,
+        utilisation_buffer_bps: u16,
         ctx: &mut TxContext,
     ) {
         self.version.assert_version_and_upgrade(CURRENT_VERSION);
         assert!(self.lending.is_none(), ELendingAlreadyActive);
-        assert!(target_utilisation + utilisation_buffer < 10_000, EUtilisationRangeAboveHundredPercent);
-        assert!(target_utilisation > utilisation_buffer, EUtilisationRangeBelowHundredPercent);
+        assert!(target_utilisation_bps + utilisation_buffer_bps < 10_000, EUtilisationRangeAboveHundredPercent);
+        assert!(target_utilisation_bps > utilisation_buffer_bps, EUtilisationRangeBelowHundredPercent);
 
         let obligation_cap = lending_market.create_obligation(ctx);
         let reserve_array_index = lending_market.reserve_array_index<P, T>();
@@ -104,8 +103,8 @@ module slamm::bank {
             lending_market: object::id(lending_market),
             funds_deployed: 0,
             ctokens: 0,
-            target_utilisation,
-            utilisation_buffer,
+            target_utilisation_bps,
+            utilisation_buffer_bps,
             reserve_array_index,
             obligation_cap,
         })
@@ -181,8 +180,8 @@ module slamm::bank {
         needs_lending_action_(
             bank.funds_available.value(),
             lending.funds_deployed,
-            lending.target_utilisation as u64,
-            lending.utilisation_buffer as u64,
+            lending.target_utilisation_bps as u64,
+            lending.utilisation_buffer_bps as u64,
             amount,
             is_input,
         )
@@ -219,8 +218,8 @@ module slamm::bank {
                 bank.funds_available.value(),
                 withdraw_amount,
                 lending.funds_deployed,
-                lending.target_utilisation as u64,
-                lending.utilisation_buffer as u64,
+                lending.target_utilisation_bps as u64,
+                lending.utilisation_buffer_bps as u64,
             )
         };
 
@@ -419,8 +418,8 @@ module slamm::bank {
     public fun lending_market<P, T>(self: &Bank<P, T>): ID { self.lending.borrow().lending_market }
     public fun funds_available<P, T>(self: &Bank<P, T>): &Balance<T> { &self.funds_available }
     public fun funds_deployed_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().funds_deployed }
-    public fun target_utilisation_rate_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().target_utilisation as u64}
-    public fun utilisation_buffer_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().utilisation_buffer as u64 }
+    public fun target_utilisation_rate_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().target_utilisation_bps as u64}
+    public fun utilisation_buffer_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().utilisation_buffer_bps as u64 }
     public fun reserve_array_index<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().reserve_array_index }
 
     // ===== Test-Only Functions =====
