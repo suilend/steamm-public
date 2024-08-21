@@ -42,6 +42,8 @@ module slamm::pool {
     const SWAP_FEE_NUMERATOR: u64 = 2_000;
     // Redemption Fee numerator in basis points
     const REDEMPTION_FEE_NUMERATOR: u64 = 10;
+    // Minimum redemption fee
+    const MINIMUM_REDEMPTION_FEE: u64 = 1;
     // Protocol Fee denominator in basis points (100%)
     const BPS_DENOMINATOR: u64 = 10_000;
     // Minimum liquidity burned during
@@ -701,8 +703,8 @@ module slamm::pool {
     ): (u64, u64) {
         let (fee_num, fee_denom) = self.redemption_fees.fee_ratio();
         
-        let fees_a = safe_mul_div_up(amount_a, fee_num, fee_denom);
-        let fees_b = safe_mul_div_up(amount_b, fee_num, fee_denom);
+        let fees_a = safe_mul_div_up(amount_a, fee_num, fee_denom).max(MINIMUM_REDEMPTION_FEE);
+        let fees_b = safe_mul_div_up(amount_b, fee_num, fee_denom).max(MINIMUM_REDEMPTION_FEE);
 
         (fees_a, fees_b)
     }
