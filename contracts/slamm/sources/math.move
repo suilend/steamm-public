@@ -1,9 +1,19 @@
 module slamm::math {
+    use suilend::decimal::Decimal;
+
     const MAX_U64: u128 = 18_446_744_073_709_551_615u128;
 
     const EMathOverflow: u64 = 0;
     const EDivideByZer0: u64 = 1;
 
+    public(package) fun abs_diff(x: Decimal, y: Decimal): Decimal {
+        if (x.ge(y)) {
+            x.sub(y)
+        } else {
+            y.sub(x)
+        }
+    }
+    
     public(package) fun safe_mul_div(x: u64, y: u64, z: u64): u64 {
         assert!(z > 0, EDivideByZer0);
         let res = (x as u128) * (y as u128) / (z as u128);
