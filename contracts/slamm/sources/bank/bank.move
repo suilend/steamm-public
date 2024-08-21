@@ -362,9 +362,7 @@ module slamm::bank {
 
         ctoken_amount = ctokens.value();
 
-        let current_ctoken_ratio = ctoken_amount * 10_000 / amount_to_recall;
-        let bank_ctoken_ratio =  lending.ctokens * 10_000 / lending.funds_deployed;
-        assert!(current_ctoken_ratio >= bank_ctoken_ratio, EInvalidCTokenRatio);
+        assert!(ctoken_amount * lending.funds_deployed <= lending.ctokens * amount_to_recall, EInvalidCTokenRatio);
         
         let coin = lending_market.redeem_ctokens_and_withdraw_liquidity(
             bank.lending.borrow().reserve_array_index,
