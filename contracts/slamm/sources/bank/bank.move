@@ -25,6 +25,7 @@ module slamm::bank {
     // ===== Constants =====
 
     const CURRENT_VERSION: u16 = 1;
+    const MIN_AMOUNT_TO_DEPLOY: u64 = 1; // TODO: Define amount
 
     // ===== Errors =====
 
@@ -33,6 +34,8 @@ module slamm::bank {
     const EUtilisationRateOffTarget: u64 = 3;
     const ELendingAlreadyActive: u64 = 4;
     const EInsufficientFundsInBank: u64 = 5;
+    const EInvalidCTokenRatio: u64 = 6;
+    const EDeployAmountTooLow: u64 = 7;
 
     public struct Bank<phantom P, phantom T> has key {
         id: UID,
@@ -308,6 +311,8 @@ module slamm::bank {
             return
         };
 
+        assert!(amount_to_deploy >= MIN_AMOUNT_TO_DEPLOY, EDeployAmountTooLow);
+
         let balance_to_lend = bank.funds_available.split(amount_to_deploy);
 
         let c_tokens = lending_market.deposit_liquidity_and_mint_ctokens<P, T>(
@@ -357,6 +362,10 @@ module slamm::bank {
 
         ctoken_amount = ctokens.value();
 
+        let current_ctoken_ratio = ctoken_amount * 10_000 / amount_to_recall;
+        let bank_ctoken_ratio =  lending.ctokens * 10_000 / lending.funds_deployed;
+        assert!(current_ctoken_ratio >= bank_ctoken_ratio, EInvalidCTokenRatio);
+        
         let coin = lending_market.redeem_ctokens_and_withdraw_liquidity(
             bank.lending.borrow().reserve_array_index,
             clock,
@@ -372,6 +381,8 @@ module slamm::bank {
         bank.funds_available.join(coin.into_balance());
     }
 
+    // Given how much tokens we want to withdraw form the lending market,
+    // how many ctokens do we need to burn
     fun ctoken_amount_<P, T>(
         bank: &Bank<P, T>,
         lending_market: &LendingMarket<P>,
