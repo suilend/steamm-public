@@ -345,7 +345,6 @@ module slamm::pool {
     /// - If results in an inconsisten reserve-to-LP supply ratio
     public fun deposit_liquidity<A, B, Hook: drop, State: store, P>(
         self: &mut Pool<A, B, Hook, State>,
-        lending_market: &mut LendingMarket<P>,
         bank_a: &mut Bank<P, A>,
         bank_b: &mut Bank<P, B>,
         coin_a: &mut Coin<A>,
@@ -354,7 +353,6 @@ module slamm::pool {
         max_b: u64,
         min_a: u64,
         min_b: u64,
-        clock: &Clock,
         ctx:  &mut TxContext,
     ): (Coin<LP<A, B, Hook>>, DepositResult) {
         self.version.assert_version_and_upgrade(CURRENT_VERSION);
@@ -415,18 +413,6 @@ module slamm::pool {
             self.total_funds_b(),
             self.lp_supply.supply_value(),
         );
-
-        bank_a.rebalance(
-            lending_market,
-            clock,
-            ctx
-        );
-        
-        bank_b.rebalance(
-            lending_market,
-            clock,
-            ctx
-        );
         
         (lp_coins, result)
     }
@@ -452,13 +438,11 @@ module slamm::pool {
     /// - If it results in withdraw amounts that violate the slippage `min` params
     public fun redeem_liquidity<A, B, Hook: drop, State: store, P>(
         self: &mut Pool<A, B, Hook, State>,
-        lending_market: &mut LendingMarket<P>,
         bank_a: &mut Bank<P, A>,
         bank_b: &mut Bank<P, B>,
         lp_tokens: Coin<LP<A, B, Hook>>,
         min_a: u64,
         min_b: u64,
-        clock: &Clock,
         ctx:  &mut TxContext,
     ): (Coin<A>, Coin<B>, RedeemResult) {
         self.version.assert_version_and_upgrade(CURRENT_VERSION);
@@ -470,20 +454,6 @@ module slamm::pool {
             lp_tokens.value(),
             min_a,
             min_b,
-        );
-
-        bank_a.prepare_bank_for_pending_withdraw(
-            lending_market,
-            quote.withdraw_a(),
-            clock,
-            ctx
-        );
-        
-        bank_b.prepare_bank_for_pending_withdraw(
-            lending_market,
-            quote.withdraw_b(),
-            clock,
-            ctx
         );
 
         let initial_lp_supply = self.lp_supply.supply_value();
@@ -526,18 +496,6 @@ module slamm::pool {
             initial_lp_supply,
             self.total_funds_a(),
             self.lp_supply.supply_value(),
-        );
-
-        bank_a.rebalance(
-            lending_market,
-            clock,
-            ctx
-        );
-        
-        bank_b.rebalance(
-            lending_market,
-            clock,
-            ctx
         );
 
         // Emit events
@@ -593,14 +551,14 @@ module slamm::pool {
         ctx: &mut TxContext,
     ) {
         if (intent.quote.a2b()) {
-            bank_b.prepare_bank_for_pending_withdraw(
+            bank_b.prepare_bank_for_pending_withdraw_(
                 lending_market,
                 intent.quote.amount_out_net_of_pool_fees(), // output amount - pool fees
                 clock,
                 ctx
             );
         } else {
-            bank_a.prepare_bank_for_pending_withdraw(
+            bank_a.prepare_bank_for_pending_withdraw_(
                 lending_market,
                 intent.quote.amount_out_net_of_pool_fees(),
                 clock,

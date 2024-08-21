@@ -59,7 +59,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -68,8 +67,19 @@ module slamm::lend_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
+        );
+
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
         );
 
         let (reserve_a, reserve_b) = pool.total_funds();
@@ -143,7 +153,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -152,8 +161,19 @@ module slamm::lend_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
+        );
+
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
         );
 
         let (reserve_a, reserve_b) = pool.total_funds();
@@ -178,15 +198,41 @@ module slamm::lend_tests {
         destroy(coin_b);
 
         // Redeem
-        let (coin_a, coin_b, _) = pool.redeem_liquidity(
+        let rebalance_promise_a = bank_a.prepare_bank_for_pending_withdraw(
             &mut lending_market,
+            499_990,
+            &clock,
+            ctx,
+        );
+        
+        let rebalance_promise_b = bank_b.prepare_bank_for_pending_withdraw(
+            &mut lending_market,
+            499_990,
+            &clock,
+            ctx,
+        );
+
+        let (coin_a, coin_b, _) = pool.redeem_liquidity(
             &mut bank_a,
             &mut bank_b,
             lp_coins,
             499_990,
             499_990,
-            &clock,
             ctx,
+        );
+
+        bank_a.rebalance_with_promise(
+            &mut lending_market,
+            rebalance_promise_a,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance_with_promise(
+            &mut lending_market,
+            rebalance_promise_b,
+            &clock,
+            ctx
         );
 
         let (reserve_a, reserve_b) = pool.total_funds();
@@ -258,7 +304,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -267,8 +312,19 @@ module slamm::lend_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
+        );
+
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
         );
 
         let (reserve_a, reserve_b) = pool.total_funds();
@@ -379,7 +435,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<TEST_SUI>(500_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -388,8 +443,19 @@ module slamm::lend_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
+        );
+
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
         );
 
         let (reserve_a, reserve_b) = pool.total_funds();
@@ -472,7 +538,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<TEST_SUI>(500_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -481,8 +546,19 @@ module slamm::lend_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
+        );
+
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
         );
 
         let (reserve_a, reserve_b) = pool.total_funds();
@@ -508,15 +584,41 @@ module slamm::lend_tests {
         destroy(coin_b);
 
         // Redeem
-        let (coin_a, coin_b, _) = pool.redeem_liquidity(
+        let rebalance_promise_a = bank_a.prepare_bank_for_pending_withdraw(
             &mut lending_market,
+            499_990,
+            &clock,
+            ctx,
+        );
+        
+        let rebalance_promise_b = bank_b.prepare_bank_for_pending_withdraw(
+            &mut lending_market,
+            499_990,
+            &clock,
+            ctx,
+        );
+
+        let (coin_a, coin_b, _) = pool.redeem_liquidity(
             &mut bank_a,
             &mut bank_b,
             lp_coins,
             499_990,
             499_990,
-            &clock,
             ctx,
+        );
+
+        bank_a.rebalance_with_promise(
+            &mut lending_market,
+            rebalance_promise_a,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance_with_promise(
+            &mut lending_market,
+            rebalance_promise_b,
+            &clock,
+            ctx
         );
 
         let (reserve_a, reserve_b) = pool.total_funds();
@@ -588,7 +690,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<TEST_SUI>(500_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -597,8 +698,20 @@ module slamm::lend_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
+        );
+
+
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
         );
 
         let (reserve_a, reserve_b) = pool.total_funds();
@@ -713,7 +826,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<TEST_SUI>(500_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -722,8 +834,19 @@ module slamm::lend_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
+        );
+
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
         );
 
         let (reserve_a, reserve_b) = pool.total_funds();
@@ -841,7 +964,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -850,8 +972,19 @@ module slamm::lend_tests {
             100_000,
             0,
             0,
-            &clock,
             ctx,
+        );
+
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
         );
 
         let (reserve_a, reserve_b) = pool.total_funds();
@@ -878,7 +1011,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(5_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -887,8 +1019,19 @@ module slamm::lend_tests {
             5_000,
             0,
             0,
-            &clock,
             ctx,
+        );
+
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
         );
 
         let (reserve_a, reserve_b) = pool.total_funds();
@@ -914,7 +1057,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(5_000_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -923,8 +1065,19 @@ module slamm::lend_tests {
             5_000_000,
             0,
             0,
-            &clock,
             ctx,
+        );
+
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
         );
 
         let (reserve_a, reserve_b) = pool.total_funds();
@@ -995,7 +1148,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(100_000_000_00_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -1004,8 +1156,19 @@ module slamm::lend_tests {
             100_000_000_00_000,
             0,
             0,
-            &clock,
             ctx,
+        );
+
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
         );
 
         destroy(coin_a);
@@ -1023,7 +1186,6 @@ module slamm::lend_tests {
             let mut coin_b = coin::mint_for_testing<COIN>(amount_in, ctx);
 
             let (lp_coins, _) = pool.deposit_liquidity(
-                &mut lending_market,
                 &mut bank_a,
                 &mut bank_b,
                 &mut coin_a,
@@ -1032,8 +1194,19 @@ module slamm::lend_tests {
                 amount_in,
                 0,
                 0,
-                &clock,
                 ctx,
+            );
+
+            bank_a.rebalance(
+                &mut lending_market,
+                &clock,
+                ctx
+            );
+
+            bank_b.rebalance(
+                &mut lending_market,
+                &clock,
+                ctx
             );
 
             assert!(
@@ -1099,7 +1272,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(100_000, ctx);
 
         let (mut lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -1108,8 +1280,19 @@ module slamm::lend_tests {
             100_000,
             0,
             0,
-            &clock,
             ctx,
+        );
+
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
         );
 
         let (reserve_a, reserve_b) = pool.total_funds();
@@ -1132,14 +1315,24 @@ module slamm::lend_tests {
 
         // Redeem funds in AMM Pool - below buffer - does not recall
         let (coin_a, coin_b, _) = pool.redeem_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             lp_coins.split(100, ctx),
             100,
             100,
-            &clock,
             ctx,
+        );
+
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
         );
 
         let (reserve_a, reserve_b) = pool.total_funds();
@@ -1160,15 +1353,41 @@ module slamm::lend_tests {
         destroy(coin_b);
         
         // Redeem funds in AMM Pool - beyond buffer - recall
-        let (coin_a, coin_b, _) = pool.redeem_liquidity(
+        let rebalance_promise_a = bank_a.prepare_bank_for_pending_withdraw(
             &mut lending_market,
+            50_000,
+            &clock,
+            ctx,
+        );
+        
+        let rebalance_promise_b = bank_b.prepare_bank_for_pending_withdraw(
+            &mut lending_market,
+            50_000,
+            &clock,
+            ctx,
+        );
+
+        let (coin_a, coin_b, _) = pool.redeem_liquidity(
             &mut bank_a,
             &mut bank_b,
             lp_coins.split(50_000, ctx),
             50_000,
             50_000,
-            &clock,
             ctx,
+        );
+
+        bank_a.rebalance_with_promise(
+            &mut lending_market,
+            rebalance_promise_a,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance_with_promise(
+            &mut lending_market,
+            rebalance_promise_b,
+            &clock,
+            ctx
         );
 
         let (reserve_a, reserve_b) = pool.total_funds();
@@ -1239,7 +1458,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(100_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -1248,7 +1466,6 @@ module slamm::lend_tests {
             100_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -1330,7 +1547,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(100_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -1339,7 +1555,6 @@ module slamm::lend_tests {
             100_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -1430,7 +1645,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(100_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -1439,8 +1653,19 @@ module slamm::lend_tests {
             100_000,
             0,
             0,
-            &clock,
             ctx,
+        );
+
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
         );
 
         destroy(coin_a);
@@ -1532,7 +1757,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(100_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -1541,8 +1765,19 @@ module slamm::lend_tests {
             100_000,
             0,
             0,
-            &clock,
             ctx,
+        );
+
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
         );
 
         destroy(coin_a);

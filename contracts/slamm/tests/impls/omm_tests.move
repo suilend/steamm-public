@@ -36,7 +36,7 @@ module slamm::omm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         let ctx = ctx(&mut scenario);
 
         
@@ -65,7 +65,6 @@ module slamm::omm_tests {
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -74,7 +73,6 @@ module slamm::omm_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -136,7 +134,7 @@ module slamm::omm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         let ctx = ctx(&mut scenario);
 
         
@@ -167,7 +165,6 @@ module slamm::omm_tests {
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -176,7 +173,6 @@ module slamm::omm_tests {
             500_000_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -298,7 +294,7 @@ module slamm::omm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         let ctx = ctx(&mut scenario);
 
         
@@ -327,7 +323,6 @@ module slamm::omm_tests {
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -336,7 +331,6 @@ module slamm::omm_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -379,7 +373,7 @@ module slamm::omm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (mut clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (mut clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         set_clock_time(&mut clock);
         let ctx = ctx(&mut scenario);
 
@@ -408,7 +402,6 @@ module slamm::omm_tests {
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -417,7 +410,6 @@ module slamm::omm_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -477,7 +469,7 @@ module slamm::omm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (mut clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (mut clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         set_clock_time(&mut clock);
         let ctx = ctx(&mut scenario);
 
@@ -506,7 +498,6 @@ module slamm::omm_tests {
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -515,7 +506,6 @@ module slamm::omm_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -576,7 +566,7 @@ module slamm::omm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (mut clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (mut clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         let ctx = ctx(&mut scenario);
 
         
@@ -605,7 +595,6 @@ module slamm::omm_tests {
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -614,7 +603,6 @@ module slamm::omm_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -751,7 +739,7 @@ module slamm::omm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (mut clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (mut clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         let ctx = ctx(&mut scenario);
         
         let price_info_a = test_utils::get_price_info(1, 1, 2, &clock, ctx); // price: 10
@@ -779,7 +767,6 @@ module slamm::omm_tests {
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -788,7 +775,6 @@ module slamm::omm_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -938,7 +924,7 @@ module slamm::omm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (mut clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (mut clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         let ctx = ctx(&mut scenario);
 
         
@@ -967,7 +953,6 @@ module slamm::omm_tests {
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -976,7 +961,6 @@ module slamm::omm_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -1100,7 +1084,7 @@ module slamm::omm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (mut clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (mut clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         let ctx = ctx(&mut scenario);
 
         let price_info_a = test_utils::get_price_info(1, 1, 2, &clock, ctx); // price: 10
@@ -1128,7 +1112,6 @@ module slamm::omm_tests {
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -1137,7 +1120,6 @@ module slamm::omm_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -1266,7 +1248,7 @@ module slamm::omm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (mut clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (mut clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         let ctx = ctx(&mut scenario);
 
         
@@ -1295,7 +1277,6 @@ module slamm::omm_tests {
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -1304,7 +1285,6 @@ module slamm::omm_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -1495,7 +1475,7 @@ module slamm::omm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (mut clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (mut clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         let ctx = ctx(&mut scenario);
 
         
@@ -1524,7 +1504,6 @@ module slamm::omm_tests {
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -1533,7 +1512,6 @@ module slamm::omm_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -1725,7 +1703,7 @@ module slamm::omm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (mut clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (mut clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         let ctx = ctx(&mut scenario);
 
         
@@ -1754,7 +1732,6 @@ module slamm::omm_tests {
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -1763,7 +1740,6 @@ module slamm::omm_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -1846,7 +1822,7 @@ module slamm::omm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         let ctx = ctx(&mut scenario);
 
         
@@ -1875,7 +1851,6 @@ module slamm::omm_tests {
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -1884,7 +1859,6 @@ module slamm::omm_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -1935,7 +1909,7 @@ module slamm::omm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         let ctx = ctx(&mut scenario);
 
         
@@ -1964,7 +1938,6 @@ module slamm::omm_tests {
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -1973,7 +1946,6 @@ module slamm::omm_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -2046,7 +2018,7 @@ module slamm::omm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         let ctx = ctx(&mut scenario);
 
         
@@ -2075,7 +2047,6 @@ module slamm::omm_tests {
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -2084,7 +2055,6 @@ module slamm::omm_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -2143,7 +2113,7 @@ module slamm::omm_tests {
 
         let mut registry_1 = registry::init_for_testing(ctx(&mut scenario));
         let mut registry_2 = registry::init_for_testing(ctx(&mut scenario));
-        let (mut clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (mut clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         let ctx = ctx(&mut scenario);
 
         
@@ -2187,7 +2157,6 @@ module slamm::omm_tests {
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry_2, ctx);
 
         let (lp_coins_1, _) = pool_1.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -2196,12 +2165,10 @@ module slamm::omm_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
         
         let (lp_coins_2, _) = pool_2.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -2210,7 +2177,6 @@ module slamm::omm_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
