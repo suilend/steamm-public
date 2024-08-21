@@ -19,6 +19,9 @@ module slamm::test_utils {
     use pyth::price_identifier;
     use pyth::price;
     use pyth::i64;
+    use suilend::reserve_config::{Self};
+
+    // reserve_config::default_reserve_config(), // TODO
 
     public fun e9(amt: u64): u64 {
         1_000_000_000 * amt
@@ -33,17 +36,84 @@ module slamm::test_utils {
         bag::add(
             &mut bag, 
             type_name::get<TEST_USDC>(), 
-            lending_market::new_args(100 * 1_000_000),
+            lending_market::new_args(100 * 1_000_000, reserve_config::default_reserve_config()),
         );
             
         bag::add(
             &mut bag, 
             type_name::get<TEST_SUI>(), 
-            lending_market::new_args(100 * 1_000_000),
+            lending_market::new_args(100 * 1_000_000, reserve_config::default_reserve_config()),
         );
 
         bag
     }
+    
+    #[test_only]
+    public fun reserve_args_2(scenario: &mut Scenario): Bag {
+        let mut bag = bag::new(test_scenario::ctx(scenario));
+
+        let reserve_args = {
+            let config = reserve_config::default_reserve_config();
+            let mut builder = reserve_config::from(&config, test_scenario::ctx(scenario));
+            reserve_config::set_open_ltv_pct(&mut builder, 50);
+            reserve_config::set_close_ltv_pct(&mut builder, 50);
+            reserve_config::set_max_close_ltv_pct(&mut builder, 50);
+            sui::test_utils::destroy(config);
+            let config = reserve_config::build(builder, test_scenario::ctx(scenario));
+
+            lending_market::new_args(100 * 1_000_000, config)
+        };
+
+        bag::add(
+            &mut bag, 
+            type_name::get<TEST_USDC>(), 
+            reserve_args,
+        );
+
+        let reserve_args = {
+            let config = reserve_config::default_reserve_config();
+            lending_market::new_args(100 * 1_000_000_000, config)
+        };
+
+        bag::add(
+            &mut bag, 
+            type_name::get<TEST_SUI>(), 
+            reserve_args,
+        );
+
+        bag
+    }
+
+    // let State { clock, owner_cap, lending_market, prices, type_to_index } = setup({
+    //         let bag = bag::new(test_scenario::ctx(&mut scenario));
+    //         bag::add(
+    //             &mut bag, 
+    //             type_name::get<TEST_USDC>(), 
+    //             ReserveArgs {
+    //                 config: {
+    //                     let config = default_reserve_config();
+    //                     let builder = reserve_config::from(&config, test_scenario::ctx(&mut scenario));
+    //                     reserve_config::set_open_ltv_pct(&mut builder, 50);
+    //                     reserve_config::set_close_ltv_pct(&mut builder, 50);
+    //                     reserve_config::set_max_close_ltv_pct(&mut builder, 50);
+    //                     sui::test_utils::destroy(config);
+
+    //                     reserve_config::build(builder, test_scenario::ctx(&mut scenario))
+    //                 },
+    //                 initial_deposit: 100 * 1_000_000
+    //             }
+    //         );
+    //         bag::add(
+    //             &mut bag, 
+    //             type_name::get<TEST_SUI>(), 
+    //             ReserveArgs {
+    //                 config: reserve_config::default_reserve_config(),
+    //                 initial_deposit: 100 * 1_000_000_000
+    //             }
+    //         );
+
+    //         bag
+    //     }, &mut scenario);
     
     
     #[test_only]

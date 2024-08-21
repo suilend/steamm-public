@@ -8,7 +8,6 @@ module slamm::bank {
         transfer::share_object,
         clock::Clock,
         coin::{Self, Coin},
-        bag::{Self, Bag},
     };
     use slamm::{
         bank_math,
@@ -41,7 +40,6 @@ module slamm::bank {
         id: UID,
         funds_available: Balance<T>,
         lending: Option<Lending<P>>,
-        fields: Bag,
         version: Version,
     }
 
@@ -75,13 +73,10 @@ module slamm::bank {
         registry: &mut Registry,
         ctx: &mut TxContext,
     ): Bank<P, T> {
-        let fields = bag::new(ctx);
-
         let bank = Bank<P, T> {
             id: object::new(ctx),
             funds_available: balance::zero(),
             lending: none(),
-            fields,
             version: version::new(CURRENT_VERSION),
         };
 
@@ -468,7 +463,21 @@ module slamm::bank {
     // ===== Test-Only Functions =====
     
     #[test_only]
-    public fun mock_amount_lent<P, T>(self: &mut Bank<P, T>, amount: u64){ self.lending.borrow_mut().funds_deployed = amount; }
+    public(package) fun mock_amount_lent<P, T>(self: &mut Bank<P, T>, amount: u64){ self.lending.borrow_mut().funds_deployed = amount; }
+    
+    #[test_only]
+    public(package) fun deposit_for_testing<P, T>(self: &mut Bank<P, T>, amount: u64) {
+        self.funds_available.join(
+            balance::create_for_testing(amount)
+        );
+    }
+    
+    #[test_only]
+    public(package) fun withdraw_for_testing<P, T>(self: &mut Bank<P, T>, amount: u64): Balance<T> {
+        self.funds_available.split(
+            amount
+        )
+    }
 
     // ===== Tests =====
 
