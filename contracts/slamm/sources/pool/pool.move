@@ -198,9 +198,9 @@ module slamm::pool {
             inner,
             total_funds_a: TotalFunds(0),
             total_funds_b: TotalFunds(0),
-            protocol_fees: fees::new(SWAP_FEE_NUMERATOR, BPS_DENOMINATOR),
-            pool_fee_config: fees::new_config(swap_fee_bps, BPS_DENOMINATOR),
-            redemption_fees: fees::new(REDEMPTION_FEE_NUMERATOR, BPS_DENOMINATOR),
+            protocol_fees: fees::new(SWAP_FEE_NUMERATOR, BPS_DENOMINATOR, 0),
+            pool_fee_config: fees::new_config(swap_fee_bps, BPS_DENOMINATOR, 0),
+            redemption_fees: fees::new(REDEMPTION_FEE_NUMERATOR, BPS_DENOMINATOR, MINIMUM_REDEMPTION_FEE),
             lp_supply,
             trading_data: TradingData {
                 swap_a_in_amount: 0,
@@ -611,7 +611,7 @@ module slamm::pool {
         swap_fee_bps: u64,
     ) {
         assert!(swap_fee_bps < BPS_DENOMINATOR, EFeeAbove100Percent);
-        pool.pool_fee_config = fees::new_config(swap_fee_bps, BPS_DENOMINATOR);
+        pool.pool_fee_config = fees::new_config(swap_fee_bps, BPS_DENOMINATOR, 0);
     }
     
     // ===== View & Getters =====
@@ -663,7 +663,6 @@ module slamm::pool {
     public fun pool_fees_b(self: &TradingData): u64 { self.pool_fees_b }
 
     public fun minimum_liquidity(): u64 { MINIMUM_LIQUIDITY }
-
     public fun intent_quote<A, B, Hook: drop, State: store>(self: &Intent<A, B, Hook, State>): &SwapQuote { &self.quote }
 
     // ===== Package functions =====
@@ -702,9 +701,10 @@ module slamm::pool {
         amount_b: u64,
     ): (u64, u64) {
         let (fee_num, fee_denom) = self.redemption_fees.fee_ratio();
-        
-        let fees_a = safe_mul_div_up(amount_a, fee_num, fee_denom).max(MINIMUM_REDEMPTION_FEE);
-        let fees_b = safe_mul_div_up(amount_b, fee_num, fee_denom).max(MINIMUM_REDEMPTION_FEE);
+        let min_fee = self.redemption_fees.config().min_fee();
+
+        let fees_a = safe_mul_div_up(amount_a, fee_num, fee_denom).max(min_fee);
+        let fees_b = safe_mul_div_up(amount_b, fee_num, fee_denom).max(min_fee);
 
         (fees_a, fees_b)
     }
@@ -1042,6 +1042,8 @@ module slamm::pool {
     ) {
         let fee_num = self.redemption_fees.config_mut().fee_numerator_mut();
         *fee_num = 0;
+        let min_fee = self.redemption_fees.config_mut().min_fee_mut();
+        *min_fee = 0;
     }
     
     #[test_only]

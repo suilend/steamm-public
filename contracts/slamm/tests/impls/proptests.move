@@ -219,6 +219,8 @@ module slamm::proptests {
             ctx,
         );
 
+        pool.no_redemption_fees_for_testing();
+
         let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
