@@ -8,12 +8,16 @@ module slamm::smm {
         bank::Bank,
         pool::{Self, Pool, PoolCap, SwapResult, Intent},
         version::{Self, Version},
+        math::{abs_diff, safe_mul_div_up},
     };
     use suilend::decimal::{Self, Decimal};
 
     // ===== Constants =====
 
     const CURRENT_VERSION: u16 = 1;
+    
+    const MIN_FEE: u64 = 1; // TODO
+    const MAX_FEE: u64 = 10; // TODO
 
     // ===== Errors =====
 
@@ -133,19 +137,80 @@ module slamm::smm {
         amount_in: u64,
         a2b: bool,
     ): SwapQuote {
+        let initial_reserve_ratio = reserve_ratio(self);
         let amount_out = amount_in;
 
-        self.get_quote(amount_in, amount_out, a2b)
+        let final_funds_a = if (a2b) {
+            self.total_funds_a() + amount_in
+        } else {
+            self.total_funds_a() - amount_out
+        };
+        
+        let final_funds_b = if (a2b) {
+            self.total_funds_b() - amount_out
+        } else {
+            self.total_funds_b() + amount_in
+        };
+
+        let final_reserve_ratio = reserve_ratio_(final_funds_a, final_funds_b);
+
+        let total_variable_fee = compute_fee(
+            initial_reserve_ratio,
+            final_reserve_ratio,
+        );
+
+        let (protocol_fee_num, protocol_fee_denom) = self.protocol_fees().fee_ratio();
+        let protocol_fees = safe_mul_div_up(total_variable_fee, protocol_fee_num, protocol_fee_denom);
+        let pool_fees = total_variable_fee - protocol_fees;
+
+        let mut quote = self.get_quote(amount_in, amount_out, a2b);
+        quote.add_extra_fees(protocol_fees, pool_fees);
+
+        quote
+    }
+
+    public fun compute_fee(
+        initial_reserve_ratio: Decimal,
+        final_reserve_ratio: Decimal,
+    ): u64 {
+        let half = decimal::from_percent(50);
+        // reserve ratio when completely balanced is 0.5
+        let avg_reserve_ratio = initial_reserve_ratio.add(final_reserve_ratio).div(decimal::from(2));
+        let abs_reserve_delta = abs_diff(avg_reserve_ratio, half);
+
+        let min_fee = decimal::from(MIN_FEE);
+        let max_fee = decimal::from(MAX_FEE);
+
+        // will be MAX_FEE when abs_reserve_delta is 0.5, and MIN_FEE when abs_reserve_delta is 0
+        min_fee.add(
+            max_fee.sub(min_fee).mul(abs_reserve_delta).div(half)
+        ).ceil()
     }
     
     // ===== Assert Functions =====
 
+    fun reserve_ratio<A, B, W: drop>(
+        self: &Pool<A, B, Hook<W>, State>,
+    ): Decimal {
+        reserve_ratio_(
+            self.total_funds_a(),
+            self.total_funds_b(),
+        )
+    }
+    
+    fun reserve_ratio_(
+        total_funds_a: u64,
+        total_funds_b: u64
+    ): Decimal {
+        let a = decimal::from(total_funds_a);
+        let b = decimal::from(total_funds_b);
+        a.div(b)
+    }
+    
     fun check_reserve_ratio<A, B, W: drop>(
         self: &Pool<A, B, Hook<W>, State>,
     ): bool {
-        let a = decimal::from(self.total_funds_a());
-        let b = decimal::from(self.total_funds_b());
-        let ratio = a.div(b);
+        let ratio = reserve_ratio(self);
 
         ratio.le(self.inner().upper_reserve_ratio) && ratio.ge(self.inner().lower_reserve_ratio)
     }
