@@ -69,8 +69,6 @@ module slamm::fees {
         )
     }
 
-    // ===== View Functions =====
-
     public(package) fun balances_mut<A, B>(
         self: &mut Fees<A, B>,
     ): (&mut Balance<A>, &mut Balance<B>) {
@@ -79,7 +77,18 @@ module slamm::fees {
             &mut self.fee_b,
         )
     }
-    
+
+    public(package) fun set_config<A, B>(
+        self: &mut Fees<A, B>,
+        fee_numerator: u64,
+        fee_denominator: u64,
+        min_fee: u64,
+    ) {
+        self.config = new_config(fee_numerator, fee_denominator, min_fee)
+    }
+
+    // ===== View Functions =====
+
     public fun balances<A, B>(
         self: &Fees<A, B>,
     ): (&Balance<A>, &Balance<B>) {

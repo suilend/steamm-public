@@ -614,6 +614,18 @@ module slamm::pool {
         pool.pool_fee_config = fees::new_config(swap_fee_bps, BPS_DENOMINATOR, 0);
     }
     
+    public fun set_redemption_swap_fees<A, B, Hook: drop, State: store>(
+        pool: &mut Pool<A, B, Hook, State>,
+        _pool_cap: &PoolCap<A, B, Hook, State>,
+        redemption_fee_bps: u64,
+    ) {
+        assert!(redemption_fee_bps < BPS_DENOMINATOR, EFeeAbove100Percent);
+
+        pool.redemption_fees.set_config(
+            redemption_fee_bps, BPS_DENOMINATOR, MINIMUM_REDEMPTION_FEE
+        );
+    }
+    
     // ===== View & Getters =====
     
     public fun total_funds<A, B, Hook: drop, State: store>(self: &Pool<A, B, Hook, State>): (u64, u64) {
@@ -773,6 +785,21 @@ module slamm::pool {
         self.version.assert_version_and_upgrade(CURRENT_VERSION);
 
         let (fees_a, fees_b) = self.protocol_fees.withdraw();
+
+        (
+            coin::from_balance(fees_a, ctx),
+            coin::from_balance(fees_b, ctx)
+        )
+    }
+    
+    public fun collect_redemption_fees<A, B, Hook: drop, State: store>(
+        self: &mut Pool<A, B, Hook, State>,
+        _cap: &PoolCap<A, B, Hook, State>,
+        ctx: &mut TxContext,
+    ): (Coin<A>, Coin<B>) {
+        self.version.assert_version_and_upgrade(CURRENT_VERSION);
+
+        let (fees_a, fees_b) = self.redemption_fees.withdraw();
 
         (
             coin::from_balance(fees_a, ctx),
