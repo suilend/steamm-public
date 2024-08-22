@@ -315,7 +315,7 @@ module slamm::cpmm_tests {
 
         // Guarantees that roundings are in favour of the pool
         assert_eq(coin_a.value(), 20_000_000 - 1); // -1 for the rounddown
-        assert_eq(coin_b.value(), e9(10) - 12); // double rounddown: inital lp tokens minted + redeed
+        assert_eq(coin_b.value(), e9(10) - 12); // double rounddown: inital lp tokens minted + redeem
 
         let (reserve_a, reserve_b) = pool.total_funds();
         let reserve_ratio_2 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
