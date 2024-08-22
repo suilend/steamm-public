@@ -20,9 +20,6 @@ module slamm::lend_tests {
     use sui::test_utils::{destroy, assert_eq};
     use suilend::{
         lending_market::{Self, LENDING_MARKET},
-        reserve,
-        obligation,
-        decimal,
     };
     use sui::random;
 
@@ -1987,7 +1984,7 @@ module slamm::lend_tests {
     }
     
     #[test]
-    // #[expected_failure(abort_code = bank::EInvalidCTokenRatio)]
+    #[expected_failure(abort_code = bank::EDeployAmountTooLow)]
     public fun test_fail_below_min_deploy_amount() {
         let owner = @0x26;
         let mut scenario = test_scenario::begin(owner);
@@ -2001,8 +1998,8 @@ module slamm::lend_tests {
         bank_sui.init_lending<LENDING_MARKET, TEST_SUI>(
             &global_admin,
             &mut lending_market,
-            8_000, // utilisation_rate
-            1_000, // utilisation_buffer
+            10_000, // utilisation_rate
+            0, // utilisation_buffer
             ctx(&mut scenario),
         );
 
@@ -2022,4 +2019,9 @@ module slamm::lend_tests {
         test_utils::destroy(registry);
         test_scenario::end(scenario);
     }
+
+    // set bank config to deposit 100% of the tokens into lending market  with zero buffer
+    // deposit some amount into bank (and lending market) where you lose a bit of tokens due to rounding
+    // set bank config to deposit 0% of tokens with zero buffer
+    // immediately try and withdraw
 }

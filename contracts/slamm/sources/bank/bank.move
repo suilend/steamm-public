@@ -24,7 +24,7 @@ module slamm::bank {
     // ===== Constants =====
 
     const CURRENT_VERSION: u16 = 1;
-    const MIN_AMOUNT_TO_DEPLOY: u64 = 1; // TODO: Define amount
+    const MIN_AMOUNT_TO_DEPLOY: u64 = 10; // TODO: Define amount
 
     // ===== Errors =====
 
@@ -95,7 +95,7 @@ module slamm::bank {
     ) {
         self.version.assert_version_and_upgrade(CURRENT_VERSION);
         assert!(self.lending.is_none(), ELendingAlreadyActive);
-        assert!(target_utilisation_bps + utilisation_buffer_bps < 10_000, EUtilisationRangeAboveHundredPercent);
+        assert!(target_utilisation_bps + utilisation_buffer_bps <= 10_000, EUtilisationRangeAboveHundredPercent);
         assert!(target_utilisation_bps > utilisation_buffer_bps, EUtilisationRangeBelowHundredPercent);
 
         let obligation_cap = lending_market.create_obligation(ctx);
