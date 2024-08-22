@@ -14,6 +14,7 @@ module slamm::test_utils {
     use suilend::test_usdc::{TEST_USDC};
     use suilend::test_sui::{TEST_SUI};
     use suilend::lending_market::{Self, LENDING_MARKET};
+    use suilend::reserve_config;
     use pyth::price_info::{Self, PriceInfoObject};
     use pyth::price_feed;
     use pyth::price_identifier;
@@ -33,13 +34,13 @@ module slamm::test_utils {
         bag::add(
             &mut bag, 
             type_name::get<TEST_USDC>(), 
-            lending_market::new_args(100 * 1_000_000),
+            lending_market::new_args(100 * 1_000_000, reserve_config::default_reserve_config()),
         );
             
         bag::add(
             &mut bag, 
             type_name::get<TEST_SUI>(), 
-            lending_market::new_args(100 * 1_000_000),
+            lending_market::new_args(100 * 1_000_000, reserve_config::default_reserve_config()),
         );
 
         bag
