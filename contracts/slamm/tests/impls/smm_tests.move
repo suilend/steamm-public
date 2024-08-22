@@ -83,8 +83,8 @@ module slamm::smm_tests {
         );
 
         assert_eq(swap_result.a2b(), true);
-        assert_eq(swap_result.pool_fees(), 0);
-        assert_eq(swap_result.protocol_fees(), 0);
+        assert_eq(swap_result.pool_fees(), 9); // hook fees
+        assert_eq(swap_result.protocol_fees(), 3); // hook fees
         assert_eq(swap_result.amount_out(), 50_000);
 
         destroy(coin_a);
@@ -234,7 +234,7 @@ module slamm::smm_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
         let swap_intent = pool.smm_intent_swap(
-            166_666 + 1, // we add one here to go outside the bounds
+            166_666 + 100, // we add 100 here to go outside the bounds
             true, // a2b
         );
 
@@ -395,7 +395,7 @@ module slamm::smm_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(e9(200), ctx);
 
         let swap_intent = pool.smm_intent_swap(
-            166_666 + 1, // we add one here to go outside the bounds
+            166_666 + 100, // we 100 here to go outside the bounds
             false, // a2b
         );
 
