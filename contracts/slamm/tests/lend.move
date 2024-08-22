@@ -2019,9 +2019,4 @@ module slamm::lend_tests {
         test_utils::destroy(registry);
         test_scenario::end(scenario);
     }
-
-    // set bank config to deposit 100% of the tokens into lending market  with zero buffer
-    // deposit some amount into bank (and lending market) where you lose a bit of tokens due to rounding
-    // set bank config to deposit 0% of tokens with zero buffer
-    // immediately try and withdraw
 }

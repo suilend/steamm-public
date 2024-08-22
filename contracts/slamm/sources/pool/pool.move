@@ -1037,6 +1037,14 @@ module slamm::pool {
     }
     
     #[test_only]
+    public(package) fun no_redemption_fees_for_testing_with_min_fee<A, B, Hook: drop, State: store>(
+        self: &mut Pool<A, B, Hook, State>,
+    ) {
+        let fee_num = self.redemption_fees.config_mut().fee_numerator_mut();
+        *fee_num = 0;
+    }
+    
+    #[test_only]
     public(package) fun no_redemption_fees_for_testing<A, B, Hook: drop, State: store>(
         self: &mut Pool<A, B, Hook, State>,
     ) {
