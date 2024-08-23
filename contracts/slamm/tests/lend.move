@@ -20,6 +20,7 @@ module slamm::lend_tests {
     use sui::test_utils::{destroy, assert_eq};
     use suilend::{
         lending_market::{Self, LENDING_MARKET},
+        reserve::CToken,
     };
     use sui::random;
 
@@ -1622,6 +1623,103 @@ module slamm::lend_tests {
         test_utils::destroy(bank_sui);
         test_utils::destroy(global_admin);
         test_utils::destroy(registry);
+        test_scenario::end(scenario);
+    }
+    
+    #[test]
+    #[expected_failure(abort_code = bank::EInvalidCTokenRatio)]
+    public fun test_fail_invalid_ctoken_ratio_2() {
+        let owner = @0x26;
+        let mut scenario = test_scenario::begin(owner);
+        let (mut clock, owner_cap, mut lending_market, mut prices, type_to_index) = lending_market::setup(reserve_args_2(&mut scenario), &mut scenario).destruct_state();
+
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
+        let mut bank_sui = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
+
+        clock::set_for_testing(&mut clock, 1 * 1000);
+
+        // set reserve parameters and prices
+        mock_pyth::update_price<TEST_USDC>(&mut prices, 1, 0, &clock); // $1
+        mock_pyth::update_price<TEST_SUI>(&mut prices, 1, 1, &clock); // $10
+
+        // create obligation
+        let obligation_owner_cap = lending_market::create_obligation(
+            &mut lending_market,
+            test_scenario::ctx(&mut scenario)
+        );
+
+        let coins = coin::mint_for_testing<TEST_SUI>(100 * 1_000_000, test_scenario::ctx(&mut scenario));
+        let ctokens = lending_market::deposit_liquidity_and_mint_ctokens<LENDING_MARKET, TEST_SUI>(
+            &mut lending_market,
+            *bag::borrow(&type_to_index, type_name::get<TEST_SUI>()),
+            &clock,
+            coins,
+            test_scenario::ctx(&mut scenario)
+        );
+
+        lending_market::refresh_reserve_price<LENDING_MARKET>(
+            &mut lending_market,
+            *bag::borrow(&type_to_index, type_name::get<TEST_USDC>()),
+            &clock,
+            mock_pyth::get_price_obj<TEST_USDC>(&prices)
+        );
+        lending_market::refresh_reserve_price<LENDING_MARKET>(
+            &mut lending_market,
+            *bag::borrow(&type_to_index, type_name::get<TEST_SUI>()),
+            &clock,
+            mock_pyth::get_price_obj<TEST_SUI>(&prices)
+        );
+
+        let idx = lending_market.reserve_array_index<LENDING_MARKET, TEST_SUI>();
+        let reserves = lending_market.reserves_mut_for_testing();
+        let reserve = &mut reserves[idx];
+        // This is to change the underlying token ratio
+        reserve.burn_ctokens_for_testing(
+            balance::create_for_testing<CToken<LENDING_MARKET, TEST_SUI>>(52_000_000_000)
+        );
+
+        // Init bank lending
+        bank_sui.init_lending<LENDING_MARKET, TEST_SUI>(
+            &global_admin,
+            &mut lending_market,
+            10_000, // utilisation_rate
+            0, // utilisation_buffer
+            ctx(&mut scenario),
+        );
+
+        // Deposit
+        bank_sui.deposit_for_testing(30);
+        
+        bank_sui.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx(&mut scenario),
+        );
+
+        bank_sui.set_utilisation_rate(
+            &global_admin,
+            0, // utilisation_rate
+            0, // utilisation_buffer
+        );
+
+        // Withdraw
+        bank_sui.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx(&mut scenario),
+        );
+
+        test_utils::destroy(obligation_owner_cap);
+        test_utils::destroy(owner_cap);
+        test_utils::destroy(lending_market);
+        test_utils::destroy(clock);
+        test_utils::destroy(prices);
+        test_utils::destroy(type_to_index);
+        test_utils::destroy(bank_sui);
+        test_utils::destroy(global_admin);
+        test_utils::destroy(registry);
+        test_utils::destroy(ctokens);
         test_scenario::end(scenario);
     }
     

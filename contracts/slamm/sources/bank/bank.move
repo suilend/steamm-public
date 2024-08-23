@@ -35,6 +35,7 @@ module slamm::bank {
     const EInsufficientFundsInBank: u64 = 5;
     const EInvalidCTokenRatio: u64 = 6;
     const EDeployAmountTooLow: u64 = 7;
+    const ELendingNotActive: u64 = 8;
 
     public struct Bank<phantom P, phantom T> has key {
         id: UID,
@@ -92,7 +93,7 @@ module slamm::bank {
         self.version.assert_version_and_upgrade(CURRENT_VERSION);
         assert!(self.lending.is_none(), ELendingAlreadyActive);
         assert!(target_utilisation_bps + utilisation_buffer_bps <= 10_000, EUtilisationRangeAboveHundredPercent);
-        assert!(target_utilisation_bps > utilisation_buffer_bps, EUtilisationRangeBelowHundredPercent);
+        assert!(target_utilisation_bps >= utilisation_buffer_bps, EUtilisationRangeBelowHundredPercent);
 
         let obligation_cap = lending_market.create_obligation(ctx);
         let reserve_array_index = lending_market.reserve_array_index<P, T>();
@@ -186,6 +187,23 @@ module slamm::bank {
     }
 
     // ====== Admin Functions =====
+
+    public fun set_utilisation_rate<P, T>(
+        self: &mut Bank<P, T>,
+        _: &GlobalAdmin,
+        target_utilisation_bps: u16,
+        utilisation_buffer_bps: u16,
+    ) {
+        self.version.assert_version_and_upgrade(CURRENT_VERSION);
+        assert!(self.lending.is_some(), ELendingNotActive);
+        assert!(target_utilisation_bps + utilisation_buffer_bps <= 10_000, EUtilisationRangeAboveHundredPercent);
+        assert!(target_utilisation_bps >= utilisation_buffer_bps, EUtilisationRangeBelowHundredPercent);
+
+        let lending = self.lending.borrow_mut();
+
+        lending.target_utilisation_bps = target_utilisation_bps;
+        lending.utilisation_buffer_bps = utilisation_buffer_bps;
+    }
     
     entry fun migrate_as_global_admin<P, T>(
         self: &mut Bank<P, T>,
@@ -322,8 +340,6 @@ module slamm::bank {
         );
 
         ctoken_amount = ctokens.value();
-
-        assert!(ctoken_amount * lending.funds_deployed <= lending.ctokens * amount_to_recall, EInvalidCTokenRatio);
         
         let coin = lending_market.redeem_ctokens_and_withdraw_liquidity(
             bank.lending.borrow().reserve_array_index,
@@ -332,6 +348,8 @@ module slamm::bank {
             none(), // rate_limiter_exemption
             ctx,
         );
+
+        assert!(ctoken_amount * lending.funds_deployed <= lending.ctokens * coin.value() , EInvalidCTokenRatio);
 
         let lending = bank.lending.borrow_mut();
         lending.funds_deployed = lending.funds_deployed - amount_to_recall;
