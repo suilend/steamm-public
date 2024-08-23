@@ -53,10 +53,6 @@ module slamm::bank {
         obligation_cap: ObligationOwnerCap<P>,
     }
 
-    public struct RebalancePromise<phantom P, phantom T> {
-        bank_id: ID,
-    }
-
     // ====== Entry Functions =====
 
     public entry fun create_bank_and_share<P, T>(
@@ -112,19 +108,6 @@ module slamm::bank {
         })
     }
     
-    public fun rebalance_with_promise<P, T>(
-        bank: &mut Bank<P, T>,
-        lending_market: &mut LendingMarket<P>,
-        promise: RebalancePromise<P, T>,
-        clock: &Clock,
-        ctx: &mut TxContext,
-    ) {
-        let RebalancePromise { bank_id } = promise;
-        assert!(bank_id == object::id(bank), 0);
-
-        bank.rebalance(lending_market, clock, ctx);
-    }
-    
     public fun rebalance<P, T>(
         bank: &mut Bank<P, T>,
         lending_market: &mut LendingMarket<P>,
@@ -171,23 +154,6 @@ module slamm::bank {
                 ctx,
             );
         };
-    }
-
-    public fun prepare_bank_for_pending_withdraw<P, T>(
-        bank: &mut Bank<P, T>,
-        lending_market: &mut LendingMarket<P>,
-        withdraw_amount: u64,
-        clock: &Clock,
-        ctx: &mut TxContext,
-    ): RebalancePromise<P, T> {
-        bank.prepare_bank_for_pending_withdraw_(
-            lending_market,
-            withdraw_amount,
-            clock,
-            ctx,
-        );
-
-        RebalancePromise<P,T> { bank_id: object::id(bank) }
     }
 
     public fun ctoken_amount<P, T>(
