@@ -27,7 +27,8 @@ module slamm::dummy_hook {
             ctx,
         );
 
-        pool.no_protocol_fees();
+        pool.no_protocol_fees_for_testing();
+        pool.no_redemption_fees_for_testing();
 
         (pool, pool_cap)
     }
@@ -86,7 +87,7 @@ module slamm::dummy_hook {
         self: &mut Pool<A, B, Hook<W>, State>,
         amount_in: u64,
         a2b: bool,
-    ): Intent<A, B, Hook<W>> {
+    ): Intent<A, B, Hook<W>, State> {
         let quote = quote_swap(self, amount_in, a2b);
 
         quote.as_intent(self)
@@ -96,7 +97,7 @@ module slamm::dummy_hook {
         self: &mut Pool<A, B, Hook<W>, State>,
         bank_a: &mut Bank<P, A>,
         bank_b: &mut Bank<P, B>,
-        intent: Intent<A, B, Hook<W>>,
+        intent: Intent<A, B, Hook<W>, State>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
         min_amount_out: u64,
@@ -123,11 +124,6 @@ module slamm::dummy_hook {
     ): SwapQuote {
         let amount_out = amount_in;
 
-        let outputs = self.compute_fees_on_output(amount_out);
-
-        outputs.to_quote(
-            amount_in,
-            a2b,
-        )
+        self.get_quote(amount_in, amount_out, a2b)
     }
 }

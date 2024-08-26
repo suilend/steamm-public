@@ -1,16 +1,27 @@
 #[test_only]
 module slamm::lend_tests {
+    use sui::test_utils::{Self};
+    use suilend::mock_pyth::{Self};
+    use std::type_name::{Self};
     use slamm::pool::{Self, minimum_liquidity};
     use slamm::registry;
     use slamm::global_admin;
     use slamm::cpmm::{Self};
     use slamm::dummy_hook::{Self, intent_swap, execute_swap};
-    use slamm::test_utils::{COIN, reserve_args};
+    use slamm::test_utils::{COIN, reserve_args, reserve_args_2};
     use slamm::bank;
-    use sui::test_scenario::{Self, ctx};
-    use sui::coin::{Self};
+    use sui::{
+        test_scenario::{Self, ctx},
+        balance,
+        bag,
+        clock,
+        coin,
+    };
     use sui::test_utils::{destroy, assert_eq};
-    use suilend::lending_market::{Self, LENDING_MARKET};
+    use suilend::{
+        lending_market::{Self, LENDING_MARKET},
+        reserve::CToken,
+    };
     use sui::random;
 
     use suilend::test_usdc::{TEST_USDC};
@@ -59,7 +70,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -68,11 +78,22 @@ module slamm::lend_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+
+        let (reserve_a, reserve_b) = pool.total_funds();
 
         assert_eq(pool.cpmm_k(), 500_000 * 500_000);
         assert_eq(pool.lp_supply_val(), 500_000);
@@ -82,13 +103,13 @@ module slamm::lend_tests {
         assert_eq(pool.trading_data().pool_fees_a(), 0);
         assert_eq(pool.trading_data().pool_fees_b(), 0);
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
-        assert_eq(bank_a.lent(), 400_000); // 500_000 * 80%
-        assert_eq(bank_a.reserve().value(), 100_000); // 500_000 * 20%
-        assert_eq(bank_b.reserve().value(), 500_000);
+        assert_eq(bank_a.funds_deployed(), 400_000); // 500_000 * 80%
+        assert_eq(bank_a.funds_available().value(), 100_000); // 500_000 * 20%
+        assert_eq(bank_b.funds_available().value(), 500_000);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -103,121 +124,6 @@ module slamm::lend_tests {
         destroy(lend_cap);
         destroy(prices);
         destroy(bag);
-        destroy(clock);
-        test_scenario::end(scenario);
-    }
-    
-    #[test]
-    fun test_lend_amm_deposit_and_redeem() {
-        let mut scenario = test_scenario::begin(ADMIN);
-
-        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
-        // Create amm bank
-        let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
-
-        let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
-
-        bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
-            &global_admin,
-            &mut lending_market,
-            8_000, // utilisation_rate
-            1_000, // utilisation_buffer
-            ctx(&mut scenario),
-        );
-
-        // Init Pool
-        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-        let ctx = ctx(&mut scenario);
-
-        let (mut pool, pool_cap) = cpmm::new<TEST_USDC, COIN, Wit>(
-            Wit {},
-            &mut registry,
-            100, // admin fees BPS
-            ctx,
-        );
-
-        // Deposit funds in AMM Pool
-        let mut coin_a = coin::mint_for_testing<TEST_USDC>(500_000, ctx);
-        let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
-
-        let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
-            &mut bank_a,
-            &mut bank_b,
-            &mut coin_a,
-            &mut coin_b,
-            500_000,
-            500_000,
-            0,
-            0,
-            &clock,
-            ctx,
-        );
-
-        let (reserve_a, reserve_b) = pool.reserves();
-
-        assert_eq(pool.cpmm_k(), 500_000 * 500_000);
-        assert_eq(pool.lp_supply_val(), 500_000);
-        assert_eq(reserve_a, 500_000);
-        assert_eq(reserve_b, 500_000);
-        assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.trading_data().pool_fees_a(), 0);
-        assert_eq(pool.trading_data().pool_fees_b(), 0);
-
-        let (reserve_a, reserve_b) = pool.reserves();
-        assert_eq(reserve_a, 500_000);
-        assert_eq(reserve_b, 500_000);
-
-        assert_eq(bank_a.lent(), 400_000); // 500_000 * 80%
-        assert_eq(bank_a.reserve().value(), 100_000); // 500_000 * 20%
-        assert_eq(bank_b.reserve().value(), 500_000);
-
-        destroy(coin_a);
-        destroy(coin_b);
-
-        // Redeem
-        let (coin_a, coin_b, _) = pool.redeem_liquidity(
-            &mut lending_market,
-            &mut bank_a,
-            &mut bank_b,
-            lp_coins,
-            499_990,
-            499_990,
-            &clock,
-            ctx,
-        );
-
-        let (reserve_a, reserve_b) = pool.reserves();
-
-        assert_eq(pool.cpmm_k(), 10 * 10);
-        assert_eq(pool.lp_supply_val(), 10);
-        assert_eq(reserve_a, 10);
-        assert_eq(reserve_b, 10);
-        assert_eq(pool.trading_data().pool_fees_a(), 0);
-        assert_eq(pool.trading_data().pool_fees_b(), 0);
-
-        let (reserve_a, reserve_b) = pool.reserves();
-        assert_eq(reserve_a, 10);
-        assert_eq(reserve_b, 10);
-
-        assert_eq(bank_a.lent(), 8); // 10 * 80%
-        assert_eq(bank_a.reserve().value(), 2); // 10 * 20%
-        assert_eq(bank_b.reserve().value(), 10);
-
-        destroy(coin_a);
-        destroy(coin_b);
-        destroy(registry);
-        destroy(pool);
-        destroy(pool_cap);
-        destroy(global_admin);
-        destroy(lending_market);
-        destroy(lend_cap);
-        destroy(prices);
-        destroy(bag);
-        destroy(bank_a);
-        destroy(bank_b);
         destroy(clock);
         test_scenario::end(scenario);
     }
@@ -258,7 +164,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -267,11 +172,22 @@ module slamm::lend_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+
+        let (reserve_a, reserve_b) = pool.total_funds();
 
         assert_eq(pool.cpmm_k(), 500_000 * 500_000);
         assert_eq(pool.lp_supply_val(), 500_000);
@@ -281,12 +197,12 @@ module slamm::lend_tests {
         assert_eq(pool.trading_data().pool_fees_a(), 0);
         assert_eq(pool.trading_data().pool_fees_b(), 0);
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
-        assert_eq(bank_a.lent(), 400_000); // 500_000 * 80%
-        assert_eq(bank_a.reserve().value(), 100_000); // 500_000 * 20%
+        assert_eq(bank_a.funds_deployed(), 400_000); // 500_000 * 80%
+        assert_eq(bank_a.funds_available().value(), 100_000); // 500_000 * 20%
 
         destroy(coin_a);
         destroy(coin_b);
@@ -295,24 +211,28 @@ module slamm::lend_tests {
         let mut coin_a = coin::mint_for_testing<TEST_USDC>(50_000, ctx);
         let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
-        let _ = pool.cpmm_swap(
+        let swap_intent = pool.cpmm_intent_swap(
+            50_000,
+            true, // a2b
+        );
+
+        pool.cpmm_execute_swap(
             &mut bank_a,
             &mut bank_b,
+            swap_intent,
             &mut coin_a,
             &mut coin_b,
-            50_000,
             0,
-            true, // a2b
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(reserve_a, 550_000);
         assert_eq(reserve_b, 454_910);
 
-        assert_eq(bank_a.lent(), 400_000);
-        assert_eq(bank_a.reserve().value(), 150_000);
-        assert_eq(bank_b.reserve().value(), 454_910);
+        assert_eq(bank_a.funds_deployed(), 400_000);
+        assert_eq(bank_a.funds_available().value(), 150_000);
+        assert_eq(bank_b.funds_available().value(), 454_910);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -375,7 +295,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<TEST_SUI>(500_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -384,11 +303,22 @@ module slamm::lend_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+
+        let (reserve_a, reserve_b) = pool.total_funds();
 
         assert_eq(pool.cpmm_k(), 500_000 * 500_000);
         assert_eq(pool.lp_supply_val(), 500_000);
@@ -398,134 +328,18 @@ module slamm::lend_tests {
         assert_eq(pool.trading_data().pool_fees_a(), 0);
         assert_eq(pool.trading_data().pool_fees_b(), 0);
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
-        assert_eq(bank_a.lent(), 400_000); // 500_000 * 80%
-        assert_eq(bank_a.reserve().value(), 100_000); // 500_000 * 20%
-        assert_eq(bank_b.lent(), 400_000); // 500_000 * 80%
-        assert_eq(bank_b.reserve().value(), 100_000); // 500_000 * 20%
+        assert_eq(bank_a.funds_deployed(), 400_000); // 500_000 * 80%
+        assert_eq(bank_a.funds_available().value(), 100_000); // 500_000 * 20%
+        assert_eq(bank_b.funds_deployed(), 400_000); // 500_000 * 80%
+        assert_eq(bank_b.funds_available().value(), 100_000); // 500_000 * 20%
 
         destroy(coin_a);
         destroy(coin_b);
         destroy(lp_coins);
-        destroy(registry);
-        destroy(pool);
-        destroy(pool_cap);
-        destroy(global_admin);
-        destroy(lending_market);
-        destroy(lend_cap);
-        destroy(prices);
-        destroy(bag);
-        destroy(bank_a);
-        destroy(bank_b);
-        destroy(clock);
-        test_scenario::end(scenario);
-    }
-    
-    #[test]
-    fun test_lend_amm_deposit_and_redeem_both() {
-        let mut scenario = test_scenario::begin(ADMIN);
-
-        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
-        // Create amm bank
-        let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
-
-        let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
-        let mut bank_b = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
-
-        bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
-            &global_admin,
-            &mut lending_market,
-            8_000, // utilisation_rate
-            1_000, // utilisation_buffer
-            ctx(&mut scenario),
-        );
-        
-        bank_b.init_lending<LENDING_MARKET, TEST_SUI>(
-            &global_admin,
-            &mut lending_market,
-            8_000, // utilisation_rate
-            1_000, // utilisation_buffer
-            ctx(&mut scenario),
-        );
-
-        // Init Pool
-        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-        let ctx = ctx(&mut scenario);
-
-        let (mut pool, pool_cap) = cpmm::new<TEST_USDC, TEST_SUI, Wit>(
-            Wit {},
-            &mut registry,
-            100, // admin fees BPS
-            ctx,
-        );
-
-        // Deposit funds in AMM Pool
-        let mut coin_a = coin::mint_for_testing<TEST_USDC>(500_000, ctx);
-        let mut coin_b = coin::mint_for_testing<TEST_SUI>(500_000, ctx);
-
-        let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
-            &mut bank_a,
-            &mut bank_b,
-            &mut coin_a,
-            &mut coin_b,
-            500_000,
-            500_000,
-            0,
-            0,
-            &clock,
-            ctx,
-        );
-
-        let (reserve_a, reserve_b) = pool.reserves();
-
-        assert_eq(pool.cpmm_k(), 500_000 * 500_000);
-        assert_eq(pool.lp_supply_val(), 500_000);
-        assert_eq(reserve_a, 500_000);
-        assert_eq(reserve_b, 500_000);
-        assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
-        assert_eq(pool.trading_data().pool_fees_a(), 0);
-        assert_eq(pool.trading_data().pool_fees_b(), 0);
-
-        let (reserve_a, reserve_b) = pool.reserves();
-        assert_eq(reserve_a, 500_000);
-        assert_eq(reserve_b, 500_000);
-
-        assert_eq(bank_a.lent(), 400_000); // 500_000 * 80%
-        assert_eq(bank_a.reserve().value(), 100_000); // 500_000 * 20%
-        assert_eq(bank_b.lent(), 400_000); // 500_000 * 80%
-        assert_eq(bank_b.reserve().value(), 100_000); // 500_000 * 20%
-
-        destroy(coin_a);
-        destroy(coin_b);
-
-        // Redeem
-        let (coin_a, coin_b, _) = pool.redeem_liquidity(
-            &mut lending_market,
-            &mut bank_a,
-            &mut bank_b,
-            lp_coins,
-            499_990,
-            499_990,
-            &clock,
-            ctx,
-        );
-
-        let (reserve_a, reserve_b) = pool.reserves();
-
-        assert_eq(pool.cpmm_k(), 10 * 10);
-        assert_eq(pool.lp_supply_val(), 10);
-        assert_eq(reserve_a, 10);
-        assert_eq(reserve_b, 10);
-        assert_eq(pool.trading_data().pool_fees_a(), 0);
-        assert_eq(pool.trading_data().pool_fees_b(), 0);
-
-        destroy(coin_a);
-        destroy(coin_b);
         destroy(registry);
         destroy(pool);
         destroy(pool_cap);
@@ -584,7 +398,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<TEST_SUI>(500_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -593,11 +406,23 @@ module slamm::lend_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+
+        let (reserve_a, reserve_b) = pool.total_funds();
 
         assert_eq(pool.cpmm_k(), 500_000 * 500_000);
         assert_eq(pool.lp_supply_val(), 500_000);
@@ -607,14 +432,14 @@ module slamm::lend_tests {
         assert_eq(pool.trading_data().pool_fees_a(), 0);
         assert_eq(pool.trading_data().pool_fees_b(), 0);
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
-        assert_eq(bank_a.lent(), 400_000); // 500_000 * 80%
-        assert_eq(bank_a.reserve().value(), 100_000); // 500_000 * 20%
-        assert_eq(bank_b.lent(), 400_000); // 500_000 * 80%
-        assert_eq(bank_b.reserve().value(), 100_000); // 500_000 * 20%
+        assert_eq(bank_a.funds_deployed(), 400_000); // 500_000 * 80%
+        assert_eq(bank_a.funds_available().value(), 100_000); // 500_000 * 20%
+        assert_eq(bank_b.funds_deployed(), 400_000); // 500_000 * 80%
+        assert_eq(bank_b.funds_available().value(), 100_000); // 500_000 * 20%
 
         destroy(coin_a);
         destroy(coin_b);
@@ -638,16 +463,15 @@ module slamm::lend_tests {
             ctx,
         );
 
-
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(reserve_a, 550_000);
         assert_eq(reserve_b, 454_910);
 
-        assert_eq(bank_a.lent(), 400_000);
-        assert_eq(bank_a.reserve().value(), 150_000);
+        assert_eq(bank_a.funds_deployed(), 400_000);
+        assert_eq(bank_a.funds_available().value(), 150_000);
         
-        assert_eq(bank_b.lent(), 400_000);
-        assert_eq(bank_b.reserve().value(), 54_910);
+        assert_eq(bank_b.funds_deployed(), 400_000);
+        assert_eq(bank_b.funds_available().value(), 54_910);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -710,7 +534,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<TEST_SUI>(500_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -719,11 +542,22 @@ module slamm::lend_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+
+        let (reserve_a, reserve_b) = pool.total_funds();
 
         assert_eq(pool.cpmm_k(), 500_000 * 500_000);
         assert_eq(pool.lp_supply_val(), 500_000);
@@ -733,14 +567,14 @@ module slamm::lend_tests {
         assert_eq(pool.trading_data().pool_fees_a(), 0);
         assert_eq(pool.trading_data().pool_fees_b(), 0);
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
-        assert_eq(bank_a.lent(), 400_000); // 500_000 * 80%
-        assert_eq(bank_a.reserve().value(), 100_000); // 500_000 * 20%
-        assert_eq(bank_b.lent(), 400_000); // 500_000 * 80%
-        assert_eq(bank_b.reserve().value(), 100_000); // 500_000 * 20%
+        assert_eq(bank_a.funds_deployed(), 400_000); // 500_000 * 80%
+        assert_eq(bank_a.funds_available().value(), 100_000); // 500_000 * 20%
+        assert_eq(bank_b.funds_deployed(), 400_000); // 500_000 * 80%
+        assert_eq(bank_b.funds_available().value(), 100_000); // 500_000 * 20%
 
         destroy(coin_a);
         destroy(coin_b);
@@ -754,7 +588,7 @@ module slamm::lend_tests {
             true, // a2b
         );
 
-        pool::sync_bank(
+        pool::prepare_bank_for_pending_withdraw(
             &mut bank_a,
             &mut bank_b,
             &mut lending_market,
@@ -773,16 +607,16 @@ module slamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(reserve_a, 700_000);
         assert_eq(reserve_b, 358_286);
         assert_eq(reserve_b + pool.trading_data().protocol_fees_b(), 358_572);
 
-        assert_eq(bank_a.lent(), 400_000);
-        assert_eq(bank_a.reserve().value(), 300_000);
+        assert_eq(bank_a.funds_deployed(), 400_000);
+        assert_eq(bank_a.funds_available().value(), 300_000);
         
-        assert_eq(bank_b.lent(), 286_629);
-        assert_eq(bank_b.reserve().value(), 71_657);
+        assert_eq(bank_b.funds_deployed(), 286_628);
+        assert_eq(bank_b.funds_available().value(), 71_658);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -838,7 +672,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -847,11 +680,22 @@ module slamm::lend_tests {
             100_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(pool.lp_supply_val(), 100_000);
         assert_eq(reserve_a, 100_000);
         assert_eq(reserve_b, 100_000);
@@ -859,12 +703,12 @@ module slamm::lend_tests {
         assert_eq(pool.trading_data().pool_fees_a(), 0);
         assert_eq(pool.trading_data().pool_fees_b(), 0);
 
-        assert_eq(bank_a.lent(), 80_000); // 100_000 * 80%
-        assert_eq(bank_a.reserve().value(), 20_000); // 500_000 * 20%
-        assert_eq(bank_b.reserve().value(), 100_000);
+        assert_eq(bank_a.funds_deployed(), 80_000); // 100_000 * 80%
+        assert_eq(bank_a.funds_available().value(), 20_000); // 500_000 * 20%
+        assert_eq(bank_b.funds_available().value(), 100_000);
         
         assert_eq(bank_a.effective_utilisation_rate(), 8000); // 80% target liquidity
-        assert!(bank_a.compute_lending_action().is_none(), 0);
+        assert!(bank_a.needs_lending_action(0, true) == false, 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -875,7 +719,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(5_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -884,23 +727,34 @@ module slamm::lend_tests {
             5_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(pool.lp_supply_val(), 105_000);
         assert_eq(reserve_a, 105_000);
         assert_eq(reserve_b, 105_000);
         assert_eq(lp_coins.value(), 5_000); // newly minted lp tokens
         
-        assert_eq(bank_a.lent(), 80_000); // 100_000 * 80%
-        assert_eq(bank_a.reserve().value(), 25_000); // 100_000 * 20% + 5_000
-        assert_eq(bank_b.reserve().value(), 105_000);
+        assert_eq(bank_a.funds_deployed(), 80_000); // 100_000 * 80%
+        assert_eq(bank_a.funds_available().value(), 25_000); // 100_000 * 20% + 5_000
+        assert_eq(bank_b.funds_available().value(), 105_000);
         
         assert!(bank_a.effective_utilisation_rate() < bank_a.target_utilisation_rate(), 0);
         assert!(bank_a.effective_utilisation_rate() > bank_a.target_utilisation_rate() -  bank_a.utilisation_buffer(), 0);
-        assert!(bank_a.compute_lending_action().is_none(), 0);
+        assert!(bank_a.needs_lending_action(0, true) == false, 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -911,7 +765,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(5_000_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -920,22 +773,33 @@ module slamm::lend_tests {
             5_000_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(pool.lp_supply_val(), 5_105_000);
         assert_eq(reserve_a, 5_105_000);
         assert_eq(reserve_b, 5_105_000);
         assert_eq(lp_coins.value(), 5_000_000); // newly minted lp tokens
         
-        assert_eq(bank_a.lent(), 4_084_000); // 5_105_000 * 80%
-        assert_eq(bank_a.reserve().value(), 1_021_000); // 5_125_000 * 20%
-        assert_eq(bank_b.reserve().value(), 5_105_000);
+        assert_eq(bank_a.funds_deployed(), 4_084_000); // 5_105_000 * 80%
+        assert_eq(bank_a.funds_available().value(), 1_021_000); // 5_125_000 * 20%
+        assert_eq(bank_b.funds_available().value(), 5_105_000);
         
         assert_eq(bank_a.effective_utilisation_rate(), 8000); // 80% target liquidity
-        assert!(bank_a.compute_lending_action().is_none(), 0);
+        assert!(bank_a.needs_lending_action(0, true) == false, 0);
 
         destroy(coin_a);
         destroy(coin_b);
@@ -992,7 +856,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(100_000_000_00_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -1001,8 +864,19 @@ module slamm::lend_tests {
             100_000_000_00_000,
             0,
             0,
-            &clock,
             ctx,
+        );
+
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
         );
 
         destroy(coin_a);
@@ -1020,7 +894,6 @@ module slamm::lend_tests {
             let mut coin_b = coin::mint_for_testing<COIN>(amount_in, ctx);
 
             let (lp_coins, _) = pool.deposit_liquidity(
-                &mut lending_market,
                 &mut bank_a,
                 &mut bank_b,
                 &mut coin_a,
@@ -1029,12 +902,25 @@ module slamm::lend_tests {
                 amount_in,
                 0,
                 0,
-                &clock,
                 ctx,
             );
 
-            assert_eq(bank_a.effective_utilisation_rate(), 8000); // 80% target liquidity
-            assert!(bank_a.compute_lending_action().is_none(), 0);
+            bank_a.rebalance(
+                &mut lending_market,
+                &clock,
+                ctx
+            );
+
+            bank_b.rebalance(
+                &mut lending_market,
+                &clock,
+                ctx
+            );
+
+            assert!(
+                bank_a.effective_utilisation_rate().max(8000) - bank_a.effective_utilisation_rate().min(8000) <= 1
+            ); // 80% target liquidity (with 0.001% deviation from rounding err)
+            assert!(bank_a.needs_lending_action(0, true) == false, 0);
 
             destroy(coin_a);
             destroy(coin_b);
@@ -1094,7 +980,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(100_000, ctx);
 
         let (mut lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -1103,11 +988,22 @@ module slamm::lend_tests {
             100_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(pool.lp_supply_val(), 100_000);
         assert_eq(reserve_a, 100_000);
         assert_eq(reserve_b, 100_000);
@@ -1115,74 +1011,55 @@ module slamm::lend_tests {
         assert_eq(pool.trading_data().pool_fees_a(), 0);
         assert_eq(pool.trading_data().pool_fees_b(), 0);
 
-        assert_eq(bank_a.lent(), 80_000); // 100_000 * 80%
-        assert_eq(bank_a.reserve().value(), 20_000); // 100_000 * 20%
-        assert_eq(bank_b.reserve().value(), 100_000);
+        assert_eq(bank_a.funds_deployed(), 80_000); // 100_000 * 80%
+        assert_eq(bank_a.funds_available().value(), 20_000); // 100_000 * 20%
+        assert_eq(bank_b.funds_available().value(), 100_000);
         
         assert_eq(bank_a.effective_utilisation_rate(), 8000); // 80% target liquidity
-        assert!(bank_a.compute_lending_action().is_none(), 0);
+        assert!(bank_a.needs_lending_action(0, true) == false, 0);
 
         destroy(coin_a);
         destroy(coin_b);
 
         // Redeem funds in AMM Pool - below buffer - does not recall
         let (coin_a, coin_b, _) = pool.redeem_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
-            lp_coins.split(10, ctx),
-            10,
-            10,
-            &clock,
+            lp_coins.split(100, ctx),
+            100,
+            100,
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
-        assert_eq(pool.lp_supply_val(), 100_000 - 10);
-        assert_eq(reserve_a, 100_000 - 10);
-        assert_eq(reserve_b, 100_000 - 10);
-        assert_eq(lp_coins.value(), 100_000 - 10 - 10); // extra 10 is minimum_liquidity
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
         
-        assert_eq(bank_a.lent(), 80_000); // amount lent does not change
-        assert_eq(bank_a.reserve().value(), 19_990); // 100_000 * 20% - 10
-        assert_eq(bank_b.reserve().value(), 100_000 - 10);
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+
+        let (reserve_a, reserve_b) = pool.total_funds();
+        assert_eq(pool.lp_supply_val(), 100_000 - 100);
+        assert_eq(reserve_a, 100_000 - 100);
+        assert_eq(reserve_b, 100_000 - 100);
+        assert_eq(lp_coins.value(), 100_000 - 100 - 10); // extra 10 is minimum_liquidity
+        
+        assert_eq(bank_a.funds_deployed(), 80_000); // amount lent does not change
+        assert_eq(bank_a.funds_available().value(), 19_900); // 100_000 * 20% - 100
+        assert_eq(bank_b.funds_available().value(), 100_000 - 100);
         
         assert!(bank_a.effective_utilisation_rate() > bank_a.target_utilisation_rate(), 0);
         assert!(bank_a.effective_utilisation_rate() < bank_a.target_utilisation_rate() + bank_a.utilisation_buffer(), 0);
-        assert!(bank_a.compute_lending_action().is_none(), 0);
-
-        destroy(coin_a);
-        destroy(coin_b);
-        
-        // Redeem funds in AMM Pool - beyond buffer - recall
-        let (coin_a, coin_b, _) = pool.redeem_liquidity(
-            &mut lending_market,
-            &mut bank_a,
-            &mut bank_b,
-            lp_coins.split(50_000, ctx),
-            50_000,
-            50_000,
-            &clock,
-            ctx,
-        );
-
-        let (reserve_a, reserve_b) = pool.reserves();
-        assert_eq(pool.lp_supply_val(), 100_000 - 10 - 50_000);
-        assert_eq(reserve_a, 100_000 - 10 - 50_000);
-        assert_eq(reserve_b, 100_000 - 10 - 50_000);
-        assert_eq(lp_coins.value(), 100_000 - 10 - 50_000 - 10); // extra 10 is minimum_liquidity
-
-        assert_eq(bank_a.lent(), (100_000 - 10 - 50_000) * 80 / 100);
-        assert_eq(bank_a.reserve().value(), (100_000 - 10 - 50_000) * 20 / 100);
-        assert_eq(bank_b.reserve().value(), 100_000 - 10 - 50_000);
-        
-        assert!(bank_a.effective_utilisation_rate() == bank_a.target_utilisation_rate(), 0);
-        assert!(bank_a.compute_lending_action().is_none(), 0);
+        assert!(bank_a.needs_lending_action(0, true) == false, 0);
 
         destroy(coin_a);
         destroy(coin_b);
         destroy(lp_coins);
-
         destroy(bank_a);
         destroy(bank_b);
         destroy(registry);
@@ -1234,7 +1111,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(100_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -1243,7 +1119,6 @@ module slamm::lend_tests {
             100_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -1325,7 +1200,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(100_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -1334,7 +1208,6 @@ module slamm::lend_tests {
             100_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -1351,7 +1224,7 @@ module slamm::lend_tests {
             false, // a2b
         );
 
-        pool::sync_bank(
+        pool::prepare_bank_for_pending_withdraw(
             &mut bank_a,
             &mut bank_b,
             &mut lending_market,
@@ -1425,7 +1298,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(100_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -1434,8 +1306,19 @@ module slamm::lend_tests {
             100_000,
             0,
             0,
-            &clock,
             ctx,
+        );
+
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
         );
 
         destroy(coin_a);
@@ -1451,7 +1334,7 @@ module slamm::lend_tests {
             false, // a2b
         );
 
-        pool::sync_bank(
+        pool::prepare_bank_for_pending_withdraw(
             &mut bank_a,
             &mut bank_b,
             &mut lending_market,
@@ -1527,7 +1410,6 @@ module slamm::lend_tests {
         let mut coin_b = coin::mint_for_testing<COIN>(100_000, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -1536,8 +1418,19 @@ module slamm::lend_tests {
             100_000,
             0,
             0,
-            &clock,
             ctx,
+        );
+
+        bank_a.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
+        );
+        
+        bank_b.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx
         );
 
         destroy(coin_a);
@@ -1553,7 +1446,7 @@ module slamm::lend_tests {
             false, // a2b
         );
 
-        pool::sync_bank(
+        pool::prepare_bank_for_pending_withdraw(
             &mut bank_a,
             &mut bank_b,
             &mut lending_market,
@@ -1573,16 +1466,16 @@ module slamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(reserve_a, 100_000 - 30_000);
         assert_eq(reserve_b, 100_000 + 30_000);
 
-        assert_eq(bank_a.lent(), (100_000 - 30_000) * 80 / 100);
-        assert_eq(bank_a.reserve().value(), (100_000 - 30_000) * 20 / 100);
-        assert_eq(bank_b.reserve().value(), 100_000 + 30_000);
+        assert_eq(bank_a.funds_deployed(), (100_000 - 30_000) * 80 / 100);
+        assert_eq(bank_a.funds_available().value(), (100_000 - 30_000) * 20 / 100);
+        assert_eq(bank_b.funds_available().value(), 100_000 + 30_000);
         
         assert!(bank_a.effective_utilisation_rate() == bank_a.target_utilisation_rate(), 0);
-        assert!(bank_a.compute_lending_action().is_none(), 0);
+        assert!(bank_a.needs_lending_action(0, true) == false, 0);
         
         destroy(coin_a);
         destroy(coin_b);
@@ -1598,6 +1491,272 @@ module slamm::lend_tests {
         destroy(prices);
         destroy(bag);
         destroy(clock);
+        test_scenario::end(scenario);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = bank::EInvalidCTokenRatio)]
+    public fun test_fail_invalid_ctoken_ratio() {
+        let owner = @0x26;
+        let mut scenario = test_scenario::begin(owner);
+        let (mut clock, owner_cap, mut lending_market, mut prices, type_to_index) = lending_market::setup(reserve_args_2(&mut scenario), &mut scenario).destruct_state();
+
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
+        let mut bank_sui = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
+
+        bank_sui.deposit_for_testing(1_000_000);
+        
+        bank_sui.init_lending<LENDING_MARKET, TEST_SUI>(
+            &global_admin,
+            &mut lending_market,
+            8_000, // utilisation_rate
+            1_000, // utilisation_buffer
+            ctx(&mut scenario),
+        );
+        
+        bank_sui.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx(&mut scenario),
+        );
+
+        clock::set_for_testing(&mut clock, 1 * 1000);
+
+        // set reserve parameters and prices
+        mock_pyth::update_price<TEST_USDC>(&mut prices, 1, 0, &clock); // $1
+        mock_pyth::update_price<TEST_SUI>(&mut prices, 1, 1, &clock); // $10
+
+        // create obligation
+        let obligation_owner_cap = lending_market::create_obligation(
+            &mut lending_market,
+            test_scenario::ctx(&mut scenario)
+        );
+
+        let coins = coin::mint_for_testing<TEST_USDC>(100 * 1_000_000, test_scenario::ctx(&mut scenario));
+        let ctokens = lending_market::deposit_liquidity_and_mint_ctokens<LENDING_MARKET, TEST_USDC>(
+            &mut lending_market,
+            *bag::borrow(&type_to_index, type_name::get<TEST_USDC>()),
+            &clock,
+            coins,
+            test_scenario::ctx(&mut scenario)
+        );
+        lending_market::deposit_ctokens_into_obligation<LENDING_MARKET, TEST_USDC>(
+            &mut lending_market,
+            *bag::borrow(&type_to_index, type_name::get<TEST_USDC>()),
+            &obligation_owner_cap,
+            &clock,
+            ctokens,
+            test_scenario::ctx(&mut scenario)
+        );
+
+        lending_market::refresh_reserve_price<LENDING_MARKET>(
+            &mut lending_market,
+            *bag::borrow(&type_to_index, type_name::get<TEST_USDC>()),
+            &clock,
+            mock_pyth::get_price_obj<TEST_USDC>(&prices)
+        );
+        lending_market::refresh_reserve_price<LENDING_MARKET>(
+            &mut lending_market,
+            *bag::borrow(&type_to_index, type_name::get<TEST_SUI>()),
+            &clock,
+            mock_pyth::get_price_obj<TEST_SUI>(&prices)
+        );
+
+        let sui = lending_market::borrow<LENDING_MARKET, TEST_SUI>(
+            &mut lending_market,
+            *bag::borrow(&type_to_index, type_name::get<TEST_SUI>()),
+            &obligation_owner_cap,
+            &clock,
+            5 * 1_000_000_000,
+            test_scenario::ctx(&mut scenario)
+        );
+        test_utils::destroy(sui);
+
+        mock_pyth::update_price<TEST_SUI>(&mut prices, 1, 2, &clock); // $10
+        lending_market::refresh_reserve_price<LENDING_MARKET>(
+            &mut lending_market,
+            *bag::borrow(&type_to_index, type_name::get<TEST_SUI>()),
+            &clock,
+            mock_pyth::get_price_obj<TEST_SUI>(&prices)
+        );
+
+        // liquidate the obligation
+        let mut sui = coin::mint_for_testing<TEST_SUI>(1 * 1_000_000_000, test_scenario::ctx(&mut scenario));
+        let (usdc, _exemption) = lending_market::liquidate<LENDING_MARKET, TEST_SUI, TEST_USDC>(
+            &mut lending_market,
+            lending_market::obligation_id(&obligation_owner_cap),
+            *bag::borrow(&type_to_index, type_name::get<TEST_SUI>()),
+            *bag::borrow(&type_to_index, type_name::get<TEST_USDC>()),
+            &clock,
+            &mut sui,
+            test_scenario::ctx(&mut scenario)
+        );
+
+        lending_market::forgive<LENDING_MARKET, TEST_SUI>(
+            &owner_cap,
+            &mut lending_market,
+            *bag::borrow(&type_to_index, type_name::get<TEST_SUI>()),
+            lending_market::obligation_id(&obligation_owner_cap),
+            &clock,
+            1_000_000_000 + 10_000,
+        );
+
+        balance::destroy_for_testing(
+            bank_sui.withdraw_for_testing(150000)
+        );
+
+        bank_sui.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx(&mut scenario),
+        );
+
+        test_utils::destroy(usdc);
+        test_utils::destroy(sui);
+        test_utils::destroy(obligation_owner_cap);
+        test_utils::destroy(owner_cap);
+        test_utils::destroy(lending_market);
+        test_utils::destroy(clock);
+        test_utils::destroy(prices);
+        test_utils::destroy(type_to_index);
+        test_utils::destroy(bank_sui);
+        test_utils::destroy(global_admin);
+        test_utils::destroy(registry);
+        test_scenario::end(scenario);
+    }
+    
+    #[test]
+    #[expected_failure(abort_code = bank::EInvalidCTokenRatio)]
+    public fun test_fail_invalid_ctoken_ratio_2() {
+        let owner = @0x26;
+        let mut scenario = test_scenario::begin(owner);
+        let (mut clock, owner_cap, mut lending_market, mut prices, type_to_index) = lending_market::setup(reserve_args_2(&mut scenario), &mut scenario).destruct_state();
+
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
+        let mut bank_sui = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
+
+        clock::set_for_testing(&mut clock, 1 * 1000);
+
+        // set reserve parameters and prices
+        mock_pyth::update_price<TEST_USDC>(&mut prices, 1, 0, &clock); // $1
+        mock_pyth::update_price<TEST_SUI>(&mut prices, 1, 1, &clock); // $10
+
+        // create obligation
+        let obligation_owner_cap = lending_market::create_obligation(
+            &mut lending_market,
+            test_scenario::ctx(&mut scenario)
+        );
+
+        let coins = coin::mint_for_testing<TEST_SUI>(100 * 1_000_000, test_scenario::ctx(&mut scenario));
+        let ctokens = lending_market::deposit_liquidity_and_mint_ctokens<LENDING_MARKET, TEST_SUI>(
+            &mut lending_market,
+            *bag::borrow(&type_to_index, type_name::get<TEST_SUI>()),
+            &clock,
+            coins,
+            test_scenario::ctx(&mut scenario)
+        );
+
+        lending_market::refresh_reserve_price<LENDING_MARKET>(
+            &mut lending_market,
+            *bag::borrow(&type_to_index, type_name::get<TEST_USDC>()),
+            &clock,
+            mock_pyth::get_price_obj<TEST_USDC>(&prices)
+        );
+        lending_market::refresh_reserve_price<LENDING_MARKET>(
+            &mut lending_market,
+            *bag::borrow(&type_to_index, type_name::get<TEST_SUI>()),
+            &clock,
+            mock_pyth::get_price_obj<TEST_SUI>(&prices)
+        );
+
+        let idx = lending_market.reserve_array_index<LENDING_MARKET, TEST_SUI>();
+        let reserves = lending_market.reserves_mut_for_testing();
+        let reserve = &mut reserves[idx];
+        // This is to change the underlying token ratio
+        reserve.burn_ctokens_for_testing(
+            balance::create_for_testing<CToken<LENDING_MARKET, TEST_SUI>>(52_000_000_000)
+        );
+
+        // Init bank lending
+        bank_sui.init_lending<LENDING_MARKET, TEST_SUI>(
+            &global_admin,
+            &mut lending_market,
+            10_000, // utilisation_rate
+            0, // utilisation_buffer
+            ctx(&mut scenario),
+        );
+
+        // Deposit
+        bank_sui.deposit_for_testing(30);
+        
+        bank_sui.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx(&mut scenario),
+        );
+
+        bank_sui.set_utilisation_rate(
+            &global_admin,
+            0, // utilisation_rate
+            0, // utilisation_buffer
+        );
+
+        // Withdraw
+        bank_sui.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx(&mut scenario),
+        );
+
+        test_utils::destroy(obligation_owner_cap);
+        test_utils::destroy(owner_cap);
+        test_utils::destroy(lending_market);
+        test_utils::destroy(clock);
+        test_utils::destroy(prices);
+        test_utils::destroy(type_to_index);
+        test_utils::destroy(bank_sui);
+        test_utils::destroy(global_admin);
+        test_utils::destroy(registry);
+        test_utils::destroy(ctokens);
+        test_scenario::end(scenario);
+    }
+    
+    #[test]
+    #[expected_failure(abort_code = bank::EDeployAmountTooLow)]
+    public fun test_fail_below_min_deploy_amount() {
+        let owner = @0x26;
+        let mut scenario = test_scenario::begin(owner);
+        let (clock, owner_cap, mut lending_market, prices, type_to_index) = lending_market::setup(reserve_args_2(&mut scenario), &mut scenario).destruct_state();
+
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
+        let mut bank_sui = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
+
+        bank_sui.deposit_for_testing(1);
+        bank_sui.init_lending<LENDING_MARKET, TEST_SUI>(
+            &global_admin,
+            &mut lending_market,
+            10_000, // utilisation_rate
+            0, // utilisation_buffer
+            ctx(&mut scenario),
+        );
+
+        bank_sui.rebalance(
+            &mut lending_market,
+            &clock,
+            ctx(&mut scenario),
+        );
+
+        test_utils::destroy(owner_cap);
+        test_utils::destroy(lending_market);
+        test_utils::destroy(clock);
+        test_utils::destroy(prices);
+        test_utils::destroy(type_to_index);
+        test_utils::destroy(bank_sui);
+        test_utils::destroy(global_admin);
+        test_utils::destroy(registry);
         test_scenario::end(scenario);
     }
 }

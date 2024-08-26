@@ -14,11 +14,14 @@ module slamm::test_utils {
     use suilend::test_usdc::{TEST_USDC};
     use suilend::test_sui::{TEST_SUI};
     use suilend::lending_market::{Self, LENDING_MARKET};
+    use suilend::reserve_config;
     use pyth::price_info::{Self, PriceInfoObject};
     use pyth::price_feed;
     use pyth::price_identifier;
     use pyth::price;
     use pyth::i64;
+
+    // reserve_config::default_reserve_config(), // TODO
 
     public fun e9(amt: u64): u64 {
         1_000_000_000 * amt
@@ -33,18 +36,53 @@ module slamm::test_utils {
         bag::add(
             &mut bag, 
             type_name::get<TEST_USDC>(), 
-            lending_market::new_args(100 * 1_000_000),
+            lending_market::new_args(100 * 1_000_000, reserve_config::default_reserve_config()),
         );
             
         bag::add(
             &mut bag, 
             type_name::get<TEST_SUI>(), 
-            lending_market::new_args(100 * 1_000_000),
+            lending_market::new_args(100 * 1_000_000, reserve_config::default_reserve_config()),
         );
 
         bag
     }
     
+    #[test_only]
+    public fun reserve_args_2(scenario: &mut Scenario): Bag {
+        let mut bag = bag::new(test_scenario::ctx(scenario));
+
+        let reserve_args = {
+            let config = reserve_config::default_reserve_config();
+            let mut builder = reserve_config::from(&config, test_scenario::ctx(scenario));
+            reserve_config::set_open_ltv_pct(&mut builder, 50);
+            reserve_config::set_close_ltv_pct(&mut builder, 50);
+            reserve_config::set_max_close_ltv_pct(&mut builder, 50);
+            sui::test_utils::destroy(config);
+            let config = reserve_config::build(builder, test_scenario::ctx(scenario));
+
+            lending_market::new_args(100 * 1_000_000, config)
+        };
+
+        bag::add(
+            &mut bag, 
+            type_name::get<TEST_USDC>(), 
+            reserve_args,
+        );
+
+        let reserve_args = {
+            let config = reserve_config::default_reserve_config();
+            lending_market::new_args(100 * 1_000_000_000, config)
+        };
+
+        bag::add(
+            &mut bag, 
+            type_name::get<TEST_SUI>(), 
+            reserve_args,
+        );
+
+        bag
+    }
     
     #[test_only]
     public fun new_for_testing(
@@ -213,8 +251,8 @@ module slamm::test_utils {
 
         bump_clock(clock, clock_bump);
 
-        let a = if (a2b) {pool.reserve_a() + quote.amount_in()} else {pool.reserve_a() - quote.amount_out()};
-        let b = if (a2b) {pool.reserve_b() - quote.amount_out()} else {pool.reserve_b() + quote.amount_in()};
+        let a = if (a2b) {pool.total_funds_a() + quote.amount_in()} else {pool.total_funds_a() - quote.amount_out()};
+        let b = if (a2b) {pool.total_funds_b() - quote.amount_out()} else {pool.total_funds_b() + quote.amount_in()};
         omm::set_oracle_price_as_hypothetical_internal_reserves(
             pool,
             a,

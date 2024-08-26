@@ -31,7 +31,7 @@ module slamm::proptests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
@@ -49,7 +49,6 @@ module slamm::proptests {
         let mut coin_b = coin::mint_for_testing<COIN>(e9(100_000), ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -58,7 +57,6 @@ module slamm::proptests {
             e9(100_000),
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -80,14 +78,18 @@ module slamm::proptests {
             let mut coin_a = coin::mint_for_testing<SUI>(if (a2b) { amount_in } else {0}, ctx);
             let mut coin_b = coin::mint_for_testing<COIN>(if (a2b) { 0 } else {amount_in}, ctx);
 
-            let _swap_result = pool.cpmm_swap(
+            let swap_intent = pool.cpmm_intent_swap(
+                amount_in,
+                a2b, // a2b
+            );
+
+            pool.cpmm_execute_swap(
                 &mut bank_a,
                 &mut bank_b,
+                swap_intent,
                 &mut coin_a,
                 &mut coin_b,
-                amount_in,
                 0,
-                a2b,
                 ctx,
             );
 
@@ -119,7 +121,7 @@ module slamm::proptests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
@@ -137,7 +139,6 @@ module slamm::proptests {
         let mut coin_b = coin::mint_for_testing<COIN>(e9(100_000), ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -146,7 +147,6 @@ module slamm::proptests {
             e9(25_000),
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -168,7 +168,6 @@ module slamm::proptests {
             let mut coin_b = coin::mint_for_testing<COIN>(amount_in, ctx);
 
             let (lp_coins, _) = pool.deposit_liquidity(
-                &mut lending_market,
                 &mut bank_a,
                 &mut bank_b,
                 &mut coin_a,
@@ -177,7 +176,6 @@ module slamm::proptests {
                 amount_in,
                 0,
                 0,
-                &clock,
                 ctx,
             );
 
@@ -210,7 +208,7 @@ module slamm::proptests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
@@ -221,6 +219,8 @@ module slamm::proptests {
             ctx,
         );
 
+        pool.no_redemption_fees_for_testing();
+
         let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
@@ -228,7 +228,6 @@ module slamm::proptests {
         let mut coin_b = coin::mint_for_testing<COIN>(10_000_000_000_000_000_000, ctx);
 
         let (mut lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -237,7 +236,6 @@ module slamm::proptests {
             2_000_000_000_000_000_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -256,13 +254,11 @@ module slamm::proptests {
             let lp_burn = rng.generate_u64_in_range(1, lp_tokens_balance);
 
             let (coin_a, coin_b, _) = pool.redeem_liquidity(
-                &mut lending_market,
                 &mut bank_a,
                 &mut bank_b,
                 lp_coins.split(lp_burn, ctx),
                 0,
                 0,
-                &clock,
                 ctx,
             );
 

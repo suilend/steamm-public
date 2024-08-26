@@ -9,22 +9,25 @@ module slamm::fees {
         fee_b: Balance<B>,
     }
 
-    public struct FeeConfig has store {
-        swap_fee_numerator: u64,
-        swap_fee_denominator: u64,
+    public struct FeeConfig has store, copy, drop {
+        fee_numerator: u64,
+        fee_denominator: u64,
+        min_fee: u64,
     }
 
     // ===== Package Functions =====
 
     public(package) fun new<A, B>(
-        swap_fee_numerator: u64,
-        swap_fee_denominator: u64,
+        fee_numerator: u64,
+        fee_denominator: u64,
+        min_fee: u64,
     ): Fees<A, B> {
 
         Fees {
             config: FeeConfig {
-                swap_fee_numerator,
-                swap_fee_denominator,
+                fee_numerator,
+                fee_denominator,
+                min_fee,
             },
             fee_a: balance::zero(),
             fee_b: balance::zero(),
@@ -32,41 +35,28 @@ module slamm::fees {
     }
     
     public(package) fun new_config(
-        swap_fee_numerator: u64,
-        swap_fee_denominator: u64,
+        fee_numerator: u64,
+        fee_denominator: u64,
+        min_fee: u64,
     ): FeeConfig {
         FeeConfig {
-            swap_fee_numerator,
-            swap_fee_denominator,
+            fee_numerator,
+            fee_denominator,
+            min_fee,
         }
     }
     
     public fun fee_ratio<A, B>(
         self: &Fees<A, B>,
     ): (u64, u64) {
-        (self.config.swap_fee_numerator, self.config.swap_fee_denominator)
+        (self.config.fee_numerator, self.config.fee_denominator)
     }
     
     public fun fee_ratio_(
         self: &FeeConfig,
     ): (u64, u64) {
-        (self.swap_fee_numerator, self.swap_fee_denominator)
+        (self.fee_numerator, self.fee_denominator)
     }
-    
-    // public(package) fun deposit<T>(
-    //     self: &mut FeeReserve<T>,
-    //     balance: Balance<T>,
-    // ) {
-    //     self.acc_fees = self.acc_fees + balance.value();
-    //     self.balance.borrow_mut().join(balance);
-    // }
-    
-    // public(package) fun register_fee<T>(
-    //     self: &mut FeeReserve<T>,
-    //     amount: u64,
-    // ) {
-    //     self.acc_fees = self.acc_fees + amount;
-    // }
     
     public(package) fun withdraw<A, B>(
         self: &mut Fees<A, B>,
@@ -79,8 +69,6 @@ module slamm::fees {
         )
     }
 
-    // ===== View Functions =====
-
     public(package) fun balances_mut<A, B>(
         self: &mut Fees<A, B>,
     ): (&mut Balance<A>, &mut Balance<B>) {
@@ -89,7 +77,18 @@ module slamm::fees {
             &mut self.fee_b,
         )
     }
-    
+
+    public(package) fun set_config<A, B>(
+        self: &mut Fees<A, B>,
+        fee_numerator: u64,
+        fee_denominator: u64,
+        min_fee: u64,
+    ) {
+        self.config = new_config(fee_numerator, fee_denominator, min_fee)
+    }
+
+    // ===== View Functions =====
+
     public fun balances<A, B>(
         self: &Fees<A, B>,
     ): (&Balance<A>, &Balance<B>) {
@@ -99,10 +98,10 @@ module slamm::fees {
         )
     }
     
-    
     public fun config<A, B>(self: &Fees<A, B>): &FeeConfig { &self.config }
-    public fun swap_fee_numerator(self: &FeeConfig): u64 { self.swap_fee_numerator }
-    public fun swap_fee_denominator(self: &FeeConfig): u64 { self.swap_fee_denominator }
+    public fun fee_numerator(self: &FeeConfig): u64 { self.fee_numerator }
+    public fun fee_denominator(self: &FeeConfig): u64 { self.fee_denominator }
+    public fun min_fee(self: &FeeConfig): u64 { self.min_fee }
     public fun fee_a<A, B>(self: &Fees<A, B>,): &Balance<A> { &self.fee_a }
     public fun fee_b<A, B>(self: &Fees<A, B>,): &Balance<B> { &self.fee_b }
 
@@ -111,5 +110,7 @@ module slamm::fees {
     #[test_only]
     public(package) fun config_mut<A, B>(self: &mut Fees<A, B>): &mut FeeConfig { &mut self.config }
     #[test_only]
-    public(package) fun swap_fee_numerator_mut(self: &mut FeeConfig): &mut u64 { &mut self.swap_fee_numerator }
+    public(package) fun fee_numerator_mut(self: &mut FeeConfig): &mut u64 { &mut self.fee_numerator }
+    #[test_only]
+    public(package) fun min_fee_mut(self: &mut FeeConfig): &mut u64 { &mut self.min_fee }
 }

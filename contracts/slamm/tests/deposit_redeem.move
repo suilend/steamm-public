@@ -1,6 +1,6 @@
 #[test_only]
 module slamm::deposit_redeem {
-    use slamm::pool::{Self, quote_deposit_test, quote_redeem_test};
+    use slamm::pool_math::{Self, quote_deposit_test, quote_redeem_test};
     use slamm::test_utils;
     use sui::test_utils::{destroy, assert_eq};
     use sui::math::sqrt_u128;
@@ -82,7 +82,7 @@ module slamm::deposit_redeem {
     }
     
     #[test]
-    #[expected_failure(abort_code = pool::ERedeemSlippageAExceeded)]
+    #[expected_failure(abort_code = pool_math::ERedeemSlippageAExceeded)]
     fun test_fail_min_a_too_high() {
         let (pool, bank_a, bank_b) = test_utils::new_for_testing(
             6,
@@ -106,7 +106,7 @@ module slamm::deposit_redeem {
     }
     
     #[test]
-    #[expected_failure(abort_code = pool::ERedeemSlippageBExceeded)]
+    #[expected_failure(abort_code = pool_math::ERedeemSlippageBExceeded)]
     fun test_fail_min_b_too_high() {
         let (pool, bank_a, bank_b) = test_utils::new_for_testing(
             6,
@@ -256,9 +256,31 @@ module slamm::deposit_redeem {
         assert_eq(delta_b, 656376366);
         assert_eq(lp_tokens, 251342775123);
     }
+    
+    #[test]
+    #[expected_failure(abort_code = pool_math::EDepositRatioLeadsToZeroB)]
+    fun test_fail_deposit_ratio_leads_to_zero() {
+        let (pool, bank_a, bank_b) = test_utils::new_for_testing(
+            5,
+            0,
+            sqrt_u128(5 as u128) as u64,
+            0,
+        );
+
+        let _quote = pool.quote_deposit_impl_test(
+            5, // max_base
+            5, // max_quote,
+            0, // min_a
+            0, // min_b
+        );
+
+        destroy(pool);
+        destroy(bank_a);
+        destroy(bank_b);
+    }
 
     #[test]
-    #[expected_failure(abort_code = pool::EDepositMaxParamsCantBeZero)]
+    #[expected_failure(abort_code = pool_math::EDepositMaxParamsCantBeZero)]
     fun test_fail_max_params_as_zero() {
         let (pool, bank_a, bank_b) = test_utils::new_for_testing(
             5,

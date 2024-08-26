@@ -4,12 +4,8 @@ module slamm::quote {
 
     public use fun slamm::pool::as_intent as SwapQuote.as_intent;
     public use fun slamm::pool::swap_inner as SwapQuote.swap_inner;
-    
-    public struct SwapOutputs has drop {
-        amount_out_net: u64,
-        protocol_fees: u64,
-        pool_fees: u64,
-    }
+    public use fun redemption_fee_a as RedeemQuote.fees_a;
+    public use fun redemption_fee_b as RedeemQuote.fees_b;
 
     public struct SwapQuote has store, drop {
         amount_in: u64,
@@ -33,35 +29,26 @@ module slamm::quote {
     public struct RedeemQuote has store, drop {
         withdraw_a: u64,
         withdraw_b: u64,
+        fees_a: u64,
+        fees_b: u64,
         burn_lp: u64
     }
 
     // ===== Package Methods =====
-    
-    public(package) fun swap_outputs(
-        amount_out_net: u64,
+
+    public(package) fun quote(
+        amount_in: u64,
+        amount_out: u64,
         protocol_fees: u64,
         pool_fees: u64,
-    ): SwapOutputs {
-        SwapOutputs {
-            amount_out_net,
-            protocol_fees,
-            pool_fees,
-        }
-    }
-
-    public(package) fun to_quote(
-        swap_outputs: SwapOutputs,
-        amount_in: u64,
         a2b: bool,
     ): SwapQuote {
         SwapQuote {
-            amount_in: amount_in,
-            amount_out: swap_outputs.amount_out_net + swap_outputs.protocol_fees + swap_outputs.pool_fees,
-            // input_fees: none(),
+            amount_in,
+            amount_out,
             output_fees: SwapFee {
-                protocol_fees: swap_outputs.protocol_fees,
-                pool_fees: swap_outputs.pool_fees,
+                protocol_fees,
+                pool_fees,
             },
             a2b,
         }
@@ -84,16 +71,20 @@ module slamm::quote {
     public(package) fun redeem_quote(
         withdraw_a: u64,
         withdraw_b: u64,
+        fees_a: u64,
+        fees_b: u64,
         burn_lp: u64
     ): RedeemQuote {
         RedeemQuote {
             withdraw_a,
             withdraw_b,
+            fees_a,
+            fees_b,
             burn_lp,
         }
     }
 
-    public(package) fun add_output_fees(
+    public(package) fun add_extra_fees(
         self: &mut SwapQuote,
         protocol_fees: u64,
         pool_fees: u64
@@ -140,6 +131,8 @@ module slamm::quote {
     
     public fun withdraw_a(self: &RedeemQuote): u64 { self.withdraw_a }
     public fun withdraw_b(self: &RedeemQuote): u64 { self.withdraw_b }
+    public fun redemption_fee_a(self: &RedeemQuote): u64 { self.fees_a }
+    public fun redemption_fee_b(self: &RedeemQuote): u64 { self.fees_b }
     public fun burn_lp(self: &RedeemQuote): u64 { self.burn_lp }
 
 

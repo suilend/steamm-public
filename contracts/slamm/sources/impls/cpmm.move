@@ -41,6 +41,21 @@ module slamm::cpmm {
 
     // ===== Public Methods =====
 
+    /// Initializes and returns a new AMM Pool along with its associated PoolCap.
+    /// The pool is initialized with zero balances for both coin types `A` and `B`,
+    /// specified protocol fees, and the provided swap fee. The pool's LP supply
+    /// object is initialized at zero supply and the pool is added to the `registry`.
+    ///
+    /// # Returns
+    ///
+    /// A tuple containing:
+    /// - `Pool<A, B, Hook, State>`: The created AMM pool object.
+    /// - `PoolCap<A, B, Hook>`: The associated pool capability object.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if `swap_fee_bps` is greater than or equal to
+    /// `SWAP_FEE_DENOMINATOR`
     public fun new_with_offset<A, B, W: drop>(
         _witness: W,
         registry: &mut Registry,
@@ -78,44 +93,12 @@ module slamm::cpmm {
         )
     }
 
-    public fun swap<A, B, W: drop, P>(
-        self: &mut Pool<A, B, Hook<W>, State>,
-        bank_a: &mut Bank<P, A>,
-        bank_b: &mut Bank<P, B>,
-        coin_a: &mut Coin<A>,
-        coin_b: &mut Coin<B>,
-        amount_in: u64,
-        min_amount_out: u64,
-        a2b: bool,
-        ctx: &mut TxContext,
-    ): SwapResult {
-        self.inner_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
-
-        let intent = intent_swap(
-            self,
-            amount_in,
-            a2b,
-        );
-
-        let result = execute_swap(
-            self,
-            bank_a,
-            bank_b,
-            intent,
-            coin_a,
-            coin_b,
-            min_amount_out,
-            ctx
-        );
-
-        result
-    }
 
     public fun intent_swap<A, B, W: drop>(
         self: &mut Pool<A, B, Hook<W>, State>,
         amount_in: u64,
         a2b: bool,
-    ): Intent<A, B, Hook<W>> {
+    ): Intent<A, B, Hook<W>, State> {
         self.inner_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
         let quote = quote_swap(self, amount_in, a2b);
 
@@ -126,7 +109,7 @@ module slamm::cpmm {
         self: &mut Pool<A, B, Hook<W>, State>,
         bank_a: &mut Bank<P, A>,
         bank_b: &mut Bank<P, B>,
-        intent: Intent<A, B, Hook<W>>,
+        intent: Intent<A, B, Hook<W>, State>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
         min_amount_out: u64,
@@ -161,7 +144,7 @@ module slamm::cpmm {
         amount_in: u64,
         a2b: bool,
     ): SwapQuote {
-        let (reserve_a, reserve_b) = self.reserves();
+        let (reserve_a, reserve_b) = self.total_funds();
 
         let amount_out = quote_swap_impl(
             reserve_a,
@@ -172,12 +155,7 @@ module slamm::cpmm {
             self.inner().offset_b,
         );
 
-        let output = self.compute_fees_on_output(amount_out);
-
-        output.to_quote(
-            amount_in,
-            a2b,
-        )
+        self.get_quote(amount_in, amount_out, a2b)
     }
     
     public(package) fun quote_swap_impl(
