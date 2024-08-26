@@ -7,6 +7,7 @@ module slamm::slamm_tests {
         test_scenario::{Self, ctx},
     };
     use slamm::{
+        cpmm,
         quote,
         pool_math,
         pool::{Self, minimum_liquidity},

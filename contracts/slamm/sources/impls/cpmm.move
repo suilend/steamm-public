@@ -203,8 +203,8 @@ module slamm::cpmm {
         offset_a: u64,
         offset_b: u64,
     ): u128 {
-        let (reserve_a, reserve_b) = self.reserves();
-        (((reserve_a + offset_a) as u128) * ((reserve_b + offset_b) as u128))
+        let (total_funds_a, total_funds_b) = self.total_funds();
+        (((total_funds_a + offset_a) as u128) * ((total_funds_b + offset_b) as u128))
     }
 
     // ===== Versioning =====

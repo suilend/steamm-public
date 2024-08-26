@@ -265,6 +265,8 @@ module slamm::omm {
             reserve_b,
             amount_in,
             a2b,
+            0,
+            0,
         );
 
         let mut quote = self.get_quote(amount_in, amount_out, a2b);

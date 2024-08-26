@@ -47,7 +47,6 @@ module slamm::cpmm_offset_tests {
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -56,11 +55,10 @@ module slamm::cpmm_offset_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
         
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert!(reserve_a == 0, 0);
         assert!(reserve_b == 500000, 0);
         assert!(pool.cpmm_k() == (500000 + 20) * 20, 0);
@@ -112,7 +110,6 @@ module slamm::cpmm_offset_tests {
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -121,11 +118,10 @@ module slamm::cpmm_offset_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
         
-        let (reserve_a, reserve_b) = pool.reserves();
+        let (reserve_a, reserve_b) = pool.total_funds();
         assert!(reserve_a == 0, 0);
         assert!(reserve_b == 500000, 0);
         assert!(pool.cpmm_k() == (500000 + 20) * 20, 0);
@@ -135,7 +131,6 @@ module slamm::cpmm_offset_tests {
         destroy(lp_coins);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             &mut coin_a,
@@ -144,7 +139,6 @@ module slamm::cpmm_offset_tests {
             500_000,
             0,
             0,
-            &clock,
             ctx,
         );
 
@@ -156,13 +150,11 @@ module slamm::cpmm_offset_tests {
         let ctx = ctx(&mut scenario);
 
         let (coin_a, coin_b, _) = pool.redeem_liquidity(
-            &mut lending_market,
             &mut bank_a,
             &mut bank_b,
             lp_coins,
             0,
             0,
-            &clock,
             ctx,
         );
 
