@@ -849,7 +849,7 @@ module slamm::pool {
         lifetime_protocol_fee: &mut u64,
         lifetime_pool_fee: &mut u64,
     ) {
-        assert!(quote.amount_out() < reserve_out.0, EOutputExceedsLiquidity);
+        assert!(quote.amount_out() <= reserve_out.0, EOutputExceedsLiquidity);
         assert!(coin_in.value() >= quote.amount_in(), EInsufficientFunds);
 
         let balance_in = coin_in.balance_mut().split(quote.amount_in());
