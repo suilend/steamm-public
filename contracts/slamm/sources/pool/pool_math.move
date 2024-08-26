@@ -3,8 +3,9 @@
 /// called directly. Is also exports an intializer and swap method to be
 /// called by the hook modules.
 module slamm::pool_math {
-    use sui::{
-        math::{sqrt_u128, min},
+    use std::{
+        u64::min,
+        u128::sqrt,
     };
     use slamm::math::{safe_mul_div, safe_mul_div_up};
 
@@ -138,8 +139,8 @@ module slamm::pool_math {
         amount_b: u64
     ): u64 {
         if (lp_supply == 0) {
-            (sqrt_u128((amount_a as u128) * (amount_b as u128)) as u64)
-        } else {            
+            (sqrt((amount_a as u128) * (amount_b as u128)) as u64)
+        } else {
             min(
                 safe_mul_div(amount_a, lp_supply, reserve_a),
                 safe_mul_div(amount_b, lp_supply, reserve_b)

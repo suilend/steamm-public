@@ -3,7 +3,7 @@ module slamm::deposit_redeem {
     use slamm::pool_math::{Self, quote_deposit_test, quote_redeem_test};
     use slamm::test_utils;
     use sui::test_utils::{destroy, assert_eq};
-    use sui::math::sqrt_u128;
+    use std::u128::sqrt;
     use slamm::math::{Self as slamm_math};
 
     #[test]
@@ -37,7 +37,7 @@ module slamm::deposit_redeem {
         let (pool, bank_a, bank_b) = test_utils::new_for_testing(
             5,
             1,
-            sqrt_u128(5 as u128) as u64,
+            sqrt(5 as u128) as u64,
             0,
         );
 
@@ -263,7 +263,7 @@ module slamm::deposit_redeem {
         let (pool, bank_a, bank_b) = test_utils::new_for_testing(
             5,
             0,
-            sqrt_u128(5 as u128) as u64,
+            sqrt(5 as u128) as u64,
             0,
         );
 
@@ -285,7 +285,7 @@ module slamm::deposit_redeem {
         let (pool, bank_a, bank_b) = test_utils::new_for_testing(
             5,
             5,
-            sqrt_u128(5 as u128) as u64,
+            sqrt(5 as u128) as u64,
             0,
         );
 
@@ -307,7 +307,7 @@ module slamm::deposit_redeem {
         let (pool, bank_a, bank_b) = test_utils::new_for_testing(
             1,
             5_000_000_000_000_000,
-            sqrt_u128(5_000_000_000_000_00 as u128) as u64,
+            sqrt(5_000_000_000_000_00 as u128) as u64,
             0,
         );
 
