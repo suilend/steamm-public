@@ -2,7 +2,6 @@
 module slamm::test_utils {
     use slamm::cpmm::{Self, State as CpmmState, Hook as CpmmHook};
     use slamm::registry;
-    use slamm::omm::{Self, Hook as OmmHook, State as OmmState};
     use slamm::bank::{Self, Bank};
     use slamm::pool::{Pool};
     use sui::test_utils::destroy;
@@ -233,32 +232,6 @@ module slamm::test_utils {
             )
         );
         
-    }
-
-    public fun update_pool_oracle_price_ahead_of_trade<A, B, W: drop>(
-        pool: &mut Pool<A, B, OmmHook<W>, OmmState>,
-        amount_in: u64,
-        a2b: bool,
-        clock_bump: u64,
-        clock: &mut Clock,
-    ) {
-        let (quote, _, _, _, _) = omm::quote_swap_for_testing(
-            pool,
-            amount_in,
-            a2b, // a2b,
-            clock.timestamp_ms() + clock_bump,
-        );
-
-        bump_clock(clock, clock_bump);
-
-        let a = if (a2b) {pool.total_funds_a() + quote.amount_in()} else {pool.total_funds_a() - quote.amount_out()};
-        let b = if (a2b) {pool.total_funds_b() - quote.amount_out()} else {pool.total_funds_b() + quote.amount_in()};
-        omm::set_oracle_price_as_hypothetical_internal_reserves(
-            pool,
-            a,
-            b,
-            clock,
-        );
     }
     
     public fun bump_clock(clock: &mut Clock, seconds: u64) {
