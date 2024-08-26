@@ -8,7 +8,6 @@ module slamm::bank {
         transfer::share_object,
         clock::Clock,
         coin::{Self, Coin},
-        bag::{Self, Bag},
     };
     use slamm::{
         bank_math,
@@ -25,7 +24,7 @@ module slamm::bank {
     // ===== Constants =====
 
     const CURRENT_VERSION: u16 = 1;
-    const MIN_AMOUNT_TO_DEPLOY: u64 = 1; // TODO: Define amount
+    const MIN_AMOUNT_TO_DEPLOY: u64 = 10; // TODO: Define amount
 
     // ===== Errors =====
 
@@ -36,12 +35,12 @@ module slamm::bank {
     const EInsufficientFundsInBank: u64 = 5;
     const EInvalidCTokenRatio: u64 = 6;
     const EDeployAmountTooLow: u64 = 7;
+    const ELendingNotActive: u64 = 8;
 
     public struct Bank<phantom P, phantom T> has key {
         id: UID,
         funds_available: Balance<T>,
         lending: Option<Lending<P>>,
-        fields: Bag,
         version: Version,
     }
 
@@ -53,10 +52,6 @@ module slamm::bank {
         utilisation_buffer_bps: u16,
         reserve_array_index: u64,
         obligation_cap: ObligationOwnerCap<P>,
-    }
-
-    public struct RebalancePromise<phantom P, phantom T> {
-        bank_id: ID,
     }
 
     // ====== Entry Functions =====
@@ -75,13 +70,10 @@ module slamm::bank {
         registry: &mut Registry,
         ctx: &mut TxContext,
     ): Bank<P, T> {
-        let fields = bag::new(ctx);
-
         let bank = Bank<P, T> {
             id: object::new(ctx),
             funds_available: balance::zero(),
             lending: none(),
-            fields,
             version: version::new(CURRENT_VERSION),
         };
 
@@ -100,8 +92,8 @@ module slamm::bank {
     ) {
         self.version.assert_version_and_upgrade(CURRENT_VERSION);
         assert!(self.lending.is_none(), ELendingAlreadyActive);
-        assert!(target_utilisation_bps + utilisation_buffer_bps < 10_000, EUtilisationRangeAboveHundredPercent);
-        assert!(target_utilisation_bps > utilisation_buffer_bps, EUtilisationRangeBelowHundredPercent);
+        assert!(target_utilisation_bps + utilisation_buffer_bps <= 10_000, EUtilisationRangeAboveHundredPercent);
+        assert!(target_utilisation_bps >= utilisation_buffer_bps, EUtilisationRangeBelowHundredPercent);
 
         let obligation_cap = lending_market.create_obligation(ctx);
         let reserve_array_index = lending_market.reserve_array_index<P, T>();
@@ -115,19 +107,6 @@ module slamm::bank {
             reserve_array_index,
             obligation_cap,
         })
-    }
-    
-    public fun rebalance_with_promise<P, T>(
-        bank: &mut Bank<P, T>,
-        lending_market: &mut LendingMarket<P>,
-        promise: RebalancePromise<P, T>,
-        clock: &Clock,
-        ctx: &mut TxContext,
-    ) {
-        let RebalancePromise { bank_id } = promise;
-        assert!(bank_id == object::id(bank), 0);
-
-        bank.rebalance(lending_market, clock, ctx);
     }
     
     public fun rebalance<P, T>(
@@ -178,23 +157,6 @@ module slamm::bank {
         };
     }
 
-    public fun prepare_bank_for_pending_withdraw<P, T>(
-        bank: &mut Bank<P, T>,
-        lending_market: &mut LendingMarket<P>,
-        withdraw_amount: u64,
-        clock: &Clock,
-        ctx: &mut TxContext,
-    ): RebalancePromise<P, T> {
-        bank.prepare_bank_for_pending_withdraw_(
-            lending_market,
-            withdraw_amount,
-            clock,
-            ctx,
-        );
-
-        RebalancePromise<P,T> { bank_id: object::id(bank) }
-    }
-
     public fun ctoken_amount<P, T>(
         bank: &Bank<P, T>,
         lending_market: &LendingMarket<P>,
@@ -225,6 +187,23 @@ module slamm::bank {
     }
 
     // ====== Admin Functions =====
+
+    public fun set_utilisation_rate<P, T>(
+        self: &mut Bank<P, T>,
+        _: &GlobalAdmin,
+        target_utilisation_bps: u16,
+        utilisation_buffer_bps: u16,
+    ) {
+        self.version.assert_version_and_upgrade(CURRENT_VERSION);
+        assert!(self.lending.is_some(), ELendingNotActive);
+        assert!(target_utilisation_bps + utilisation_buffer_bps <= 10_000, EUtilisationRangeAboveHundredPercent);
+        assert!(target_utilisation_bps >= utilisation_buffer_bps, EUtilisationRangeBelowHundredPercent);
+
+        let lending = self.lending.borrow_mut();
+
+        lending.target_utilisation_bps = target_utilisation_bps;
+        lending.utilisation_buffer_bps = utilisation_buffer_bps;
+    }
     
     entry fun migrate_as_global_admin<P, T>(
         self: &mut Bank<P, T>,
@@ -361,8 +340,6 @@ module slamm::bank {
         );
 
         ctoken_amount = ctokens.value();
-
-        assert!(ctoken_amount * lending.funds_deployed <= lending.ctokens * amount_to_recall, EInvalidCTokenRatio);
         
         let coin = lending_market.redeem_ctokens_and_withdraw_liquidity(
             bank.lending.borrow().reserve_array_index,
@@ -371,6 +348,8 @@ module slamm::bank {
             none(), // rate_limiter_exemption
             ctx,
         );
+
+        assert!(ctoken_amount * lending.funds_deployed <= lending.ctokens * coin.value() , EInvalidCTokenRatio);
 
         let lending = bank.lending.borrow_mut();
         lending.funds_deployed = lending.funds_deployed - amount_to_recall;
@@ -468,7 +447,21 @@ module slamm::bank {
     // ===== Test-Only Functions =====
     
     #[test_only]
-    public fun mock_amount_lent<P, T>(self: &mut Bank<P, T>, amount: u64){ self.lending.borrow_mut().funds_deployed = amount; }
+    public(package) fun mock_amount_lent<P, T>(self: &mut Bank<P, T>, amount: u64){ self.lending.borrow_mut().funds_deployed = amount; }
+    
+    #[test_only]
+    public(package) fun deposit_for_testing<P, T>(self: &mut Bank<P, T>, amount: u64) {
+        self.funds_available.join(
+            balance::create_for_testing(amount)
+        );
+    }
+    
+    #[test_only]
+    public(package) fun withdraw_for_testing<P, T>(self: &mut Bank<P, T>, amount: u64): Balance<T> {
+        self.funds_available.split(
+            amount
+        )
+    }
 
     // ===== Tests =====
 

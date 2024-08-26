@@ -255,4 +255,38 @@ module slamm::smm {
         let k1 = k(self);
         assert!(k1 >= k0, EInvariantViolation);
     }
+
+    #[test_only]
+    use sui::test_utils::assert_eq;
+
+    #[test]
+    fun test_compute_fee_balanced() {
+        // When the reserve rati33333o is perfectly balanced at 0.5
+        let initial_reserve_ratio = decimal::from_percent(50);
+        let final_reserve_ratio = decimal::from_percent(50);
+
+        // The fee should be equal to MIN_FEE because the abs_reserve_delta is 0
+        assert_eq(compute_fee(initial_reserve_ratio, final_reserve_ratio), MIN_FEE);
+    }
+
+    #[test]
+    fun test_compute_fee_max_delta() {
+        // When the initial and final reserve ratios are both 0 (or near 0)
+        let initial_reserve_ratio = decimal::from_percent(0);
+        let final_reserve_ratio = decimal::from_percent(0);
+
+        // The fee should be MAX_FEE because the abs_reserve_delta is 0.5
+        assert_eq(compute_fee(initial_reserve_ratio, final_reserve_ratio), MAX_FEE);
+    }
+
+    #[test]
+    fun test_compute_fee_mid_range() {
+        // When the reserve ratio is somewhere between 0 and 0.5
+        let initial_reserve_ratio = decimal::from_percent(25);
+        let final_reserve_ratio = decimal::from_percent(25);
+
+        // The fee should be halfway between MIN_FEE and MAX_FEE
+        let expected_fee = decimal::from(MIN_FEE).add(decimal::from(MAX_FEE).sub(decimal::from(MIN_FEE)).div(decimal::from(2))).ceil();
+        assert_eq(compute_fee(initial_reserve_ratio, final_reserve_ratio), expected_fee);
+    }
 }

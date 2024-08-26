@@ -1,6 +1,5 @@
 #[test_only]
 module slamm::omm_tests {
-    // use std::debug::print;
     use slamm::registry;
     use slamm::bank;
     use slamm::test_utils::{

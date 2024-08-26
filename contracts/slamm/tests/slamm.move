@@ -1690,4 +1690,226 @@ module slamm::slamm_tests {
         destroy(clock);
         test_scenario::end(scenario);
     }
+
+    #[test]
+    fun test_redeem_fees() {
+        let mut scenario = test_scenario::begin(ADMIN);
+
+        // Init Pool
+        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        
+        let ctx = ctx(&mut scenario);
+
+        let (mut pool, pool_cap) = dummy_hook::new<SUI, COIN, Wit>(
+            Wit {},
+            &mut registry,
+            100, // admin fees BPS
+            ctx,
+        );
+
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
+
+        let mut coin_a = coin::mint_for_testing<SUI>(e9(100_000), ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(e9(100_000), ctx);
+
+        let (lp_coins, _) = pool.deposit_liquidity(
+            &mut bank_a,
+            &mut bank_b,
+            &mut coin_a,
+            &mut coin_b,
+            e9(100_000),
+            e9(100_000),
+            0,
+            0,
+            ctx,
+        );
+
+        destroy(coin_a);
+        destroy(coin_b);
+
+        // Redeem liquidity
+        test_scenario::next_tx(&mut scenario, LP_PROVIDER);
+        let ctx = ctx(&mut scenario);
+
+        let (coin_a, coin_b, _) = pool.redeem_liquidity(
+            &mut bank_a,
+            &mut bank_b,
+            lp_coins,
+            0,
+            0,
+            ctx,
+        );
+
+        // Guarantees that roundings are in favour of the pool
+        assert_eq(coin_a.value(), 99_899_999_999_990);
+        assert_eq(coin_b.value(), 99_899_999_999_990);
+
+        destroy(registry);
+        destroy(coin_a);
+        destroy(coin_b);
+        destroy(bank_a);
+        destroy(bank_b);
+        destroy(pool);
+        destroy(pool_cap);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(clock);
+        destroy(bag);
+        destroy(lending_market);
+        test_scenario::end(scenario);
+    }
+    
+    #[test]
+    fun test_min_redeem_fees_ceil() {
+        let mut scenario = test_scenario::begin(ADMIN);
+
+        // Init Pool
+        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        
+        let ctx = ctx(&mut scenario);
+
+        let (mut pool, pool_cap) = dummy_hook::new<SUI, COIN, Wit>(
+            Wit {},
+            &mut registry,
+            100, // admin fees BPS
+            ctx,
+        );
+
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
+
+        let mut coin_a = coin::mint_for_testing<SUI>(e9(100_000), ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(e9(100_000), ctx);
+
+        let (mut lp_coins, _) = pool.deposit_liquidity(
+            &mut bank_a,
+            &mut bank_b,
+            &mut coin_a,
+            &mut coin_b,
+            e9(100_000),
+            e9(100_000),
+            0,
+            0,
+            ctx,
+        );
+
+        let lp_coins_2 = lp_coins.split(10, ctx);
+
+        destroy(lp_coins);
+        destroy(coin_a);
+        destroy(coin_b);
+
+        // Redeem liquidity
+        test_scenario::next_tx(&mut scenario, LP_PROVIDER);
+        let ctx = ctx(&mut scenario);
+
+        let (coin_a, coin_b, _) = pool.redeem_liquidity(
+            &mut bank_a,
+            &mut bank_b,
+            lp_coins_2,
+            0,
+            0,
+            ctx,
+        );
+
+        assert_eq(coin_a.value(), 10 - 1);
+        assert_eq(coin_b.value(), 10 - 1);
+
+        destroy(registry);
+        destroy(coin_a);
+        destroy(coin_b);
+        destroy(bank_a);
+        destroy(bank_b);
+        destroy(pool);
+        destroy(pool_cap);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(clock);
+        destroy(bag);
+        destroy(lending_market);
+        test_scenario::end(scenario);
+    }
+    
+    #[test]
+    fun test_min_redeem_fees() {
+        let mut scenario = test_scenario::begin(ADMIN);
+
+        // Init Pool
+        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+
+        let mut registry = registry::init_for_testing(ctx(&mut scenario));
+        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        
+        let ctx = ctx(&mut scenario);
+
+        let (mut pool, pool_cap) = dummy_hook::new<SUI, COIN, Wit>(
+            Wit {},
+            &mut registry,
+            100, // admin fees BPS
+            ctx,
+        );
+
+        pool.no_redemption_fees_for_testing_with_min_fee();
+
+        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
+
+        let mut coin_a = coin::mint_for_testing<SUI>(e9(100_000), ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(e9(100_000), ctx);
+
+        let (mut lp_coins, _) = pool.deposit_liquidity(
+            &mut bank_a,
+            &mut bank_b,
+            &mut coin_a,
+            &mut coin_b,
+            e9(100_000),
+            e9(100_000),
+            0,
+            0,
+            ctx,
+        );
+
+        let lp_coins_2 = lp_coins.split(10, ctx);
+
+        destroy(lp_coins);
+        destroy(coin_a);
+        destroy(coin_b);
+
+        // Redeem liquidity
+        test_scenario::next_tx(&mut scenario, LP_PROVIDER);
+        let ctx = ctx(&mut scenario);
+
+        let (coin_a, coin_b, _) = pool.redeem_liquidity(
+            &mut bank_a,
+            &mut bank_b,
+            lp_coins_2,
+            0,
+            0,
+            ctx,
+        );
+
+        assert_eq(coin_a.value(), 10 - 1);
+        assert_eq(coin_b.value(), 10 - 1);
+
+        destroy(registry);
+        destroy(coin_a);
+        destroy(coin_b);
+        destroy(bank_a);
+        destroy(bank_b);
+        destroy(pool);
+        destroy(pool_cap);
+        destroy(lend_cap);
+        destroy(prices);
+        destroy(clock);
+        destroy(bag);
+        destroy(lending_market);
+        test_scenario::end(scenario);
+    }
 }
