@@ -109,7 +109,7 @@ module slamm::pool_math {
         min_a: u64,
         min_b: u64
     ): (u64, u64) {
-        assert!(max_a > 0 && max_b > 0, EDepositMaxParamsCantBeZero);
+        assert!(max_a > 0 || max_b > 0, EDepositMaxParamsCantBeZero);
 
         if(reserve_a == 0 && reserve_b == 0) {
             (max_a, max_b)
@@ -139,6 +139,14 @@ module slamm::pool_math {
         amount_b: u64
     ): u64 {
         if (lp_supply == 0) {
+            if (amount_a == 0) {
+                return amount_b
+            };
+
+            if (amount_b == 0) {
+                return amount_a
+            };
+
             (sqrt((amount_a as u128) * (amount_b as u128)) as u64)
         } else {
             min(
