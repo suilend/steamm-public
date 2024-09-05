@@ -165,27 +165,6 @@ module slamm::bank {
         bank.ctoken_amount_(lending_market, amount)
     }
 
-    public fun needs_lending_action<P, T>(
-        bank: &Bank<P, T>,
-        amount: u64,
-        is_input: bool,
-    ): bool {
-        if (bank.lending.is_none()) {
-            return false
-        };
-
-        let lending = bank.lending.borrow();
-
-        needs_lending_action_(
-            bank.funds_available.value(),
-            lending.funds_deployed,
-            lending.target_utilisation_bps as u64,
-            lending.utilisation_buffer_bps as u64,
-            amount,
-            is_input,
-        )
-    }
-
     // ====== Admin Functions =====
 
     public fun set_utilisation_rate<P, T>(
@@ -375,38 +354,6 @@ module slamm::bank {
         ctoken_amount
     }
 
-    fun needs_lending_action_(
-        funds_available: u64,
-        funds_deployed: u64,
-        target_utilisation: u64,
-        utilisation_buffer: u64,
-        amount: u64,
-        is_input: bool,
-    ): bool {
-        if (!is_input) {
-            bank_math::assert_output(funds_available, funds_deployed, amount);
-
-            // If the amount is bigger than the reserve, then it's clear that
-            // we need to recall
-            if (amount > funds_available) {
-                return true
-            }
-        };
-
-        let funds_available = if (is_input) { funds_available + amount } else { funds_available - amount };
-        let effective_utilisation = bank_math::compute_utilisation_rate(funds_available, funds_deployed);
-
-        if (effective_utilisation < target_utilisation - utilisation_buffer) {
-            return true
-        };
-
-        if (effective_utilisation > target_utilisation + utilisation_buffer) {
-            return true
-        };
-
-        false
-    }
-
     // ====== Getters Functions =====
 
     public fun lending<P, T>(self: &Bank<P, T>): &Option<Lending<P>> { &self.lending }
@@ -461,89 +408,5 @@ module slamm::bank {
         self.funds_available.split(
             amount
         )
-    }
-
-    // ===== Tests =====
-
-    #[test_only]
-    use sui::test_utils::assert_eq;
-    
-    #[test]
-    #[expected_failure(abort_code = bank_math::EOutputExceedsTotalBankReserves)]
-    fun test_fail_compute_recall_with_output_too_big() {
-        needs_lending_action_(2_000, 2_000, 1_000, 500, 4001, false);
-    }
-    
-    #[test]
-    fun test_compute_lending_action() {
-        // Reserve, Lent, Utilisation Ratio
-        assert_eq(
-            needs_lending_action_(0, 8_000, 8_000, 500, 0, false),
-            true, // some(LendingAction { amount: 1_600, is_lend: false })
-        );
-        assert_eq(
-            needs_lending_action_(500, 8_000, 8_000, 500, 0, false),
-            true, // some(LendingAction { amount: 1_200, is_lend: false })
-        );
-        assert_eq(
-            needs_lending_action_(1_000, 8_000, 8_000, 500, 0, false),
-            true, // some(LendingAction { amount: 800, is_lend: false })
-        );
-        assert_eq(
-            needs_lending_action_(1_500, 8_000, 8_000, 500, 0, false),
-            false, // none()
-        );
-        assert_eq(
-            needs_lending_action_(2_000, 8_000, 8_000, 500, 0, false),
-            false, // none()
-        );
-        assert_eq(
-            needs_lending_action_(2_500, 8_000, 8_000, 500, 0, false),
-            false, // none()
-        );
-        assert_eq(
-            needs_lending_action_(3_000, 8_000, 8_000, 500, 0, false),
-            true, // some(LendingAction { amount: 800, is_lend: true })
-        );
-        assert_eq(
-            needs_lending_action_(3_500, 8_000, 8_000, 500, 0, false),
-            true, // some(LendingAction { amount: 1_200, is_lend: true })
-        );
-        assert_eq(
-            needs_lending_action_(4_000, 8_000, 8_000, 500, 0, false),
-            true, // some(LendingAction { amount: 1_600, is_lend: true })
-        );
-        assert_eq(
-            needs_lending_action_(4_500, 8_000, 8_000, 500, 0, false),
-            true, // some(LendingAction { amount: 2_000, is_lend: true })
-        );
-        assert_eq(
-            needs_lending_action_(5_000, 8_000, 8_000, 500, 0, false),
-            true, // some(LendingAction { amount: 2_400, is_lend: true })
-        );
-        assert_eq(
-            needs_lending_action_(5_500, 8_000, 8_000, 500, 0, false),
-            true, // some(LendingAction { amount: 2_800, is_lend: true })
-        );
-        assert_eq(
-            needs_lending_action_(6_000, 8_000, 8_000, 500, 0, false),
-            true, // some(LendingAction { amount: 3_200, is_lend: true })
-        );
-        assert_eq(
-            needs_lending_action_(6_500, 8_000, 8_000, 500, 0, false),
-            true, // some(LendingAction { amount: 3_600, is_lend: true })
-        );
-        assert_eq(
-            needs_lending_action_(7_000, 8_000, 8_000, 500, 0, false),
-            true, // some(LendingAction { amount: 4_000, is_lend: true })
-        );
-        assert_eq(
-            needs_lending_action_(7_500, 8_000, 8_000, 500, 0, false),
-            true, // some(LendingAction { amount: 4_400, is_lend: true })
-        );
-        assert_eq(
-            needs_lending_action_(8_000, 8_000, 8_000, 500, 0, false),
-            true, // some(LendingAction { amount: 4_800, is_lend: true })
-        );
     }
 }
