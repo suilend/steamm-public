@@ -34,8 +34,9 @@ module slamm::bank {
     const ELendingAlreadyActive: u64 = 4;
     const EInsufficientFundsInBank: u64 = 5;
     const EInvalidCTokenRatio: u64 = 6;
-    const EDeployAmountTooLow: u64 = 7;
-    const ELendingNotActive: u64 = 8;
+    const ECTokenRatioTooLow: u64 = 7;
+    const EDeployAmountTooLow: u64 = 8;
+    const ELendingNotActive: u64 = 9;
 
     public struct Bank<phantom P, phantom T> has key {
         id: UID,
@@ -344,6 +345,12 @@ module slamm::bank {
         lending.ctokens = lending.ctokens - ctoken_amount;
 
         bank.funds_available.join(coin.into_balance());
+
+        let reserves = lending_market.reserves();
+        let reserve = reserves.borrow(lending.reserve_array_index);
+        let ctoken_ratio = reserve.ctoken_ratio();
+
+        assert!(decimal::from(lending.ctokens).mul(ctoken_ratio).floor() >= lending.funds_deployed, ECTokenRatioTooLow);
     }
 
     // ====== Getters Functions =====
