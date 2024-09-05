@@ -280,7 +280,7 @@ module slamm::deposit_redeem {
     }
 
     #[test]
-    #[expected_failure(abort_code = pool_math::EDepositMaxParamsCantBeZero)]
+    #[expected_failure(abort_code = pool_math::EDepositMaxAParamCantBeZero)]
     fun test_fail_max_params_as_zero() {
         let (pool, bank_a, bank_b) = test_utils::new_for_testing(
             5,

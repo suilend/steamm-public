@@ -18,6 +18,7 @@ module slamm::cpmm {
     // ===== Errors =====
 
     const EInvariantViolation: u64 = 1;
+    const EZeroInvariant: u64 = 2;
 
     /// Hook type for the constant-product AMM implementation. Serves as both
     /// the hook's witness (authentication) as well as it wraps around the pool
@@ -35,8 +36,7 @@ module slamm::cpmm {
     /// instead we compute it at runtime.
     public struct State has store {
         version: Version,
-        offset_a: u64,
-        offset_b: u64,
+        offset: u64,
     }
 
     // ===== Public Methods =====
@@ -60,11 +60,10 @@ module slamm::cpmm {
         _witness: W,
         registry: &mut Registry,
         swap_fee_bps: u64,
-        offset_a: u64,
-        offset_b: u64,
+        offset: u64,
         ctx: &mut TxContext,
     ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>, State>) {
-        let inner = State { version: version::new(CURRENT_VERSION), offset_a, offset_b };
+        let inner = State { version: version::new(CURRENT_VERSION), offset };
 
         let (pool, pool_cap) = pool::new<A, B, Hook<W>, State>(
             Hook<W> {},
@@ -87,7 +86,6 @@ module slamm::cpmm {
             witness,
             registry,
             swap_fee_bps,
-            0,
             0,
             ctx,
         )
@@ -131,7 +129,7 @@ module slamm::cpmm {
         );
 
         // Recompute invariant
-        assert_invariant_does_not_decrease(self, k0);
+        check_invariance(self, k0);
 
         response
     }
@@ -151,8 +149,7 @@ module slamm::cpmm {
             reserve_b,
             amount_in,
             a2b,
-            self.inner().offset_a,
-            self.inner().offset_b,
+            self.inner().offset,
         );
 
         self.get_quote(amount_in, amount_out, a2b)
@@ -163,8 +160,7 @@ module slamm::cpmm {
         reserve_b: u64,
         amount_in: u64,
         a2b: bool,
-        offset_a: u64,
-        offset_b: u64,
+        offset: u64,
     ): u64 {
         if (a2b) {
             // IN: A && OUT: B
@@ -172,8 +168,8 @@ module slamm::cpmm {
                 reserve_b, // reserve_out
                 reserve_a, // reserve_in
                 amount_in,
-                offset_a,
-                offset_b,
+                0,
+                offset,
             )
         } else {
             // IN: B && OUT: A
@@ -181,30 +177,29 @@ module slamm::cpmm {
                 reserve_a, // reserve_out
                 reserve_b, // reserve_in
                 amount_in,
-                offset_b,
-                offset_a,
+                offset,
+                0,
             )
         }
     }
 
     // ===== View Functions =====
     
-    public fun offsets<A, B, W: drop>(self: &Pool<A, B, Hook<W>, State>): (u64, u64) {
-        (self.inner().offset_a, self.inner().offset_b)
+    public fun offset<A, B, W: drop>(self: &Pool<A, B, Hook<W>, State>): u64 {
+        self.inner().offset
     }
     
     public fun k<A, B, W: drop>(self: &Pool<A, B, Hook<W>, State>): u128 {
-        let (offset_a, offset_b) = offsets(self);
-        k_(self, offset_a, offset_b)
+        let offset = offset(self);
+        k_(self, offset)
     }
     
     public fun k_<A, B, Hook: drop, State: store>(
         self: &Pool<A, B, Hook, State>,
-        offset_a: u64,
-        offset_b: u64,
+        offset: u64,
     ): u128 {
         let (total_funds_a, total_funds_b) = self.total_funds();
-        (((total_funds_a + offset_a) as u128) * ((total_funds_b + offset_b) as u128))
+        ((total_funds_a as u128) * ((total_funds_b + offset) as u128))
     }
 
     // ===== Versioning =====
@@ -245,18 +240,19 @@ module slamm::cpmm {
         safe_mul_div(adjusted_reserve_out, amount_in, adjusted_reserve_in + amount_in) // amount_out
     }
     
-    fun assert_invariant_does_not_decrease<A, B, W: drop>(self: &Pool<A, B, Hook<W>, State>, k0: u128) {
+    fun check_invariance<A, B, W: drop>(self: &Pool<A, B, Hook<W>, State>, k0: u128) {
         let k1 = k(self);
+        assert!(k1 > 0, EZeroInvariant);
         assert!(k1 >= k0, EInvariantViolation);
     }
     
-    public(package) fun assert_invariant_does_not_decrease_<A, B, Hook: drop, State: store>(
+    public(package) fun check_invariance_<A, B, Hook: drop, State: store>(
         self: &Pool<A, B, Hook, State>,
         k0: u128,
-        offset_a: u64,
-        offset_b: u64,
+        offset: u64,
     ) {
-        let k1 = k_(self, offset_a, offset_b);
+        let k1 = k_(self, offset);
+        assert!(k1 > 0, EZeroInvariant);
         assert!(k1 >= k0, EInvariantViolation);
     }
     

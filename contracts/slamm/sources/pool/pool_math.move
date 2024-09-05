@@ -27,7 +27,7 @@ module slamm::pool_math {
     // in favor of of the pool. This error should not occur
     const ELpSupplyToReserveRatioViolation: u64 = 6;
     // When depositing the max deposit params cannot be zero
-    const EDepositMaxParamsCantBeZero: u64 = 7;
+    const EDepositMaxAParamCantBeZero: u64 = 7;
     // The deposit ratio computed leads to a coin B deposit of zero
     const EDepositRatioLeadsToZeroB: u64 = 8;
     // The deposit ratio computed leads to a coin A deposit of zero
@@ -109,7 +109,7 @@ module slamm::pool_math {
         min_a: u64,
         min_b: u64
     ): (u64, u64) {
-        assert!(max_a > 0 || max_b > 0, EDepositMaxParamsCantBeZero);
+        assert!(max_a > 0, EDepositMaxAParamCantBeZero);
 
         if(reserve_a == 0 && reserve_b == 0) {
             (max_a, max_b)

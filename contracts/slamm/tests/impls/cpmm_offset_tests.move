@@ -1,6 +1,5 @@
 #[test_only]
 module slamm::cpmm_offset_tests {
-    // use std::debug::print;
     use slamm::pool::minimum_liquidity;
     use slamm::registry;
     use slamm::bank;
@@ -36,12 +35,11 @@ module slamm::cpmm_offset_tests {
             &mut registry,
             100, // admin fees BPS
             20,
-            20,
             ctx,
         );
 
         let mut coin_a = coin::mint_for_testing<SUI>(500_000, ctx);
-        let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(0, ctx);
 
         let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
@@ -51,17 +49,17 @@ module slamm::cpmm_offset_tests {
             &mut bank_b,
             &mut coin_a,
             &mut coin_b,
-            0,
             500_000,
+            0,
             0,
             0,
             ctx,
         );
         
         let (reserve_a, reserve_b) = pool.total_funds();
-        assert!(reserve_a == 0, 0);
-        assert!(reserve_b == 500000, 0);
-        assert!(pool.cpmm_k() == (500000 + 20) * 20, 0);
+        assert_eq(reserve_a, 500_000);
+        assert_eq(reserve_b, 0);
+        assert_eq(pool.cpmm_k(), 500_000 * 20);
         assert_eq(pool.lp_supply_val(), 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
 
@@ -99,7 +97,6 @@ module slamm::cpmm_offset_tests {
             &mut registry,
             100, // admin fees BPS
             20,
-            20,
             ctx,
         );
 
@@ -114,17 +111,17 @@ module slamm::cpmm_offset_tests {
             &mut bank_b,
             &mut coin_a,
             &mut coin_b,
-            0,
             500_000,
+            0,
             0,
             0,
             ctx,
         );
         
         let (reserve_a, reserve_b) = pool.total_funds();
-        assert!(reserve_a == 0, 0);
-        assert!(reserve_b == 500000, 0);
-        assert!(pool.cpmm_k() == (500000 + 20) * 20, 0);
+        assert!(reserve_a == 500_000, 0);
+        assert!(reserve_b == 0, 0);
+        assert!(pool.cpmm_k() == 500000 * 20, 0);
         assert_eq(pool.lp_supply_val(), 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
 
@@ -144,8 +141,8 @@ module slamm::cpmm_offset_tests {
         );
 
         assert_eq(redeem_result.burn_lp(), 499990);
-        assert_eq(pool.total_funds_a(), 0);
-        assert_eq(pool.total_funds_b(), 10);
+        assert_eq(pool.total_funds_a(), 10);
+        assert_eq(pool.total_funds_b(), 0);
 
         destroy(coin_a);
         destroy(coin_b);
