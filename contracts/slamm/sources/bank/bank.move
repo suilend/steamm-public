@@ -157,12 +157,21 @@ module slamm::bank {
         };
     }
 
+    // Given how much tokens we want to withdraw form the lending market,
+    // how many ctokens do we need to burn
     public fun ctoken_amount<P, T>(
         bank: &Bank<P, T>,
         lending_market: &LendingMarket<P>,
         amount: u64,
     ): u64 {
-        bank.ctoken_amount_(lending_market, amount)
+        let reserves = lending_market.reserves();
+        let lending = bank.lending.borrow();
+        let reserve = reserves.borrow(lending.reserve_array_index);
+        let ctoken_ratio = reserve.ctoken_ratio();
+
+        let ctoken_amount = decimal::from(amount).div(ctoken_ratio).floor();
+        
+        ctoken_amount
     }
 
     // ====== Admin Functions =====
@@ -308,7 +317,7 @@ module slamm::bank {
             return
         };
 
-        let mut ctoken_amount = bank.ctoken_amount_(lending_market, amount_to_recall);
+        let mut ctoken_amount = bank.ctoken_amount(lending_market, amount_to_recall);
 
         let ctokens: Coin<CToken<P, T>> = lending_market.withdraw_ctokens(
             lending.reserve_array_index,
@@ -335,23 +344,6 @@ module slamm::bank {
         lending.ctokens = lending.ctokens - ctoken_amount;
 
         bank.funds_available.join(coin.into_balance());
-    }
-
-    // Given how much tokens we want to withdraw form the lending market,
-    // how many ctokens do we need to burn
-    fun ctoken_amount_<P, T>(
-        bank: &Bank<P, T>,
-        lending_market: &LendingMarket<P>,
-        amount: u64,
-    ): u64 {
-        let reserves = lending_market.reserves();
-        let lending = bank.lending.borrow();
-        let reserve = reserves.borrow(lending.reserve_array_index);
-        let ctoken_ratio = reserve.ctoken_ratio();
-
-        let ctoken_amount = decimal::from(amount).div(ctoken_ratio).floor();
-        
-        ctoken_amount
     }
 
     // ====== Getters Functions =====
