@@ -341,7 +341,7 @@ module slamm::bank {
         assert!(ctoken_amount * lending.funds_deployed <= lending.ctokens * coin.value() , EInvalidCTokenRatio);
 
         let lending = bank.lending.borrow_mut();
-        lending.funds_deployed = lending.funds_deployed - amount_to_recall;
+        lending.funds_deployed = lending.funds_deployed - coin.value();
         lending.ctokens = lending.ctokens - ctoken_amount;
 
         bank.funds_available.join(coin.into_balance());
