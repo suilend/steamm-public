@@ -24,7 +24,7 @@ module slamm::bank {
     // ===== Constants =====
 
     const CURRENT_VERSION: u16 = 1;
-    const MIN_AMOUNT_TO_DEPLOY: u64 = 10; // TODO: Define amount
+    const MIN_TOKEN_BLOCK_SIZE: u64 = 10; // TODO: Define amount
 
     // ===== Errors =====
 
@@ -279,7 +279,7 @@ module slamm::bank {
             return
         };
 
-        assert!(amount_to_deploy >= MIN_AMOUNT_TO_DEPLOY, EDeployAmountTooLow);
+        assert!(amount_to_deploy >= MIN_TOKEN_BLOCK_SIZE, EDeployAmountTooLow);
 
         let balance_to_lend = bank.funds_available.split(amount_to_deploy);
 
@@ -318,6 +318,7 @@ module slamm::bank {
             return
         };
 
+        let amount_to_recall = amount_to_recall.max(MIN_TOKEN_BLOCK_SIZE);
         let mut ctoken_amount = bank.ctoken_amount(lending_market, amount_to_recall);
 
         let ctokens: Coin<CToken<P, T>> = lending_market.withdraw_ctokens(
