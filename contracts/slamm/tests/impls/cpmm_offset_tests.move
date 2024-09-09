@@ -3,7 +3,7 @@ module slamm::cpmm_offset_tests {
     use slamm::pool::minimum_liquidity;
     use slamm::registry;
     use slamm::bank;
-    use slamm::cpmm::{Self};
+    use slamm::cpmm::{Self, offset};
     use slamm::test_utils::{COIN, reserve_args};
     use sui::test_scenario::{Self, ctx};
     use sui::sui::SUI;
@@ -59,7 +59,7 @@ module slamm::cpmm_offset_tests {
         let (reserve_a, reserve_b) = pool.total_funds();
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 0);
-        assert_eq(pool.cpmm_k(), 500_000 * 20);
+        assert_eq(pool.cpmm_k(offset(&pool)), 500_000 * 20);
         assert_eq(pool.lp_supply_val(), 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
 
@@ -121,7 +121,7 @@ module slamm::cpmm_offset_tests {
         let (reserve_a, reserve_b) = pool.total_funds();
         assert!(reserve_a == 500_000, 0);
         assert!(reserve_b == 0, 0);
-        assert!(pool.cpmm_k() == 500000 * 20, 0);
+        assert!(pool.cpmm_k(offset(&pool)) == 500000 * 20, 0);
         assert_eq(pool.lp_supply_val(), 500_000);
         assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
 

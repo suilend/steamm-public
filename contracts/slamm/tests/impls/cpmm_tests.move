@@ -63,7 +63,7 @@ module slamm::cpmm_tests {
         let (reserve_a, reserve_b) = pool.total_funds();
         let reserve_ratio_0 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
 
-        assert_eq(pool.cpmm_k(), 500_000 * 500_000);
+        assert_eq(pool.cpmm_k(0), 500_000 * 500_000);
         assert_eq(pool.lp_supply_val(), 500_000);
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
@@ -259,7 +259,7 @@ module slamm::cpmm_tests {
         let (reserve_a, reserve_b) = pool.total_funds();
         let reserve_ratio_0 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
 
-        assert_eq(pool.cpmm_k(), 500000000000000000000000000);
+        assert_eq(pool.cpmm_k(0), 500000000000000000000000000);
         assert_eq(pool.lp_supply_val(), 22360679774997);
         assert_eq(reserve_a, e9(1_000));
         assert_eq(reserve_b, e9(500_000));
@@ -572,7 +572,7 @@ module slamm::cpmm_tests {
         let (reserve_a, reserve_b) = pool.total_funds();
         let reserve_ratio_0 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
 
-        assert_eq(pool.cpmm_k(), 500000000000000000000000000);
+        assert_eq(pool.cpmm_k(0), 500000000000000000000000000);
         assert_eq(pool.lp_supply_val(), 22360679774997);
         assert_eq(reserve_a, e9(1_000));
         assert_eq(reserve_b, e9(500_000));
@@ -674,7 +674,7 @@ module slamm::cpmm_tests {
         let (reserve_a, reserve_b) = pool.total_funds();
         let reserve_ratio_0 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
 
-        assert_eq(pool.cpmm_k(), 1000000000000000000000000);
+        assert_eq(pool.cpmm_k(0), 1000000000000000000000000);
         assert_eq(pool.lp_supply_val(), 1000000000000);
         assert_eq(reserve_a, e9(1_000));
         assert_eq(reserve_b, e9(1_000));
