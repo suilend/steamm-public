@@ -28,10 +28,8 @@ module slamm::pool_math {
     const ELpSupplyToReserveRatioViolation: u64 = 6;
     // When depositing the max deposit params cannot be zero
     const EDepositMaxAParamCantBeZero: u64 = 7;
-    // The deposit ratio computed leads to a coin B deposit of zero
-    const EDepositRatioLeadsToZeroB: u64 = 8;
     // The deposit ratio computed leads to a coin A deposit of zero
-    const EDepositRatioLeadsToZeroA: u64 = 9;
+    const EDepositRatioLeadsToZeroA: u64 = 8;
 
     
     // ===== Package functions =====
@@ -117,7 +115,6 @@ module slamm::pool_math {
             let b_star = safe_mul_div_up(max_a, reserve_b, reserve_a);
             if (b_star <= max_b) {
 
-                assert!(b_star > 0, EDepositRatioLeadsToZeroB);
                 assert!(b_star >= min_b, EInsufficientDepositB);
 
                 (max_a, b_star)
@@ -145,10 +142,14 @@ module slamm::pool_math {
 
             (sqrt((amount_a as u128) * (amount_b as u128)) as u64)
         } else {
-            min(
-                safe_mul_div(amount_a, lp_supply, reserve_a),
-                safe_mul_div(amount_b, lp_supply, reserve_b)
-            )
+            if (reserve_b == 0) {
+                safe_mul_div(amount_a, lp_supply, reserve_a)
+            } else {
+                min(
+                    safe_mul_div(amount_a, lp_supply, reserve_a),
+                    safe_mul_div(amount_b, lp_supply, reserve_b)
+                )
+            }
         }
     }
 
