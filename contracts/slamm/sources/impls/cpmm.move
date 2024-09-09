@@ -8,6 +8,7 @@ module slamm::cpmm {
         bank::Bank,
         pool::{Self, Pool, PoolCap, SwapResult, Intent},
         version::{Self, Version},
+        math::safe_mul_div
     };
 
     // ===== Constants =====
@@ -90,7 +91,6 @@ module slamm::cpmm {
         )
     }
 
-
     public fun intent_swap<A, B, W: drop>(
         self: &mut Pool<A, B, Hook<W>, State>,
         amount_in: u64,
@@ -135,7 +135,6 @@ module slamm::cpmm {
 
     // cpmm return price, take price that's best for LPs, on top we add dynamic fee
     // fees should always be computed on the output amount;
-
     public fun quote_swap<A, B, W: drop>(
         self: &Pool<A, B, Hook<W>, State>,
         amount_in: u64,
@@ -226,17 +225,13 @@ module slamm::cpmm {
         a2b: bool,
     ): u64 {
         // if a2b == true, a is input, b is output
-        if (a2b) {
-            let reserve_out_amount_in = (amount_in as u128) * (reserve_out as u128);
-            let offset_reserve_in = (offset as u128) * (reserve_in as u128);
-            let offset_amount_in = (offset as u128) * (amount_in as u128);
-            let num = reserve_out_amount_in + offset_reserve_in + offset_amount_in;
-
-            (num / ((reserve_in + amount_in) as u128) as u64)
+        let (reserve_in_, reserve_out_) = if (a2b) {
+            (reserve_in, reserve_out + offset)
         } else {
-            let reserve_out_amount_in = (amount_in as u128) * (reserve_out as u128);
-            (reserve_out_amount_in / ((reserve_in + amount_in + offset) as u128) as u64)
-        }
+            (reserve_in + offset, reserve_out)
+        };
+        
+        safe_mul_div(reserve_out_, amount_in, reserve_in_ + amount_in) // amount_out
     }
     
     public(package) fun check_invariance<A, B, Hook: drop, State: store>(
