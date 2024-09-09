@@ -139,10 +139,6 @@ module slamm::pool_math {
         amount_b: u64
     ): u64 {
         if (lp_supply == 0) {
-            if (amount_a == 0) {
-                return amount_b
-            };
-
             if (amount_b == 0) {
                 return amount_a
             };
