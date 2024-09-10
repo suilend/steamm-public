@@ -822,12 +822,10 @@ module slamm::cpmm_offset_tests {
         destroy(coin_a);
         destroy(coin_b);
         
-        let quote = pool.cpmm_quote_swap(
+        pool.cpmm_quote_swap(
             10_000_000,
             true, // a2b
         );
-
-        print(&quote);
 
         destroy(bank_a);
         destroy(bank_b);
@@ -898,7 +896,7 @@ module slamm::cpmm_offset_tests {
             true, // a2b
         );
 
-        let swap_result_1 = pool.cpmm_execute_swap(
+        pool.cpmm_execute_swap(
             &mut bank_a,
             &mut bank_b,
             swap_intent,
@@ -907,9 +905,6 @@ module slamm::cpmm_offset_tests {
             0,
             ctx,
         );
-
-        print(&swap_result_1.amount_out());
-
 
         destroy(coin_a);
         destroy(coin_b);
@@ -927,7 +922,4 @@ module slamm::cpmm_offset_tests {
         destroy(lending_market);
         test_scenario::end(scenario);
     }
-
-    use std::debug::print;
-
 }

@@ -1,5 +1,6 @@
 /// Constant-Product AMM Hook implementation
 module slamm::cpmm {
+    use std::option::none;
     use sui::coin::Coin;
     use slamm::{
         global_admin::GlobalAdmin,
@@ -8,7 +9,7 @@ module slamm::cpmm {
         bank::Bank,
         pool::{Self, Pool, PoolCap, SwapResult, Intent, assert_liquidity},
         version::{Self, Version},
-        math::safe_mul_div
+        math::{safe_mul_div, checked_mul_div}
     };
 
     // ===== Constants =====
@@ -197,6 +198,19 @@ module slamm::cpmm {
     ): u128 {
         let (total_funds_a, total_funds_b) = self.total_funds();
         ((total_funds_a as u128) * ((total_funds_b + offset) as u128))
+    }
+
+    public fun max_amount_in_on_a2b<A, B, W: drop>(
+        self: &Pool<A, B, Hook<W>, State>,
+    ): Option<u64> {
+        let (reserve_in, reserve_out) = self.total_funds();
+        let offset = offset(self);
+
+        if (offset == 0) {
+            return none()
+        };
+        
+        checked_mul_div(reserve_out, reserve_in, offset) // max_amount_in
     }
 
     // ===== Versioning =====
