@@ -6,7 +6,7 @@ module slamm::cpmm {
         registry::{Registry},
         quote::SwapQuote,
         bank::Bank,
-        pool::{Self, Pool, PoolCap, SwapResult, Intent},
+        pool::{Self, Pool, PoolCap, SwapResult, Intent, assert_liquidity},
         version::{Self, Version},
         math::safe_mul_div
     };
@@ -161,21 +161,27 @@ module slamm::cpmm {
         a2b: bool,
     ): u64 {
         if (a2b) {
-            quote_swap_(
+            let amount_out = quote_swap_(
                 amount_in,
                 reserve_a,
                 reserve_b,
                 offset,
                 a2b,
-            )
+            );
+
+            assert_liquidity(reserve_b, amount_out);
+            return amount_out
         } else {
-            quote_swap_(
+            let amount_out = quote_swap_(
                 amount_in,
                 reserve_b,
                 reserve_a,
                 offset,
                 a2b,
-            )
+            );
+
+            assert_liquidity(reserve_a, amount_out);
+            return amount_out
         }
     }
 

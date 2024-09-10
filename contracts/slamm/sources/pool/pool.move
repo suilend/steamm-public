@@ -675,6 +675,10 @@ module slamm::pool {
 
     // ===== Package functions =====
 
+    public(package) fun assert_liquidity(reserve_out: u64, amount_out: u64) {
+        assert!(amount_out <= reserve_out, EOutputExceedsLiquidity);
+    }
+
     public(package) fun get_quote<A, B, Hook: drop, State: store>(
         self: &Pool<A, B, Hook, State>,
         amount_in: u64,
