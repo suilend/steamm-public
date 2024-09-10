@@ -13,10 +13,10 @@ module slamm::pool_math {
 
     // When depositing leads to a coin B deposit amount lower
     // than the min_b parameter
-    const EInsufficientDepositB: u64 = 1;
+    const EEffectiveDepositBBelowMinB: u64 = 1;
     // When depositing leads to a coin A deposit amount lower
     // than the min_a parameter
-    const EInsufficientDepositA: u64 = 2;
+    const EEffectiveDepositABelowMinA: u64 = 2;
     // When the deposit max parameter ratio is invalid
     const EDepositRatioInvalid: u64 = 3;
     // The amount of coin A reedemed is below the minimum set
@@ -115,14 +115,14 @@ module slamm::pool_math {
             let b_star = safe_mul_div_up(max_a, reserve_b, reserve_a);
             if (b_star <= max_b) {
 
-                assert!(b_star >= min_b, EInsufficientDepositB);
+                assert!(b_star >= min_b, EEffectiveDepositBBelowMinB);
 
                 (max_a, b_star)
             } else {
                 let a_star = safe_mul_div_up(max_b, reserve_a, reserve_b);
                 assert!(a_star > 0, EDepositRatioLeadsToZeroA);
                 assert!(a_star <= max_a, EDepositRatioInvalid);
-                assert!(a_star >= min_a, EInsufficientDepositA);
+                assert!(a_star >= min_a, EEffectiveDepositABelowMinA);
                 (a_star, max_b)
             } 
         }

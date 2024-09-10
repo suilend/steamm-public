@@ -378,7 +378,7 @@ module slamm::slamm_tests {
     }
     
     #[test]
-    #[expected_failure(abort_code = pool_math::EInsufficientDepositA)]
+    #[expected_failure(abort_code = pool_math::EEffectiveDepositABelowMinA)]
     fun test_fail_deposit_slippage_a() {
         let mut scenario = test_scenario::begin(ADMIN);
 
@@ -480,7 +480,7 @@ module slamm::slamm_tests {
     }
     
     #[test]
-    #[expected_failure(abort_code = pool_math::EInsufficientDepositB)]
+    #[expected_failure(abort_code = pool_math::EEffectiveDepositBBelowMinB)]
     fun test_fail_deposit_slippage_b() {
         let mut scenario = test_scenario::begin(ADMIN);
 
