@@ -265,7 +265,7 @@ module slamm::pool {
 
         let quote = self.consume(intent);
 
-        assert!(quote.amount_out() > 0, ESwapOutputAmountIsZero); // TODO: move this to as_intent function
+        assert!(quote.amount_out() > 0, ESwapOutputAmountIsZero);
         assert!(quote.amount_out() >= min_amount_out, ESwapExceedsSlippage);
 
         let (protocol_fee_a, protocol_fee_b) = self.protocol_fees.balances_mut();
