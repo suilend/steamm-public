@@ -200,19 +200,6 @@ module slamm::cpmm {
         ((total_funds_a as u128) * ((total_funds_b + offset) as u128))
     }
 
-    public fun max_amount_in_on_a2b<A, B, W: drop>(
-        self: &Pool<A, B, Hook<W>, State>,
-    ): Option<u64> {
-        let (reserve_in, reserve_out) = self.total_funds();
-        let offset = offset(self);
-
-        if (offset == 0) {
-            return none()
-        };
-        
-        checked_mul_div(reserve_out, reserve_in, offset) // max_amount_in
-    }
-
     // ===== Versioning =====
     
     entry fun migrate<A, B, W>(
@@ -235,6 +222,31 @@ module slamm::cpmm {
         self.inner_mut().version.migrate_(CURRENT_VERSION);
     }
 
+    // ===== Package Functions =====
+    
+    public(package) fun check_invariance<A, B, Hook: drop, State: store>(
+        self: &Pool<A, B, Hook, State>,
+        k0: u128,
+        offset: u64,
+    ) {
+        let k1 = k(self, offset);
+        assert!(k1 > 0, EZeroInvariant);
+        assert!(k1 >= k0, EInvariantViolation);
+    }
+
+    public(package) fun max_amount_in_on_a2b<A, B, W: drop>(
+        self: &Pool<A, B, Hook<W>, State>,
+    ): Option<u64> {
+        let (reserve_in, reserve_out) = self.total_funds();
+        let offset = offset(self);
+
+        if (offset == 0) {
+            return none()
+        };
+        
+        checked_mul_div(reserve_out, reserve_in, offset) // max_amount_in
+    }
+
     // ===== Private Functions =====
 
     fun quote_swap_(
@@ -252,16 +264,6 @@ module slamm::cpmm {
         };
         
         safe_mul_div(reserve_out_, amount_in, reserve_in_ + amount_in) // amount_out
-    }
-    
-    public(package) fun check_invariance<A, B, Hook: drop, State: store>(
-        self: &Pool<A, B, Hook, State>,
-        k0: u128,
-        offset: u64,
-    ) {
-        let k1 = k(self, offset);
-        assert!(k1 > 0, EZeroInvariant);
-        assert!(k1 >= k0, EInvariantViolation);
     }
     
     // ===== Tests =====
