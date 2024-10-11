@@ -547,14 +547,14 @@ module slamm::pool {
         ctx: &mut TxContext,
     ) {
         if (intent.quote.a2b()) {
-            bank_b.prepare_bank_for_pending_withdraw_(
+            bank_b.prepare_for_pending_withdraw_(
                 lending_market,
                 intent.quote.amount_out_net_of_pool_fees(), // output amount - pool fees
                 clock,
                 ctx
             );
         } else {
-            bank_a.prepare_bank_for_pending_withdraw_(
+            bank_a.prepare_for_pending_withdraw_(
                 lending_market,
                 intent.quote.amount_out_net_of_pool_fees(),
                 clock,

@@ -46,6 +46,9 @@ module slamm::bank {
     }
 
     public struct Lending<phantom P> has store {
+        /// Tracks the total amount of funds deposited into the bank,
+        /// and does not account for the interest generated
+        /// by depositing into suilend.
         funds_deployed: u64,
         ctokens: u64,
         target_utilisation_bps: u16,
@@ -199,7 +202,7 @@ module slamm::bank {
     
     // ====== Package Functions =====
     
-    public(package) fun prepare_bank_for_pending_withdraw_<P, T>(
+    public(package) fun prepare_for_pending_withdraw_<P, T>(
         bank: &mut Bank<P, T>,
         lending_market: &mut LendingMarket<P>,
         withdraw_amount: u64,
