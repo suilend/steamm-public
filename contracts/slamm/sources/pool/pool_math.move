@@ -13,10 +13,10 @@ module slamm::pool_math {
 
     // When depositing leads to a coin B deposit amount lower
     // than the min_b parameter
-    const EInsufficientDepositB: u64 = 1;
+    const EEffectiveDepositBBelowMinB: u64 = 1;
     // When depositing leads to a coin A deposit amount lower
     // than the min_a parameter
-    const EInsufficientDepositA: u64 = 2;
+    const EEffectiveDepositABelowMinA: u64 = 2;
     // When the deposit max parameter ratio is invalid
     const EDepositRatioInvalid: u64 = 3;
     // The amount of coin A reedemed is below the minimum set
@@ -27,11 +27,9 @@ module slamm::pool_math {
     // in favor of of the pool. This error should not occur
     const ELpSupplyToReserveRatioViolation: u64 = 6;
     // When depositing the max deposit params cannot be zero
-    const EDepositMaxParamsCantBeZero: u64 = 7;
-    // The deposit ratio computed leads to a coin B deposit of zero
-    const EDepositRatioLeadsToZeroB: u64 = 8;
+    const EDepositMaxAParamCantBeZero: u64 = 7;
     // The deposit ratio computed leads to a coin A deposit of zero
-    const EDepositRatioLeadsToZeroA: u64 = 9;
+    const EDepositRatioLeadsToZeroA: u64 = 8;
 
     
     // ===== Package functions =====
@@ -109,7 +107,7 @@ module slamm::pool_math {
         min_a: u64,
         min_b: u64
     ): (u64, u64) {
-        assert!(max_a > 0 && max_b > 0, EDepositMaxParamsCantBeZero);
+        assert!(max_a > 0, EDepositMaxAParamCantBeZero);
 
         if(reserve_a == 0 && reserve_b == 0) {
             (max_a, max_b)
@@ -117,15 +115,14 @@ module slamm::pool_math {
             let b_star = safe_mul_div_up(max_a, reserve_b, reserve_a);
             if (b_star <= max_b) {
 
-                assert!(b_star > 0, EDepositRatioLeadsToZeroB);
-                assert!(b_star >= min_b, EInsufficientDepositB);
+                assert!(b_star >= min_b, EEffectiveDepositBBelowMinB);
 
                 (max_a, b_star)
             } else {
                 let a_star = safe_mul_div_up(max_b, reserve_a, reserve_b);
                 assert!(a_star > 0, EDepositRatioLeadsToZeroA);
                 assert!(a_star <= max_a, EDepositRatioInvalid);
-                assert!(a_star >= min_a, EInsufficientDepositA);
+                assert!(a_star >= min_a, EEffectiveDepositABelowMinA);
                 (a_star, max_b)
             } 
         }
@@ -139,12 +136,20 @@ module slamm::pool_math {
         amount_b: u64
     ): u64 {
         if (lp_supply == 0) {
+            if (amount_b == 0) {
+                return amount_a
+            };
+
             (sqrt((amount_a as u128) * (amount_b as u128)) as u64)
         } else {
-            min(
-                safe_mul_div(amount_a, lp_supply, reserve_a),
-                safe_mul_div(amount_b, lp_supply, reserve_b)
-            )
+            if (reserve_b == 0) {
+                safe_mul_div(amount_a, lp_supply, reserve_a)
+            } else {
+                min(
+                    safe_mul_div(amount_a, lp_supply, reserve_a),
+                    safe_mul_div(amount_b, lp_supply, reserve_b)
+                )
+            }
         }
     }
 

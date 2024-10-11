@@ -220,7 +220,6 @@ module slamm::pool {
             pool_id: pool.id.uid_to_inner(),
         };
 
-
         // Emit event
         emit_event(
             NewPoolResult {
@@ -369,7 +368,7 @@ module slamm::pool {
 
         let balance_a = coin_a.balance_mut().split(quote.deposit_a());
         let balance_b = coin_b.balance_mut().split(quote.deposit_b());
-        
+
         // Add liquidity to pool
         self.total_funds_a.deposit(bank_a, balance_a);
         self.total_funds_b.deposit(bank_b, balance_b);
@@ -470,8 +469,11 @@ module slamm::pool {
         // let (fee_amount_a, fee_amount_b) = self.compute_redemption_fees_(balance_a.value(), balance_b.value());
         let (fee_balance_a, fee_balance_b) = self.redemption_fees.balances_mut();
 
-        fee_balance_a.join(balance_a.split(quote.fees_a()));
-        fee_balance_b.join(balance_b.split(quote.fees_b()));
+        let balance_a_value = balance_a.value();
+        let balance_b_value = balance_b.value();
+
+        fee_balance_a.join(balance_a.split(quote.fees_a().min(balance_a_value)));
+        fee_balance_b.join(balance_b.split(quote.fees_b().min(balance_b_value)));
         
         // Update redemption fee data
         self.trading_data.redemption_fees_a = self.trading_data.redemption_fees_a + quote.fees_a();
@@ -638,6 +640,10 @@ module slamm::pool {
     public fun intent_quote<A, B, Hook: drop, State: store>(self: &Intent<A, B, Hook, State>): &SwapQuote { &self.quote }
 
     // ===== Package functions =====
+
+    public(package) fun assert_liquidity(reserve_out: u64, amount_out: u64) {
+        assert!(amount_out <= reserve_out, EOutputExceedsLiquidity);
+    }
 
     public(package) fun get_quote<A, B, Hook: drop, State: store>(
         self: &Pool<A, B, Hook, State>,
