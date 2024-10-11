@@ -24,7 +24,7 @@ module slamm::bank {
     // ===== Constants =====
 
     const CURRENT_VERSION: u16 = 1;
-    const MIN_TOKEN_BLOCK_SIZE: u64 = 10; // TODO: Define amount
+    const MIN_TOKEN_BLOCK_SIZE: u64 = 1_000_000_000;
 
     // ===== Errors =====
 
@@ -46,7 +46,6 @@ module slamm::bank {
     }
 
     public struct Lending<phantom P> has store {
-        lending_market: ID,
         funds_deployed: u64,
         ctokens: u64,
         target_utilisation_bps: u16,
@@ -100,7 +99,6 @@ module slamm::bank {
         let reserve_array_index = lending_market.reserve_array_index<P, T>();
 
         self.lending.fill(Lending {
-            lending_market: object::id(lending_market),
             funds_deployed: 0,
             ctokens: 0,
             target_utilisation_bps,
@@ -122,15 +120,15 @@ module slamm::bank {
             return
         };
 
-        let effective_utilisation = bank.effective_utilisation_rate();
-        let target_utilisation = bank.target_utilisation_rate_unchecked();
-        let buffer = bank.utilisation_buffer();
+        let effective_utilisation_bps = bank.effective_utilisation_bps();
+        let target_utilisation_bps = bank.target_utilisation_bps_unchecked();
+        let buffer_bps = bank.utilisation_buffer_bps();
 
-        if (effective_utilisation < target_utilisation - buffer) {
+        if (effective_utilisation_bps < target_utilisation_bps - buffer_bps) {
             let amount_to_deploy = bank_math::compute_amount_to_deploy(
                 bank.funds_available.value(),
                 bank.funds_deployed_unchecked(),
-                target_utilisation,
+                target_utilisation_bps,
             );
 
             bank.deploy(
@@ -139,14 +137,12 @@ module slamm::bank {
                 clock,
                 ctx,
             );
-        };
-
-        if (effective_utilisation > target_utilisation + buffer) {
+        } else if (effective_utilisation_bps > target_utilisation_bps + buffer_bps) {
             let amount_to_recall = bank_math::compute_amount_to_recall(
                 bank.funds_available.value(),
                 0,
                 bank.funds_deployed_unchecked(),
-                target_utilisation,
+                target_utilisation_bps,
             );
 
             bank.recall(
@@ -177,7 +173,7 @@ module slamm::bank {
 
     // ====== Admin Functions =====
 
-    public fun set_utilisation_rate<P, T>(
+    public fun set_utilisation_bps<P, T>(
         self: &mut Bank<P, T>,
         _: &GlobalAdmin,
         target_utilisation_bps: u16,
@@ -244,12 +240,12 @@ module slamm::bank {
             return
         };
 
-        let effective_utilisation = bank.effective_utilisation_rate();
-        let target_utilisation = bank.target_utilisation_rate_unchecked();
-        let buffer = bank.utilisation_buffer_unchecked();
+        let effective_utilisation_bps = bank.effective_utilisation_bps();
+        let target_utilisation_bps = bank.target_utilisation_bps_unchecked();
+        let buffer_bps = bank.utilisation_buffer_bps_unchecked();
 
         assert!(
-            effective_utilisation <= target_utilisation + buffer,
+            effective_utilisation_bps <= target_utilisation_bps + buffer_bps,
             EUtilisationRateOffTarget
         );
     }
@@ -362,8 +358,8 @@ module slamm::bank {
         self.funds_available.value() + self.funds_deployed()
     }
 
-    public fun effective_utilisation_rate<P, T>(self: &Bank<P, T>): u64 { 
-        bank_math::compute_utilisation_rate(self.funds_available.value(), self.funds_deployed())
+    public fun effective_utilisation_bps<P, T>(self: &Bank<P, T>): u64 { 
+        bank_math::compute_utilisation_bps(self.funds_available.value(), self.funds_deployed())
     }
     
     public fun funds_deployed<P, T>(self: &Bank<P, T>): u64 {
@@ -372,23 +368,22 @@ module slamm::bank {
         } else { 0 }
     }
     
-    public fun target_utilisation_rate<P, T>(self: &Bank<P, T>): u64 {
+    public fun target_utilisation_bps<P, T>(self: &Bank<P, T>): u64 {
         if (self.lending.is_some()) {
-            self.target_utilisation_rate_unchecked()
+            self.target_utilisation_bps_unchecked()
         } else { 0 }
     }
     
-    public fun utilisation_buffer<P, T>(self: &Bank<P, T>): u64 {
+    public fun utilisation_buffer_bps<P, T>(self: &Bank<P, T>): u64 {
         if (self.lending.is_some()) {
-            self.utilisation_buffer_unchecked()
+            self.utilisation_buffer_bps_unchecked()
         } else { 0 }
     }
     
-    public fun lending_market<P, T>(self: &Bank<P, T>): ID { self.lending.borrow().lending_market }
     public fun funds_available<P, T>(self: &Bank<P, T>): &Balance<T> { &self.funds_available }
     public fun funds_deployed_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().funds_deployed }
-    public fun target_utilisation_rate_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().target_utilisation_bps as u64}
-    public fun utilisation_buffer_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().utilisation_buffer_bps as u64 }
+    public fun target_utilisation_bps_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().target_utilisation_bps as u64}
+    public fun utilisation_buffer_bps_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().utilisation_buffer_bps as u64 }
     public fun reserve_array_index<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().reserve_array_index }
 
     // ===== Test-Only Functions =====

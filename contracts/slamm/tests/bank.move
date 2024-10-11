@@ -63,8 +63,8 @@ module slamm::bank_tests {
         bank.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            8_000, // utilisation_rate
-            1_000, // utilisation_buffer
+            8_000, // utilisation_bps
+            1_000, // utilisation_buffer_bps
             ctx(&mut scenario),
         );
 
@@ -94,16 +94,16 @@ module slamm::bank_tests {
         bank.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            8_000, // utilisation_rate
-            1_000, // utilisation_buffer
+            8_000, // utilisation_bps
+            1_000, // utilisation_buffer_bps
             ctx(&mut scenario),
         );
         
         bank.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            8_000, // utilisation_rate
-            1_000, // utilisation_buffer
+            8_000, // utilisation_bps
+            1_000, // utilisation_buffer_bps
             ctx(&mut scenario),
         );
 
@@ -134,7 +134,7 @@ module slamm::bank_tests {
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            10_001, // utilisation_rate
+            10_001, // utilisation_bps
             1_000, // buffer
             ctx(&mut scenario),
         );
@@ -166,8 +166,8 @@ module slamm::bank_tests {
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            1_000, // utilisation_rate
-            1_001, // utilisation_buffer
+            1_000, // utilisation_bps
+            1_001, // utilisation_buffer_bps
             ctx(&mut scenario),
         );
 
@@ -198,8 +198,8 @@ module slamm::bank_tests {
         bank.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            8_000, // utilisation_rate
-            500, // utilisation_buffer
+            8_000, // utilisation_bps
+            500, // utilisation_buffer_bps
             ctx(&mut scenario),
         );
 
@@ -218,7 +218,7 @@ module slamm::bank_tests {
     
     #[test]
     #[expected_failure(abort_code = bank::EUtilisationRateOffTarget)]
-    fun test_fail_assert_utilisation_rate() {
+    fun test_fail_assert_utilisation() {
         let mut scenario = test_scenario::begin(@0x0);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
@@ -232,8 +232,8 @@ module slamm::bank_tests {
         bank.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
             &mut lending_market,
-            8_000, // utilisation_rate
-            500, // utilisation_buffer
+            8_000, // utilisation_bps
+            500, // utilisation_buffer_bps
             ctx(&mut scenario),
         );
 

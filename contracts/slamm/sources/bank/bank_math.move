@@ -10,15 +10,15 @@ module slamm::bank_math {
         funds_available: u64,
         withdraw_amount: u64,
         funds_deployed: u64,
-        target_utilisation: u64,
-        buffer: u64,
+        target_utilisation_bps: u64,
+        buffer_bps: u64,
     ): u64 {
         assert_output(funds_available, funds_deployed, withdraw_amount);
         
         let needs_recall = if (withdraw_amount > funds_available) { true } else {
-            let post_utilisation_ratio = compute_utilisation_rate(funds_available - withdraw_amount, funds_deployed) as u64;
+            let post_utilisation_bps = compute_utilisation_bps(funds_available - withdraw_amount, funds_deployed) as u64;
 
-            post_utilisation_ratio > target_utilisation + buffer
+            post_utilisation_bps > target_utilisation_bps + buffer_bps
         };
 
         if (needs_recall) {
@@ -26,12 +26,12 @@ module slamm::bank_math {
                 funds_available,
                 withdraw_amount,
                 funds_deployed,
-                target_utilisation,
+                target_utilisation_bps,
             )
         } else { 0 }
     }
     
-    public(package) fun compute_utilisation_rate(
+    public(package) fun compute_utilisation_bps(
         funds_available: u64,
         funds_deployed: u64,
     ): u64 {
@@ -128,12 +128,12 @@ module slamm::bank_math {
     }
     
     #[test]
-    fun test_compute_utilisation_rate() {
+    fun test_compute_utilisation_bps() {
         // Reserve, Lent, Utilisation Ratio
-        assert_eq(compute_utilisation_rate(10_000, 0), 0); // 100%
-        assert_eq(compute_utilisation_rate(7_000, 3_000), 3_000); // 70%
-        assert_eq(compute_utilisation_rate(5_000, 5_000), 5_000); // 50%
-        assert_eq(compute_utilisation_rate(3_000, 7_000), 7_000); // 30%
-        assert_eq(compute_utilisation_rate(0, 10_000), 10_000); // 0%
+        assert_eq(compute_utilisation_bps(10_000, 0), 0); // 100%
+        assert_eq(compute_utilisation_bps(7_000, 3_000), 3_000); // 70%
+        assert_eq(compute_utilisation_bps(5_000, 5_000), 5_000); // 50%
+        assert_eq(compute_utilisation_bps(3_000, 7_000), 7_000); // 30%
+        assert_eq(compute_utilisation_bps(0, 10_000), 10_000); // 0%
     }
 }

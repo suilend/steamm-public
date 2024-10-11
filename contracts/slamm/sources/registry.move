@@ -4,6 +4,7 @@ module slamm::registry {
     use std::type_name::{Self, TypeName};
     use sui::table::{Self, Table};
     use slamm::global_admin::GlobalAdmin;
+    use slamm::version::{Self, Version};
 
     // ===== Constants =====
 
@@ -11,13 +12,12 @@ module slamm::registry {
 
     // ===== Errors =====
 
-    const EIncorrectVersion: u64 = 1;
-    const EDuplicatedPoolType: u64 = 2;
-    const EDuplicatedBankType: u64 = 3;
+    const EDuplicatedPoolType: u64 = 1;
+    const EDuplicatedBankType: u64 = 2;
 
     public struct Registry has key {
         id: UID,
-        version: u16,
+        version: Version,
         amms: Table<TypeName, ID>,
         banks: Table<TypeName, ID>,
     }
@@ -25,7 +25,7 @@ module slamm::registry {
     fun init(ctx: &mut TxContext) {
         let registry = Registry {
             id: object::new(ctx),
-            version: CURRENT_VERSION,
+            version: version::new(CURRENT_VERSION),
             amms: table::new(ctx),
             banks: table::new(ctx),
         };
@@ -34,7 +34,7 @@ module slamm::registry {
     }
 
     public(package) fun add_amm<AMM: key>(registry: &mut Registry, pool: &AMM) {
-        registry.assert_version_and_upgrade();
+        registry.version.assert_version_and_upgrade(CURRENT_VERSION);
         
         let amm_type = type_name::get<AMM>();
         assert!(!table::contains(&registry.amms, amm_type), EDuplicatedPoolType);
@@ -43,7 +43,7 @@ module slamm::registry {
     }
     
     public(package) fun add_bank<BANK: key>(registry: &mut Registry, bank: &BANK) {
-        registry.assert_version_and_upgrade();
+        registry.version.assert_version_and_upgrade(CURRENT_VERSION);
         
         let bank_type = type_name::get<BANK>();
         assert!(!table::contains(&registry.banks, bank_type), EDuplicatedBankType);
@@ -53,29 +53,12 @@ module slamm::registry {
 
     // ===== Versioning =====
     
+
     entry fun migrate_as_global_admin(
         self: &mut Registry,
         _admin: &GlobalAdmin,
     ) {
-        migrate_(self);
-    }
-
-    fun migrate_(
-        self: &mut Registry
-    ) {
-        assert!(self.version < CURRENT_VERSION, EIncorrectVersion);
-        self.version = CURRENT_VERSION;
-    }
-
-    fun assert_version(self: &Registry) {
-        assert!(self.version == CURRENT_VERSION, EIncorrectVersion);
-    }
-
-    fun assert_version_and_upgrade(self: &mut Registry) {
-        if (self.version < CURRENT_VERSION) {
-            self.version = CURRENT_VERSION;
-        };
-        assert_version(self);
+        self.version.migrate_(CURRENT_VERSION);
     }
 
     // ===== Tests =====
@@ -84,7 +67,7 @@ module slamm::registry {
     public fun init_for_testing(ctx: &mut TxContext): Registry {
         let registry = Registry {
             id: object::new(ctx),
-            version: CURRENT_VERSION,
+            version: version::new(CURRENT_VERSION),
             amms: table::new(ctx),
             banks: table::new(ctx),
         };
