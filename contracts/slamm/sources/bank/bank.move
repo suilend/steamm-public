@@ -35,8 +35,7 @@ module slamm::bank {
     const EInsufficientFundsInBank: u64 = 5;
     const EInvalidCTokenRatio: u64 = 6;
     const ECTokenRatioTooLow: u64 = 7;
-    const EDeployAmountTooLow: u64 = 8;
-    const ELendingNotActive: u64 = 9;
+    const ELendingNotActive: u64 = 8;
 
     public struct Bank<phantom P, phantom T> has key {
         id: UID,
@@ -275,11 +274,9 @@ module slamm::bank {
     ) {
         let lending = bank.lending.borrow();
 
-        if (amount_to_deploy == 0) {
+        if (amount_to_deploy < MIN_TOKEN_BLOCK_SIZE ) {
             return
         };
-
-        assert!(amount_to_deploy >= MIN_TOKEN_BLOCK_SIZE, EDeployAmountTooLow);
 
         let balance_to_lend = bank.funds_available.split(amount_to_deploy);
 

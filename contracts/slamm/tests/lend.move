@@ -1717,8 +1717,7 @@ module slamm::lend_tests {
     }
     
     #[test]
-    #[expected_failure(abort_code = bank::EDeployAmountTooLow)]
-    public fun test_fail_below_min_deploy_amount() {
+    public fun test_no_op_below_min_deploy_amount() {
         let owner = @0x26;
         let mut scenario = test_scenario::begin(owner);
         let (clock, owner_cap, mut lending_market, prices, type_to_index) = lending_market::setup(reserve_args_2(&mut scenario), &mut scenario).destruct_state();
@@ -1736,11 +1735,17 @@ module slamm::lend_tests {
             ctx(&mut scenario),
         );
 
+        let effective_utilisation_bps_before = bank_sui.effective_utilisation_bps();
+
         bank_sui.rebalance(
             &mut lending_market,
             &clock,
             ctx(&mut scenario),
         );
+
+        let effective_utilisation_bps_after = bank_sui.effective_utilisation_bps();
+
+        assert!(effective_utilisation_bps_before == effective_utilisation_bps_after, 0);
 
         test_utils::destroy(owner_cap);
         test_utils::destroy(lending_market);
