@@ -59,30 +59,15 @@ module slamm::bank {
 
     // ====== Entry Functions =====
 
+    #[allow(lint(share_owned))]
     public entry fun create_bank_and_share<P, T>(
         registry: &mut Registry,
         ctx: &mut TxContext,
-    ) {
+    ): ID {
         let bank = create_bank<P, T>(registry, ctx);
+        let bank_id = object::id(&bank);
         share_object(bank);
-    }
-    
-    // ====== Public Functions =====
-
-    public fun create_bank<P, T>(
-        registry: &mut Registry,
-        ctx: &mut TxContext,
-    ): Bank<P, T> {
-        let bank = Bank<P, T> {
-            id: object::new(ctx),
-            funds_available: balance::zero(),
-            lending: none(),
-            version: version::new(CURRENT_VERSION),
-        };
-
-        registry.add_bank(&bank);
-
-        bank
+        bank_id
     }
     
     public fun init_lending<P, T>(
@@ -201,6 +186,22 @@ module slamm::bank {
     }
     
     // ====== Package Functions =====
+
+    public(package) fun create_bank<P, T>(
+        registry: &mut Registry,
+        ctx: &mut TxContext,
+    ): Bank<P, T> {
+        let bank = Bank<P, T> {
+            id: object::new(ctx),
+            funds_available: balance::zero(),
+            lending: none(),
+            version: version::new(CURRENT_VERSION),
+        };
+
+        registry.add_bank(&bank);
+
+        bank
+    }
     
     public(package) fun prepare_for_pending_withdraw_<P, T>(
         bank: &mut Bank<P, T>,
