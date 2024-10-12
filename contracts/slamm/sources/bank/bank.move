@@ -41,6 +41,7 @@ module slamm::bank {
         id: UID,
         funds_available: Balance<T>,
         lending: Option<Lending<P>>,
+        min_token_block_size: u64,
         version: Version,
     }
 
@@ -194,6 +195,7 @@ module slamm::bank {
             id: object::new(ctx),
             funds_available: balance::zero(),
             lending: none(),
+            min_token_block_size: MIN_TOKEN_BLOCK_SIZE,
             version: version::new(CURRENT_VERSION),
         };
 
@@ -274,7 +276,7 @@ module slamm::bank {
     ) {
         let lending = bank.lending.borrow();
 
-        if (amount_to_deploy < MIN_TOKEN_BLOCK_SIZE ) {
+        if (amount_to_deploy < bank.min_token_block_size ) {
             return
         };
 
@@ -315,7 +317,7 @@ module slamm::bank {
             return
         };
 
-        let amount_to_recall = amount_to_recall.max(MIN_TOKEN_BLOCK_SIZE);
+        let amount_to_recall = amount_to_recall.max(bank.min_token_block_size);
         let mut ctoken_amount = bank.ctoken_amount(lending_market, amount_to_recall);
 
         let ctokens: Coin<CToken<P, T>> = lending_market.withdraw_ctokens(
@@ -391,6 +393,9 @@ module slamm::bank {
     
     #[test_only]
     public(package) fun mock_amount_lent<P, T>(self: &mut Bank<P, T>, amount: u64){ self.lending.borrow_mut().funds_deployed = amount; }
+    
+    #[test_only]
+    public(package) fun mock_min_token_block_size<P, T>(self: &mut Bank<P, T>, amount: u64){ self.min_token_block_size = amount; }
     
     #[test_only]
     public(package) fun deposit_for_testing<P, T>(self: &mut Bank<P, T>, amount: u64) {

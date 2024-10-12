@@ -45,6 +45,8 @@ module slamm::lend_tests {
 
         let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
+        bank_a.mock_min_token_block_size(10);
+        bank_b.mock_min_token_block_size(10);
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -139,6 +141,8 @@ module slamm::lend_tests {
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
         let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
+        bank_a.mock_min_token_block_size(10);
+        bank_b.mock_min_token_block_size(10);
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -262,6 +266,8 @@ module slamm::lend_tests {
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
         let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
         let mut bank_b = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
+        bank_a.mock_min_token_block_size(10);
+        bank_b.mock_min_token_block_size(10);
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -365,6 +371,8 @@ module slamm::lend_tests {
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
         let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
         let mut bank_b = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
+        bank_a.mock_min_token_block_size(10);
+        bank_b.mock_min_token_block_size(10);
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -501,6 +509,8 @@ module slamm::lend_tests {
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
         let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
         let mut bank_b = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
+        bank_a.mock_min_token_block_size(10);
+        bank_b.mock_min_token_block_size(10);
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -647,6 +657,8 @@ module slamm::lend_tests {
 
         let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
+        bank_a.mock_min_token_block_size(10);
+        bank_b.mock_min_token_block_size(10);
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -828,6 +840,8 @@ module slamm::lend_tests {
 
         let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
+        bank_a.mock_min_token_block_size(10);
+        bank_b.mock_min_token_block_size(10);
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -951,6 +965,8 @@ module slamm::lend_tests {
 
         let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
+        bank_a.mock_min_token_block_size(10);
+        bank_b.mock_min_token_block_size(10);
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -1080,6 +1096,8 @@ module slamm::lend_tests {
 
         let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
+        bank_a.mock_min_token_block_size(10);
+        bank_b.mock_min_token_block_size(10);
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -1169,6 +1187,8 @@ module slamm::lend_tests {
 
         let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
+        bank_a.mock_min_token_block_size(10);
+        bank_b.mock_min_token_block_size(10);
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -1267,6 +1287,8 @@ module slamm::lend_tests {
 
         let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
+        bank_a.mock_min_token_block_size(10);
+        bank_b.mock_min_token_block_size(10);
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -1379,6 +1401,8 @@ module slamm::lend_tests {
 
         let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
         let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
+        bank_a.mock_min_token_block_size(10);
+        bank_b.mock_min_token_block_size(10);
 
         bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
             &global_admin,
@@ -1497,6 +1521,7 @@ module slamm::lend_tests {
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
         let mut bank_sui = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
+        bank_sui.mock_min_token_block_size(10);
 
         bank_sui.deposit_for_testing(1_000_000);
         
@@ -1629,6 +1654,7 @@ module slamm::lend_tests {
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
         let mut bank_sui = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
+        bank_sui.mock_min_token_block_size(10);
 
         clock::set_for_testing(&mut clock, 1 * 1000);
 
@@ -1725,6 +1751,7 @@ module slamm::lend_tests {
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
         let mut bank_sui = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
+        bank_sui.mock_min_token_block_size(10);
 
         bank_sui.deposit_for_testing(1);
         bank_sui.init_lending<LENDING_MARKET, TEST_SUI>(
