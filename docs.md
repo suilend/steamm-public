@@ -28,6 +28,20 @@ As an ilustration, if one AMM pool has high demand for SUI (i.e. high volume of 
 
 In other words, in periods of low market correlations, offsetting flows take place, whereas in periods of high market correlations there's a higher necessity in recalling liquidity from lending markets.
 
+### Yield-bearing LP tokens
+
+Liquidity reutilisation not only enhances the overall efficiency of the market, but also provides an opportunity for liquidity providers to earn a money-market yield on their funds while market-making. Banks deposit funds to the lending market and earn a yield $r$ that compounds over time. Banks then act as a pass-through and channel the yield to the respective pools proportional to the time and principal invested.
+
+The bank performs this pass-through calculation by allocating an intermediate BToken to each participating Pool. Any time a pool adds new funds to a Bank, the bank issues BTokens in proportion to the new incoming principal versus the present value of the banks funds (accounting for both the funds on Suilend and funds held in contingency).
+
+$$
+\Delta{B_{tokens}} = \frac{\Delta{Principal} *B_{supply} }{Principal + Interest}
+$$
+
+In a nutshell, BTokens allow the interest earned to flow back into the pool, which is then added to the liquidity, distributing it further to each LP position.
+
+In practice, the effective yield generated on the funds allocated to a Bank are lower than the lending market yield, given that the bank keeps a utilisation rate below 100% in order to allow pools to fulfil trades without the need to withdraw funds from the lending market.
+
 ### Utilisation Target and Buffer
 Banks are setup with a target utilisation rate. Liquidity deployed to lending market is allowed to fluctuate around the target utilisation rate and the extent to which these fluctuations can deviate form the target is kept by a utilisation buffer. So if the target utilisation is set at 50% with a utilisation buffer of 5%, then utilised liquidity is allowed to fluctuate between 45% and 55%.
 
@@ -82,6 +96,8 @@ $$
     \iff \Delta d = U^* (a + d + \Delta L) - d
 \end{gather*}
 $$
+
+The ability to parameterize utilisation allows the protocol to maximise efficiency without compromising on the market making. When market conditions are such that volatility is uni-directional banks can adjust utilisation rate higher or lower depending on which side of the trading pair is facing sell pressure. Conversely, when volatility is more or less symetric can lower utilisation to account for the bi-directional flows.
 
 
 ### Swap model
@@ -249,6 +265,3 @@ The hook then provides a quotation price bsaed on the constant-product formula a
 ```
 
 Where $\Delta Out$ represents the output amount and $\phi$ is a fee control parameter used for scaling.
-
-### Risks and mitigations
-TODO
