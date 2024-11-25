@@ -1,10 +1,10 @@
 #[test_only]
-module slamm::deposit_redeem {
-    use slamm::pool_math::{Self, quote_deposit_test, quote_redeem_test};
-    use slamm::test_utils;
-    use sui::test_utils::{destroy, assert_eq};
+module steamm::deposit_redeem {
     use std::u128::sqrt;
-    use slamm::math::{Self as slamm_math};
+    use sui::test_utils::{destroy, assert_eq};
+    use steamm::test_utils;
+    use steamm::pool_math::{Self, quote_deposit_test, quote_redeem_test};
+    use steamm::math::{Self as steamm_math};
 
     #[test]
     fun test_initial_deposit() {
@@ -280,7 +280,7 @@ module slamm::deposit_redeem {
     }
     
     #[test]
-    #[expected_failure(abort_code = slamm_math::EMathOverflow)]
+    #[expected_failure(abort_code = steamm_math::EMathOverflow)]
     fun test_fail_deposit_maximally_imbalanced_pool() {
         let (pool, bank_a, bank_b) = test_utils::new_for_testing(
             1,

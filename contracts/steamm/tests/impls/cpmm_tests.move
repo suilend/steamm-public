@@ -1,6 +1,6 @@
 #[test_only]
-module slamm::cpmm_tests {
-    use slamm::{
+module steamm::cpmm_tests {
+    use steamm::{
         registry::{Self, Registry},
         bank::{Self, Bank},
         cpmm::{Self, CpQuoter},

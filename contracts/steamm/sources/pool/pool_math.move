@@ -2,12 +2,12 @@
 /// such as the deposit and redeem logic, which is exposed and should be
 /// called directly. Is also exports an intializer and swap method to be
 /// called by the hook modules.
-module slamm::pool_math {
+module steamm::pool_math {
     use std::{
         u64::min,
         u128::sqrt,
     };
-    use slamm::math::{safe_mul_div, safe_mul_div_up};
+    use steamm::math::{safe_mul_div, safe_mul_div_up};
 
     // ===== Errors =====
 

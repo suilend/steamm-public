@@ -1,4 +1,4 @@
-module slamm::math {
+module steamm::math {
     use std::u64::min;
     use std::option::{none, some};
     use suilend::decimal::Decimal;

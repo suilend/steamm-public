@@ -1,5 +1,5 @@
 [package]
-name = "slamm"
+name = "steamm"
 edition = "2024.beta" # edition = "legacy" to use legacy (pre-2024) Move
 # license = ""           # e.g., "MIT", "GPL", "Apache 2.0"
 # authors = ["..."]      # e.g., ["Joe Smith (joesmith@noemail.com)", "John Snow (johnsnow@noemail.com)"]
@@ -20,7 +20,7 @@ suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "con
 # Override = { local = "../conflicting/version", override = true }
 
 [addresses]
-slamm = "0x0"
+steamm = "0x0"
 suilend = "0xf95b06141ed4a174f239417323bde3f209b972f5930d8521ea38a52aff3a6ddf"
 
 # Named addresses will be accessible in Move as `@name`. They're also exported:

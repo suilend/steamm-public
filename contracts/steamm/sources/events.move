@@ -1,4 +1,4 @@
-module slamm::events {
+module steamm::events {
     use sui::event;
 
     // Thin wrapper for events. Has the advantage of allowing events

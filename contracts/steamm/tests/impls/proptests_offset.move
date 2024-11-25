@@ -1,10 +1,10 @@
 #[test_only]
-module slamm::proptests {
-    use slamm::registry;
-    use slamm::cpmm::{Self};
-    use slamm::bank;
-    use slamm::test_utils::reserve_args;
-    use slamm::test_utils::COIN;
+module steamm::proptests_offset {
+    use steamm::registry;
+    use steamm::cpmm::{Self};
+    use steamm::bank;
+    use steamm::test_utils::reserve_args;
+    use steamm::test_utils::COIN;
     use sui::test_scenario::{Self, ctx};
     use sui::sui::SUI;
     use sui::random;
@@ -24,7 +24,7 @@ module slamm::proptests {
     }
 
     #[test]
-    fun proptest_swap() {
+    fun proptest_swap_offset() {
         let mut scenario = test_scenario::begin(ADMIN);
 
         // Init Pool
@@ -35,10 +35,11 @@ module slamm::proptests {
         
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+        let (mut pool, pool_cap) = cpmm::new_with_offset<SUI, COIN, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
+            5,
             ctx,
         );
 
@@ -54,7 +55,7 @@ module slamm::proptests {
             &mut coin_a,
             &mut coin_b,
             e9(100_000),
-            e9(100_000),
+            0,
             0,
             0,
             ctx,
@@ -67,16 +68,41 @@ module slamm::proptests {
         test_scenario::next_tx(&mut scenario, TRADER);
         let ctx = ctx(&mut scenario);
 
-        let mut rng = random::new_generator_from_seed_for_testing(vector[0, 1, 2, 3]);
-
+        let mut rng = random::new_generator_from_seed_for_testing(vector[1, 4, 2, 3]);
         let mut trades = 1_000;
 
         while (trades > 0) {
-            let amount_in = rng.generate_u64_in_range(1_000, 100_000_000_000_000_000);
             let a2b = if (rng.generate_u8_in_range(1_u8, 2_u8) == 1) { true } else { false };
+
+            let amount_in = 
+                if (a2b) {
+                    let max_amount_in = cpmm::max_amount_in_on_a2b(&pool);
+
+                    if (max_amount_in.is_none()) {
+                        rng.generate_u64_in_range(1_000, 100_000_000_000_000_000)
+                    } else {
+                        if (max_amount_in.borrow() == 0) {
+                            continue
+                        };
+                        rng.generate_u64_in_range(1, *max_amount_in.borrow())
+                    }
+                } else {
+                    rng.generate_u64_in_range(1_000, 100_000_000_000_000_000)
+                };
 
             let mut coin_a = coin::mint_for_testing<SUI>(if (a2b) { amount_in } else {0}, ctx);
             let mut coin_b = coin::mint_for_testing<COIN>(if (a2b) { 0 } else {amount_in}, ctx);
+
+            let quote = pool.cpmm_quote_swap(
+                amount_in,
+                a2b, // a2b
+            );
+
+            if (quote.amount_out() == 0) {
+                destroy(coin_a);
+                destroy(coin_b);
+                continue
+            };
 
             let swap_intent = pool.cpmm_intent_swap(
                 amount_in,
@@ -114,7 +140,7 @@ module slamm::proptests {
     }
     
     #[test]
-    fun proptest_deposit() {
+    fun proptest_deposit_offset() {
         let mut scenario = test_scenario::begin(ADMIN);
 
         // Init Pool
@@ -125,10 +151,11 @@ module slamm::proptests {
         
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+        let (mut pool, pool_cap) = cpmm::new_with_offset<SUI, COIN, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
+            5,
             ctx,
         );
 
@@ -144,7 +171,7 @@ module slamm::proptests {
             &mut coin_a,
             &mut coin_b,
             e9(100_000),
-            e9(25_000),
+            0,
             0,
             0,
             ctx,
@@ -173,7 +200,7 @@ module slamm::proptests {
                 &mut coin_a,
                 &mut coin_b,
                 amount_in,
-                amount_in,
+                0,
                 0,
                 0,
                 ctx,
@@ -201,7 +228,7 @@ module slamm::proptests {
     }
     
     #[test]
-    fun proptest_redeem() {
+    fun proptest_redeem_offset() {
         let mut scenario = test_scenario::begin(ADMIN);
 
         // Init Pool
@@ -212,10 +239,11 @@ module slamm::proptests {
         
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit>(
+        let (mut pool, pool_cap) = cpmm::new_with_offset<SUI, COIN, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
+            5,
             ctx,
         );
 
@@ -233,7 +261,7 @@ module slamm::proptests {
             &mut coin_a,
             &mut coin_b,
             1_000_000_000_000_000_000,
-            2_000_000_000_000_000_000,
+            0,
             0,
             0,
             ctx,

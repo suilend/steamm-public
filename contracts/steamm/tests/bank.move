@@ -1,10 +1,10 @@
 
-module slamm::bank_tests {
+module steamm::bank_tests {
     use sui::{
         test_scenario::{Self, ctx},
         test_utils::destroy,
     };
-    use slamm::{
+    use steamm::{
         bank_math,
         bank,
         registry,

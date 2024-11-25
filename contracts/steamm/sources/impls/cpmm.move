@@ -1,8 +1,8 @@
 /// Constant-Product AMM Hook implementation
-module slamm::cpmm {
+module steamm::cpmm {
     use std::option::none;
     use sui::coin::Coin;
-    use slamm::{
+    use steamm::{
         global_admin::GlobalAdmin,
         registry::{Registry},
         quote::SwapQuote,

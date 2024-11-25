@@ -1,4 +1,4 @@
-module slamm::global_admin {
+module steamm::global_admin {
     public struct GlobalAdmin has key, store {
         id: UID
     }

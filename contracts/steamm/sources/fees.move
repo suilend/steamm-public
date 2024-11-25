@@ -1,7 +1,7 @@
-module slamm::fees {
+module steamm::fees {
     use sui::balance::{Self, Balance};
 
-    public use fun slamm::fees::fee_ratio_ as FeeConfig.fee_ratio;
+    public use fun steamm::fees::fee_ratio_ as FeeConfig.fee_ratio;
 
     public struct Fees<phantom A, phantom B> has store {
         config: FeeConfig,

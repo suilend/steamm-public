@@ -2,7 +2,7 @@
 /// such as the deposit and redeem logic, which is exposed and should be
 /// called directly. Is also exports an intializer and swap method to be
 /// called by the hook modules.
-module slamm::pool {
+module steamm::pool {
     use sui::{
         clock::Clock,
         transfer::public_transfer,
@@ -10,7 +10,7 @@ module slamm::pool {
         coin::{Self, Coin},
         balance::{Self, Balance, Supply},
     };
-    use slamm::{
+    use steamm::{
         pool_math,
         events::emit_event,
         version::{Self, Version},
@@ -24,11 +24,11 @@ module slamm::pool {
 
     use suilend::lending_market::{LendingMarket};
     
-    public use fun slamm::pool::intent_quote as Intent.quote;
-    public use fun slamm::cpmm::intent_swap as Pool.cpmm_intent_swap;
-    public use fun slamm::cpmm::execute_swap as Pool.cpmm_execute_swap;
-    public use fun slamm::cpmm::quote_swap as Pool.cpmm_quote_swap;
-    public use fun slamm::cpmm::k as Pool.cpmm_k;
+    public use fun steamm::pool::intent_quote as Intent.quote;
+    public use fun steamm::cpmm::intent_swap as Pool.cpmm_intent_swap;
+    public use fun steamm::cpmm::execute_swap as Pool.cpmm_execute_swap;
+    public use fun steamm::cpmm::quote_swap as Pool.cpmm_quote_swap;
+    public use fun steamm::cpmm::k as Pool.cpmm_k;
 
     // ===== Constants =====
 
