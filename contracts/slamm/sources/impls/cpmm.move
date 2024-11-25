@@ -31,11 +31,11 @@ module slamm::cpmm {
     /// Other hook implementations can decide to leverage this property and
     /// provide pathways for the inner witness contract to add further logic,
     /// therefore making the hook extendable.
-    public struct Hook<phantom W> has drop {}
+    // public struct Hook<phantom W> has drop {}
 
     /// Constant-Product AMM specific state. We do not store the invariant,
     /// instead we compute it at runtime.
-    public struct State has store {
+    public struct CpQuoter<phantom W> has store {
         version: Version,
         offset: u64,
     }
@@ -50,8 +50,8 @@ module slamm::cpmm {
     /// # Returns
     ///
     /// A tuple containing:
-    /// - `Pool<A, B, Hook, State>`: The created AMM pool object.
-    /// - `PoolCap<A, B, Hook>`: The associated pool capability object.
+    /// - `Pool<A, B, CpQuoter<W>>`: The created AMM pool object.
+    /// - `PoolCap<A, B, CpQuoter<W>>`: The associated pool capability object.
     ///
     /// # Panics
     ///
@@ -63,14 +63,13 @@ module slamm::cpmm {
         swap_fee_bps: u64,
         offset: u64,
         ctx: &mut TxContext,
-    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>, State>) {
-        let inner = State { version: version::new(CURRENT_VERSION), offset };
+    ): (Pool<A, B, CpQuoter<W>>, PoolCap<A, B, CpQuoter<W>>) {
+        let quoter = CpQuoter { version: version::new(CURRENT_VERSION), offset };
 
-        let (pool, pool_cap) = pool::new<A, B, Hook<W>, State>(
-            Hook<W> {},
+        let (pool, pool_cap) = pool::new<A, B, CpQuoter<W>>(
             registry,
             swap_fee_bps,
-            inner,
+            quoter,
             ctx,
         );
 
@@ -82,7 +81,7 @@ module slamm::cpmm {
         registry: &mut Registry,
         swap_fee_bps: u64,
         ctx: &mut TxContext,
-    ): (Pool<A, B, Hook<W>, State>, PoolCap<A, B, Hook<W>, State>) {
+    ): (Pool<A, B, CpQuoter<W>>, PoolCap<A, B, CpQuoter<W>>) {
         new_with_offset(
             witness,
             registry,
@@ -93,10 +92,10 @@ module slamm::cpmm {
     }
 
     public fun intent_swap<A, B, W: drop>(
-        self: &mut Pool<A, B, Hook<W>, State>,
+        self: &mut Pool<A, B, CpQuoter<W>>,
         amount_in: u64,
         a2b: bool,
-    ): Intent<A, B, Hook<W>, State> {
+    ): Intent<A, B, CpQuoter<W>> {
         self.inner_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
         let quote = quote_swap(self, amount_in, a2b);
 
@@ -104,10 +103,10 @@ module slamm::cpmm {
     }
 
     public fun execute_swap<A, B, W: drop, P>(
-        self: &mut Pool<A, B, Hook<W>, State>,
+        self: &mut Pool<A, B, CpQuoter<W>>,
         bank_a: &mut Bank<P, A>,
         bank_b: &mut Bank<P, B>,
-        intent: Intent<A, B, Hook<W>, State>,
+        intent: Intent<A, B, CpQuoter<W>>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
         min_amount_out: u64,
@@ -118,7 +117,6 @@ module slamm::cpmm {
         let k0 = k(self, offset(self));
 
         let response = self.swap(
-            Hook<W> {},
             bank_a,
             bank_b,
             coin_a,
@@ -137,7 +135,7 @@ module slamm::cpmm {
     // cpmm return price, take price that's best for LPs, on top we add dynamic fee
     // fees should always be computed on the output amount;
     public fun quote_swap<A, B, W: drop>(
-        self: &Pool<A, B, Hook<W>, State>,
+        self: &Pool<A, B, CpQuoter<W>>,
         amount_in: u64,
         a2b: bool,
     ): SwapQuote {
@@ -147,7 +145,7 @@ module slamm::cpmm {
             reserve_a,
             reserve_b,
             amount_in,
-            self.inner().offset,
+            self.quoter().offset,
             a2b,
         );
 
@@ -188,12 +186,12 @@ module slamm::cpmm {
 
     // ===== View Functions =====
     
-    public fun offset<A, B, W: drop>(self: &Pool<A, B, Hook<W>, State>): u64 {
-        self.inner().offset
+    public fun offset<A, B, W: drop>(self: &Pool<A, B, CpQuoter<W>>): u64 {
+        self.quoter().offset
     }
     
-    public fun k<A, B, Hook: drop, State: store>(
-        self: &Pool<A, B, Hook, State>,
+    public fun k<A, B, Quoter: store>(
+        self: &Pool<A, B, Quoter>,
         offset: u64,
     ): u128 {
         let (total_funds_a, total_funds_b) = self.total_funds();
@@ -203,29 +201,29 @@ module slamm::cpmm {
     // ===== Versioning =====
     
     entry fun migrate<A, B, W>(
-        self: &mut Pool<A, B, Hook<W>, State>,
-        _cap: &PoolCap<A, B, Hook<W>, State>,
+        self: &mut Pool<A, B, CpQuoter<W>>,
+        _cap: &PoolCap<A, B, CpQuoter<W>>,
     ) {
         migrate_(self);
     }
     
     entry fun migrate_as_global_admin<A, B, W>(
-        self: &mut Pool<A, B, Hook<W>, State>,
+        self: &mut Pool<A, B, CpQuoter<W>>,
         _admin: &GlobalAdmin,
     ) {
         migrate_(self);
     }
 
     fun migrate_<A, B, W>(
-        self: &mut Pool<A, B, Hook<W>, State>,
+        self: &mut Pool<A, B, CpQuoter<W>>,
     ) {
         self.inner_mut().version.migrate_(CURRENT_VERSION);
     }
 
     // ===== Package Functions =====
     
-    public(package) fun check_invariance<A, B, Hook: drop, State: store>(
-        self: &Pool<A, B, Hook, State>,
+    public(package) fun check_invariance<A, B, Quoter: store>(
+        self: &Pool<A, B, Quoter>,
         k0: u128,
         offset: u64,
     ) {
@@ -235,7 +233,7 @@ module slamm::cpmm {
     }
 
     public(package) fun max_amount_in_on_a2b<A, B, W: drop>(
-        self: &Pool<A, B, Hook<W>, State>,
+        self: &Pool<A, B, CpQuoter<W>>,
     ): Option<u64> {
         let (reserve_in, reserve_out) = self.total_funds();
         let offset = offset(self);

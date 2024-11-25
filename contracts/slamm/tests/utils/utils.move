@@ -1,6 +1,6 @@
 #[test_only]
 module slamm::test_utils {
-    use slamm::cpmm::{Self, State as CpmmState, Hook as CpmmHook};
+    use slamm::cpmm::{Self, CpQuoter};
     use slamm::registry;
     use slamm::bank::{Self, Bank};
     use slamm::pool::{Pool};
@@ -89,7 +89,7 @@ module slamm::test_utils {
         reserve_b: u64,
         lp_supply: u64,
         swap_fee_bps: u64,
-    ): (Pool<SUI, COIN, CpmmHook<PoolWit>, CpmmState>, Bank<LENDING_MARKET, SUI>, Bank<LENDING_MARKET, COIN>) {
+    ): (Pool<SUI, COIN, CpQuoter<PoolWit>>, Bank<LENDING_MARKET, SUI>, Bank<LENDING_MARKET, COIN>) {
         let mut scenario = test_scenario::begin(@0x0);
         let ctx = ctx(&mut scenario);
 

@@ -10,7 +10,7 @@ module slamm::cpmm_offset_tests {
     use slamm::{
         registry::{Self, Registry},
         bank::{Self, Bank},
-        cpmm::{Self, Hook, State},
+        cpmm::{Self, CpQuoter},
         test_utils::{COIN, reserve_args},
         pool::{Self, Pool, PoolCap},
     };
@@ -29,8 +29,8 @@ module slamm::cpmm_offset_tests {
         LendingMarketOwnerCap<LENDING_MARKET>,
         LendingMarket<LENDING_MARKET>,
         Registry,
-        Pool<COIN, SUI, Hook<Wit>, State>,
-        PoolCap<COIN, SUI, Hook<Wit>, State>,
+        Pool<COIN, SUI, CpQuoter<Wit>>,
+        PoolCap<COIN, SUI, CpQuoter<Wit>>,
         Bank<LENDING_MARKET, COIN>,
         Bank<LENDING_MARKET, SUI>
     ) {
@@ -45,8 +45,8 @@ module slamm::cpmm_offset_tests {
     
     public fun setup_pool(offset: u64, scenario: &mut Scenario): (
         Registry,
-        Pool<COIN, SUI, Hook<Wit>, State>,
-        PoolCap<COIN, SUI, Hook<Wit>, State>,
+        Pool<COIN, SUI, CpQuoter<Wit>>,
+        PoolCap<COIN, SUI, CpQuoter<Wit>>,
         Bank<LENDING_MARKET, COIN>,
         Bank<LENDING_MARKET, SUI>
     ) {
