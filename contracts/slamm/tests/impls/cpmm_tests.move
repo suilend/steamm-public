@@ -3,7 +3,7 @@ module slamm::cpmm_tests {
     use slamm::{
         registry::{Self, Registry},
         bank::{Self, Bank},
-        cpmm::{Self, Hook, State},
+        cpmm::{Self, CpQuoter},
         pool::{Self, Pool, PoolCap, minimum_liquidity},
         pool_math,
         global_admin,
@@ -31,8 +31,8 @@ module slamm::cpmm_tests {
         LendingMarketOwnerCap<LENDING_MARKET>,
         LendingMarket<LENDING_MARKET>,
         Registry,
-        Pool<SUI, COIN, Hook<Wit>, State>,
-        PoolCap<SUI, COIN, Hook<Wit>, State>,
+        Pool<SUI, COIN, CpQuoter<Wit>>,
+        PoolCap<SUI, COIN, CpQuoter<Wit>>,
         Bank<LENDING_MARKET, SUI>,
         Bank<LENDING_MARKET, COIN>,
     ) {
@@ -47,8 +47,8 @@ module slamm::cpmm_tests {
     
     public fun setup_pool(fees: u64, scenario: &mut Scenario): (
         Registry,
-        Pool<SUI, COIN, Hook<Wit>, State>,
-        PoolCap<SUI, COIN, Hook<Wit>, State>,
+        Pool<SUI, COIN, CpQuoter<Wit>>,
+        PoolCap<SUI, COIN, CpQuoter<Wit>>,
         Bank<LENDING_MARKET, SUI>,
         Bank<LENDING_MARKET, COIN>,
     ) {
