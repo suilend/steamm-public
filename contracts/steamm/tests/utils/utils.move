@@ -1,9 +1,9 @@
 #[test_only]
-module slamm::test_utils {
-    use slamm::cpmm::{Self, CpQuoter};
-    use slamm::registry;
-    use slamm::bank::{Self, Bank};
-    use slamm::pool::{Pool};
+module steamm::test_utils {
+    use steamm::cpmm::{Self, CpQuoter};
+    use steamm::registry;
+    use steamm::bank::{Self, Bank};
+    use steamm::pool::{Pool};
     use sui::test_utils::destroy;
     use sui::clock::Clock;
     use sui::test_scenario::{Self, ctx, Scenario};

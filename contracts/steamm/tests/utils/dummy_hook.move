@@ -1,10 +1,10 @@
 #[test_only]
-module slamm::dummy_hook {
+module steamm::dummy_hook {
     use sui::coin::Coin;
-    use slamm::registry::{Registry};
-    use slamm::quote::SwapQuote;
-    use slamm::bank::Bank;
-    use slamm::pool::{Self, Pool, PoolCap, SwapResult, Intent};
+    use steamm::registry::{Registry};
+    use steamm::quote::SwapQuote;
+    use steamm::bank::Bank;
+    use steamm::pool::{Self, Pool, PoolCap, SwapResult, Intent};
 
     public struct DummyQuoter<phantom W> has store {}
 

@@ -1,15 +1,15 @@
 #[test_only]
-module slamm::lend_tests {
+module steamm::lend_tests {
     use sui::test_utils::{Self};
     use suilend::mock_pyth::{Self};
     use std::type_name::{Self};
-    use slamm::pool::{Self, minimum_liquidity};
-    use slamm::registry;
-    use slamm::global_admin;
-    use slamm::cpmm::{Self};
-    use slamm::dummy_hook::{Self, intent_swap, execute_swap};
-    use slamm::test_utils::{COIN, reserve_args, reserve_args_2};
-    use slamm::bank;
+    use steamm::pool::{Self, minimum_liquidity};
+    use steamm::registry;
+    use steamm::global_admin;
+    use steamm::cpmm::{Self};
+    use steamm::dummy_hook::{Self, intent_swap, execute_swap};
+    use steamm::test_utils::{COIN, reserve_args, reserve_args_2};
+    use steamm::bank;
     use sui::{
         test_scenario::{Self, ctx},
         balance,

@@ -1,12 +1,12 @@
 #[test_only]
-module slamm::slamm_tests {
+module steamm::steamm_tests {
     use sui::{
         sui::SUI,
         coin::{Self},
         test_utils::{destroy, assert_eq},
         test_scenario::{Self, ctx},
     };
-    use slamm::{
+    use steamm::{
         quote,
         pool_math,
         pool::{Self, minimum_liquidity},
@@ -28,7 +28,7 @@ module slamm::slamm_tests {
     public struct Wit2 has drop {}
 
     #[test]
-    fun test_slamm_deposit_redeem_swap() {
+    fun test_steamm_deposit_redeem_swap() {
         let mut scenario = test_scenario::begin(ADMIN);
 
         // Init Pool
@@ -1061,7 +1061,7 @@ module slamm::slamm_tests {
     }
     
     #[test]
-    fun test_slamm_fees() {
+    fun test_steamm_fees() {
         let mut scenario = test_scenario::begin(ADMIN);
 
         // Init Pool

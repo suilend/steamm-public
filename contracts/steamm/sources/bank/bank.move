@@ -1,5 +1,5 @@
 #[allow(lint(share_owned))]
-module slamm::bank {
+module steamm::bank {
     use std::{
         option::{none},
     };
@@ -9,7 +9,7 @@ module slamm::bank {
         clock::Clock,
         coin::{Self, Coin},
     };
-    use slamm::{
+    use steamm::{
         bank_math,
         version::{Self, Version},
         registry::Registry,

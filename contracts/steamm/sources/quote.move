@@ -1,9 +1,9 @@
 /// Module for informative structs which provide the input/outputs of a given quotation.
-module slamm::quote {
+module steamm::quote {
     use suilend::decimal::{Self, Decimal};
 
-    public use fun slamm::pool::as_intent as SwapQuote.as_intent;
-    public use fun slamm::pool::swap_inner as SwapQuote.swap_inner;
+    public use fun steamm::pool::as_intent as SwapQuote.as_intent;
+    public use fun steamm::pool::swap_inner as SwapQuote.swap_inner;
     public use fun redemption_fee_a as RedeemQuote.fees_a;
     public use fun redemption_fee_b as RedeemQuote.fees_b;
 

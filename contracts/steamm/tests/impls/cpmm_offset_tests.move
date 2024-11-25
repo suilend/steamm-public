@@ -1,5 +1,5 @@
 #[test_only]
-module slamm::cpmm_offset_tests {
+module steamm::cpmm_offset_tests {
     use sui::{
         test_scenario::{Self, Scenario, ctx},
         sui::SUI,
@@ -7,7 +7,7 @@ module slamm::cpmm_offset_tests {
         test_utils::{destroy, assert_eq},
         clock::Clock,
     };
-    use slamm::{
+    use steamm::{
         registry::{Self, Registry},
         bank::{Self, Bank},
         cpmm::{Self, CpQuoter},

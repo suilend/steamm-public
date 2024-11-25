@@ -1,5 +1,5 @@
 #[allow(lint(share_owned))]
-module slamm::bank_math {
+module steamm::bank_math {
     // ===== Errors =====
 
     const EOutputExceedsTotalBankReserves: u64 = 1;

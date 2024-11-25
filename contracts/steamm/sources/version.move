@@ -1,4 +1,4 @@
-module slamm::version {
+module steamm::version {
   
     // ===== Errors =====
 
