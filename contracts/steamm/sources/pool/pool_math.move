@@ -11,12 +11,6 @@ module steamm::pool_math {
 
     // ===== Errors =====
 
-    // When depositing leads to a coin B deposit amount lower
-    // than the min_b parameter
-    const EEffectiveDepositBBelowMinB: u64 = 1;
-    // When depositing leads to a coin A deposit amount lower
-    // than the min_a parameter
-    const EEffectiveDepositABelowMinA: u64 = 2;
     // When the deposit max parameter ratio is invalid
     const EDepositRatioInvalid: u64 = 3;
     // The amount of coin A reedemed is below the minimum set

@@ -6,7 +6,7 @@ module steamm::cpmm {
         global_admin::GlobalAdmin,
         registry::{Registry},
         quote::SwapQuote,
-        bank::{Bank, BToken},
+        bank::{BToken},
         pool::{Self, Pool, PoolCap, SwapResult, Intent, assert_liquidity},
         version::{Self, Version},
         math::{safe_mul_div, checked_mul_div},
@@ -104,8 +104,6 @@ module steamm::cpmm {
 
     public fun execute_swap<A, B, W: drop, P>(
         self: &mut Pool<A, B, CpQuoter<W>, P>,
-        bank_a: &mut Bank<P, A>,
-        bank_b: &mut Bank<P, B>,
         intent: Intent<A, B, CpQuoter<W>, P>,
         coin_a: &mut Coin<BToken<P, A>>,
         coin_b: &mut Coin<BToken<P, B>>,

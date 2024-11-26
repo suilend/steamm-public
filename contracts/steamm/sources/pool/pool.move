@@ -68,8 +68,6 @@ module steamm::pool {
     const EPoolUnguarded: u64 = 7;
     // When the user coin object does not have enough balance to fulfil the swap
     const EInsufficientFunds: u64 = 8;
-    const EEffectiveWithdrawAmountABelowQuoteAmount: u64 = 9;
-    const EEffectiveWithdrawAmountBBelowQuoteAmount: u64 = 10;
 
     /// Marker type for the LP coins of a pool. There can only be one
     /// pool per type, albeit given the permissionless aspect of the pool

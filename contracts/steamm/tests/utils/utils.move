@@ -89,24 +89,24 @@ module steamm::test_utils {
         reserve_b: u64,
         lp_supply: u64,
         swap_fee_bps: u64,
-    ): (Pool<SUI, COIN, CpQuoter<PoolWit>>, Bank<LENDING_MARKET, SUI>, Bank<LENDING_MARKET, COIN>) {
+    ): (Pool<SUI, COIN, CpQuoter<PoolWit>, LENDING_MARKET>, Bank<LENDING_MARKET, SUI>, Bank<LENDING_MARKET, COIN>) {
         let mut scenario = test_scenario::begin(@0x0);
         let ctx = ctx(&mut scenario);
 
         let mut registry = registry::init_for_testing(ctx);
 
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, PoolWit>(
+        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, PoolWit, LENDING_MARKET>(
             PoolWit {},
             &mut registry,
             swap_fee_bps,
             ctx,
         );
 
-        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
+        let bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
-        pool.mut_reserve_a(&mut bank_a, reserve_a, true);
-        pool.mut_reserve_b(&mut bank_b, reserve_b, true);
+        pool.mut_reserve_a(reserve_a, true);
+        pool.mut_reserve_b(reserve_b, true);
         let lp = pool.lp_supply_mut_for_testing().increase_supply(lp_supply);
 
         destroy(registry);
