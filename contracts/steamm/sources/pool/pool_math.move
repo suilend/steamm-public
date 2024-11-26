@@ -40,16 +40,12 @@ module steamm::pool_math {
         lp_supply: u64,
         max_a: u64,
         max_b: u64,
-        min_a: u64,
-        min_b: u64
     ): (u64, u64, u64) {
         let (delta_a, delta_b) = tokens_to_deposit(
             reserve_a,
             reserve_b,
             max_a,
             max_b,
-            min_a,
-            min_b,
         );
 
         // Compute new LP Tokens
@@ -104,8 +100,6 @@ module steamm::pool_math {
         reserve_b: u64,
         max_a: u64,
         max_b: u64,
-        min_a: u64,
-        min_b: u64
     ): (u64, u64) {
         assert!(max_a > 0, EDepositMaxAParamCantBeZero);
 
@@ -115,14 +109,11 @@ module steamm::pool_math {
             let b_star = safe_mul_div_up(max_a, reserve_b, reserve_a);
             if (b_star <= max_b) {
 
-                assert!(b_star >= min_b, EEffectiveDepositBBelowMinB);
-
                 (max_a, b_star)
             } else {
                 let a_star = safe_mul_div_up(max_b, reserve_a, reserve_b);
                 assert!(a_star > 0, EDepositRatioLeadsToZeroA);
                 assert!(a_star <= max_a, EDepositRatioInvalid);
-                assert!(a_star >= min_a, EEffectiveDepositABelowMinA);
                 (a_star, max_b)
             } 
         }
@@ -162,8 +153,6 @@ module steamm::pool_math {
         lp_supply: u64,
         max_a: u64,
         max_b: u64,
-        min_a: u64,
-        min_b: u64
     ): (u64, u64, u64) {
         quote_deposit(
             reserve_a,
@@ -171,8 +160,6 @@ module steamm::pool_math {
             lp_supply,
             max_a,
             max_b,
-            min_a,
-            min_b,
         )
     }
 

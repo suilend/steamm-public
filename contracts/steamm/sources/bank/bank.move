@@ -37,6 +37,10 @@ module steamm::bank {
     const ECTokenRatioTooLow: u64 = 7;
     const ELendingNotActive: u64 = 8;
 
+    /// Interest bearing token on the underlying Coin<T>. The ctoken can be redeemed for 
+    /// the underlying token + any interest earned.
+    public struct BToken<phantom P, phantom T> has drop {}
+
     public struct Bank<phantom P, phantom T> has key {
         id: UID,
         funds_available: Balance<T>,
