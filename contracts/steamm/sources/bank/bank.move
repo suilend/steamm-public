@@ -34,12 +34,10 @@ module steamm::bank {
 
     const EUtilisationRangeAboveHundredPercent: u64 = 1;
     const EUtilisationRangeBelowHundredPercent: u64 = 2;
-    const EUtilisationRateOffTarget: u64 = 3;
-    const ELendingAlreadyActive: u64 = 4;
-    const EInsufficientFundsInBank: u64 = 5;
-    const EInvalidCTokenRatio: u64 = 6;
-    const ECTokenRatioTooLow: u64 = 7;
-    const ELendingNotActive: u64 = 8;
+    const ELendingAlreadyActive: u64 = 3;
+    const EInvalidCTokenRatio: u64 = 4;
+    const ECTokenRatioTooLow: u64 = 5;
+    const ELendingNotActive: u64 = 6;
 
     /// Interest bearing token on the underlying Coin<T>. The ctoken can be redeemed for 
     /// the underlying token + any interest earned.
@@ -109,24 +107,49 @@ module steamm::bank {
         liquidity: Coin<T>,
         ctx: &mut TxContext,
     ): Coin<BToken<P, T>> {
-        let btoken_ratio = bank.btoken_ratio(lending_market);
-
-        let new_btokens = decimal::from(liquidity.value()).div(btoken_ratio).floor();
+        // let btoken_ratio = bank.btoken_ratio(lending_market);
+        // let new_btokens = decimal::from(liquidity.value()).div(btoken_ratio).floor();
+        let new_btokens = bank.to_btokens(lending_market, liquidity.value()).floor();
 
         bank.funds_available.join(liquidity.into_balance());
         coin::from_balance(bank.btoken_supply.increase_supply(new_btokens), ctx)
     }
+
+    fun to_btokens<P, T>(
+        bank: &Bank<P, T>,
+        lending_market: &LendingMarket<P>,
+        amount: u64,
+    ): Decimal {
+        let btoken_ratio = bank.btoken_ratio(lending_market);
+        decimal::from(amount).div(btoken_ratio)
+    }
+    
+    fun from_btokens<P, T>(
+        bank: &Bank<P, T>,
+        lending_market: &LendingMarket<P>,
+        btoken_amount: u64,
+    ): Decimal {
+        let btoken_ratio = bank.btoken_ratio(lending_market);
+        decimal::from(btoken_amount).mul(btoken_ratio)
+    }
     
     public fun burn_btokens<P, T>(
         bank: &mut Bank<P, T>,
-        lending_market: &LendingMarket<P>,
+        lending_market: &mut LendingMarket<P>,
         btokens: Coin<BToken<P, T>>,
+        clock: &Clock,
         ctx: &mut TxContext,
     ): Coin<T> {
-        let btoken_ratio = bank.btoken_ratio(lending_market);
-        let tokens = decimal::from(btokens.value()).mul(btoken_ratio).floor();
+        // let btoken_ratio = bank.btoken_ratio(lending_market);
+        // let tokens = decimal::from(btokens.value()).mul(btoken_ratio).floor();
+        let tokens = bank.from_btokens(lending_market, btokens.value()).floor();
 
         bank.btoken_supply.decrease_supply(btokens.into_balance());
+
+        if (bank.funds_available.value() < tokens) {
+            bank.prepare_for_pending_withdraw(lending_market, tokens, clock, ctx);
+        };
+
         coin::from_balance(bank.funds_available.split(tokens), ctx)
     }
     
@@ -176,23 +199,6 @@ module steamm::bank {
         };
     }
 
-    // Given how much tokens we want to withdraw form the lending market,
-    // how many ctokens do we need to burn
-    public fun ctoken_amount<P, T>(
-        bank: &Bank<P, T>,
-        lending_market: &LendingMarket<P>,
-        amount: u64,
-    ): u64 {
-        let reserves = lending_market.reserves();
-        let lending = bank.lending.borrow();
-        let reserve = reserves.borrow(lending.reserve_array_index);
-        let ctoken_ratio = reserve.ctoken_ratio();
-
-        let ctoken_amount = decimal::from(amount).div(ctoken_ratio).floor();
-        
-        ctoken_amount
-    }
-
     // ====== Admin Functions =====
 
     public fun set_utilisation_bps<P, T>(
@@ -239,7 +245,7 @@ module steamm::bank {
         bank
     }
     
-    public(package) fun prepare_for_pending_withdraw_<P, T>(
+    fun prepare_for_pending_withdraw<P, T>(
         bank: &mut Bank<P, T>,
         lending_market: &mut LendingMarket<P>,
         withdraw_amount: u64,
@@ -272,34 +278,6 @@ module steamm::bank {
         );
     }
 
-    // We only check lower bound
-    public(package) fun assert_utilisation<P, T>(
-        bank: &Bank<P, T>,
-        lending_market: &LendingMarket<P>,
-    ) {
-        if (bank.lending.is_none()) {
-            return
-        };
-
-        let effective_utilisation_bps = bank.effective_utilisation_bps(lending_market);
-        let target_utilisation_bps = bank.target_utilisation_bps_unchecked();
-        let buffer_bps = bank.utilisation_buffer_bps_unchecked();
-
-        assert!(
-            effective_utilisation_bps <= target_utilisation_bps + buffer_bps,
-            EUtilisationRateOffTarget
-        );
-    }
-
-    public(package) fun deposit<P, T>(bank: &mut Bank<P, T>, balance: Balance<T>) {
-        bank.funds_available.join(balance);
-    }
-    
-    public(package) fun withdraw<P, T>(bank: &mut Bank<P, T>, amount: u64): Balance<T> {
-        assert!(amount <= bank.funds_available.value(), EInsufficientFundsInBank);
-
-        bank.funds_available.split(amount)
-    }
 
     // ====== Private Functions =====
 
@@ -387,6 +365,23 @@ module steamm::bank {
         assert!(decimal::from(lending.ctokens).mul(ctoken_ratio).floor() >= bank.funds_deployed(lending_market).floor(), ECTokenRatioTooLow);
     }
 
+    // Given how much tokens we want to withdraw form the lending market,
+    // how many ctokens do we need to burn
+    public fun ctoken_amount<P, T>(
+        bank: &Bank<P, T>,
+        lending_market: &LendingMarket<P>,
+        amount: u64,
+    ): u64 {
+        let reserves = lending_market.reserves();
+        let lending = bank.lending.borrow();
+        let reserve = reserves.borrow(lending.reserve_array_index);
+        let ctoken_ratio = reserve.ctoken_ratio();
+
+        let ctoken_amount = decimal::from(amount).div(ctoken_ratio).floor();
+        
+        ctoken_amount
+    }
+
     public fun btoken_ratio<P, T>(
         bank: &Bank<P, T>,
         lending_market: &LendingMarket<P>
@@ -424,6 +419,62 @@ module steamm::bank {
         
             decimal::from(bank.lending.borrow().ctokens).mul(ctoken_ratio)
         } else { decimal::from(0) }
+    }
+
+    public fun needs_rebalance<P, T>(
+        bank: &Bank<P, T>,
+        lending_market: &LendingMarket<P>,
+    ): bool {
+        if (bank.lending.is_none()) {
+            return false
+        };
+
+        let effective_utilisation_bps = bank.effective_utilisation_bps(lending_market);
+        let target_utilisation_bps = bank.target_utilisation_bps_unchecked();
+        let buffer_bps = bank.utilisation_buffer_bps_unchecked();
+
+        if (effective_utilisation_bps <= target_utilisation_bps + buffer_bps && effective_utilisation_bps >= target_utilisation_bps - buffer_bps) { false } else { true }
+    }
+    
+    public fun needs_rebalance_after_inflow<P, T>(
+        bank: &Bank<P, T>,
+        lending_market: &LendingMarket<P>,
+        amount: u64,
+    ): bool {
+        if (bank.lending.is_none()) {
+            return false
+        };
+
+        let funds_deployed = bank.funds_deployed(lending_market).floor();
+
+        let effective_utilisation_bps = bank_math::compute_utilisation_bps(bank.funds_available.value() + amount, funds_deployed);
+        let target_utilisation_bps = bank.target_utilisation_bps_unchecked();
+        let buffer_bps = bank.utilisation_buffer_bps_unchecked();
+
+        if (effective_utilisation_bps <= target_utilisation_bps + buffer_bps && effective_utilisation_bps >= target_utilisation_bps - buffer_bps) { false } else { true }
+    }
+    
+    public fun needs_rebalance_after_outflow<P, T>(
+        bank: &Bank<P, T>,
+        lending_market: &LendingMarket<P>,
+        btoken_amount: u64,
+    ): bool {
+        if (bank.lending.is_none()) {
+            return false
+        };
+
+        let funds_deployed = bank.funds_deployed(lending_market).floor();
+        let amount = bank.from_btokens(lending_market, btoken_amount).floor();
+
+        if (amount > bank.funds_available.value()) {
+            return true
+        };
+
+        let effective_utilisation_bps = bank_math::compute_utilisation_bps(bank.funds_available.value() - amount, funds_deployed);
+        let target_utilisation_bps = bank.target_utilisation_bps_unchecked();
+        let buffer_bps = bank.utilisation_buffer_bps_unchecked();
+
+        if (effective_utilisation_bps <= target_utilisation_bps + buffer_bps && effective_utilisation_bps >= target_utilisation_bps - buffer_bps) { false } else { true }
     }
 
     // ====== Getters Functions =====
