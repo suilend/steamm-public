@@ -14,7 +14,8 @@ module steamm::cpmm_tests {
     use sui::coin::{Self};
     use sui::test_utils::{destroy, assert_eq};
     use suilend::{
-        lending_market::{Self, LENDING_MARKET, LendingMarketOwnerCap, LendingMarket}
+        lending_market_tests::{LENDING_MARKET, setup as suilend_setup},
+        lending_market::{LendingMarketOwnerCap, LendingMarket}
     };
 
     const ADMIN: address = @0x10;
@@ -33,7 +34,7 @@ module steamm::cpmm_tests {
         Pool<SUI, COIN, CpQuoter<Wit>, LENDING_MARKET>,
         PoolCap<SUI, COIN, CpQuoter<Wit>, LENDING_MARKET>,
     ) {
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(scenario), scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(scenario), scenario).destruct_state();
         destroy(bag);
         destroy(prices);
 

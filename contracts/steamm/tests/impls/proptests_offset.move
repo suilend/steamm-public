@@ -10,7 +10,9 @@ module steamm::proptests_offset {
     use sui::random;
     use sui::coin::{Self};
     use sui::test_utils::{destroy};
-    use suilend::lending_market::{Self, LENDING_MARKET};
+    use suilend::{
+        lending_market_tests::{LENDING_MARKET, setup as suilend_setup},
+    };
 
     const ADMIN: address = @0x10;
     const POOL_CREATOR: address = @0x11;
@@ -31,7 +33,7 @@ module steamm::proptests_offset {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
@@ -136,7 +138,7 @@ module steamm::proptests_offset {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
@@ -211,7 +213,7 @@ module steamm::proptests_offset {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 

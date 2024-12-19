@@ -16,7 +16,8 @@ module steamm::cpmm_offset_tests {
     };
     use suilend::{
         decimal,
-        lending_market::{Self, LENDING_MARKET, LendingMarketOwnerCap, LendingMarket}
+        lending_market_tests::{LENDING_MARKET, setup as suilend_setup},
+        lending_market::{LendingMarketOwnerCap, LendingMarket}
     };
 
     const ADMIN: address = @0x10;
@@ -32,7 +33,7 @@ module steamm::cpmm_offset_tests {
         Pool<COIN, SUI, CpQuoter<Wit>, LENDING_MARKET>,
         PoolCap<COIN, SUI, CpQuoter<Wit>, LENDING_MARKET>,
     ) {
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(scenario), scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(scenario), scenario).destruct_state();
         destroy(bag);
         destroy(prices);
 
@@ -126,7 +127,7 @@ module steamm::cpmm_offset_tests {
         // Init Pool
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let mut pow_n = 0;
         let mut price = decimal::from(0);
@@ -187,7 +188,7 @@ module steamm::cpmm_offset_tests {
         let mut scenario = test_scenario::begin(ADMIN);
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let mut pow_n = 0;
         let mut price = decimal::from_scaled_val(50000040000080000160); // arbitrarily large number

@@ -4,7 +4,6 @@
 /// called by the hook modules.
 module steamm::pool {
     use sui::{
-        clock::Clock,
         transfer::public_transfer,
         tx_context::sender,
         coin::{Self, Coin},
@@ -19,10 +18,8 @@ module steamm::pool {
         global_admin::GlobalAdmin,
         fees::{Self, Fees, FeeConfig},
         quote::{Self, SwapQuote, SwapFee, DepositQuote, RedeemQuote},
-        bank::{Bank, BToken},
+        bank::{BToken},
     };
-
-    use suilend::lending_market::{LendingMarket};
     
     public use fun steamm::pool::intent_quote as Intent.quote;
     public use fun steamm::cpmm::intent_swap as Pool.cpmm_intent_swap;
@@ -515,33 +512,6 @@ module steamm::pool {
             0,
             0,
         )
-    }
-
-    // ===== Public Lending functions =====
-    
-    public fun prepare_bank_for_pending_withdraw<A, B, Quoter: store, P>(
-        bank_a: &mut Bank<P, A>,
-        bank_b: &mut Bank<P, B>,
-        lending_market: &mut LendingMarket<P>,
-        intent: &mut Intent<A, B, Quoter, P>,
-        clock: &Clock,
-        ctx: &mut TxContext,
-    ) {
-        if (intent.quote.a2b()) {
-            bank_b.prepare_for_pending_withdraw_(
-                lending_market,
-                intent.quote.amount_out_net_of_pool_fees(), // output amount - pool fees
-                clock,
-                ctx
-            );
-        } else {
-            bank_a.prepare_for_pending_withdraw_(
-                lending_market,
-                intent.quote.amount_out_net_of_pool_fees(),
-                clock,
-                ctx
-            );
-        };
     }
 
     // ===== Pool Cap Adming Endpoints =====
