@@ -2,7 +2,7 @@
 
 [move]
 version = 3
-manifest_digest = "DA57D628D13A42E0AC4235E1C5874FE199BB14858B9F6F1F46FBB05B13A23A8B"
+manifest_digest = "D4A5F405287DE9C1EA635CC9BB1E7B444801D2A4C3B306155077A28FFD37CDF4"
 deps_digest = "3C4103934B1E040BB6B23F1D610B4EF9F2F1166A50A104EADCF77467C004C600"
 dependencies = [
   { id = "Sui", name = "Sui" },
@@ -31,6 +31,15 @@ dependencies = [
 ]
 
 [[move.package]]
+id = "SuiSystem"
+source = { git = "https://github.com/MystenLabs/sui.git", rev = "framework/mainnet", subdir = "crates/sui-framework/packages/sui-system" }
+
+dependencies = [
+  { id = "MoveStdlib", name = "MoveStdlib" },
+  { id = "Sui", name = "Sui" },
+]
+
+[[move.package]]
 id = "Wormhole"
 source = { git = "https://github.com/solendprotocol/wormhole.git", rev = "e1698d3c72b15cdddd7da98ad43e151f83b72a0a", subdir = "sui/wormhole" }
 
@@ -39,12 +48,31 @@ dependencies = [
 ]
 
 [[move.package]]
+id = "liquid_staking"
+source = { git = "https://github.com/solendprotocol/liquid-staking.git", rev = "main", subdir = "contracts" }
+
+dependencies = [
+  { id = "Sui", name = "Sui" },
+  { id = "SuiSystem", name = "SuiSystem" },
+]
+
+[[move.package]]
+id = "sprungsui"
+source = { git = "https://github.com/solendprotocol/suilend.git", rev = "expose-test-only-fns", subdir = "contracts/sprungsui" }
+
+dependencies = [
+  { id = "Sui", name = "Sui" },
+]
+
+[[move.package]]
 id = "suilend"
-source = { git = "https://github.com/solendprotocol/suilend.git", rev = "expose-test-only-fns", subdir = "contracts" }
+source = { git = "https://github.com/solendprotocol/suilend.git", rev = "expose-test-only-fns", subdir = "contracts/suilend" }
 
 dependencies = [
   { id = "Pyth", name = "Pyth" },
   { id = "Sui", name = "Sui" },
+  { id = "liquid_staking", name = "liquid_staking" },
+  { id = "sprungsui", name = "sprungsui" },
 ]
 
 [move.toolchain-version]

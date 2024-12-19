@@ -11,7 +11,7 @@ module steamm::bank_tests {
         test_utils::{COIN, reserve_args},
     };
     use suilend::{
-        lending_market::{Self, LENDING_MARKET},
+        lending_market_tests::{LENDING_MARKET, setup as suilend_setup},
     };
     use suilend::test_usdc::{TEST_USDC};
 
@@ -53,7 +53,7 @@ module steamm::bank_tests {
         let mut scenario = test_scenario::begin(@0x0);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
 
         // Create bank
         let mut bank = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
@@ -84,7 +84,7 @@ module steamm::bank_tests {
         let mut scenario = test_scenario::begin(@0x0);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
 
         // Create bank
         let mut bank = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
@@ -124,7 +124,7 @@ module steamm::bank_tests {
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
 
-        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
@@ -156,7 +156,7 @@ module steamm::bank_tests {
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
 
-        let (clock, lend_cap, mut lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 

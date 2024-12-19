@@ -17,7 +17,9 @@ module steamm::steamm_tests {
         dummy_hook::{Self, swap, intent_swap, execute_swap, quote_swap},
         cpmm::{Self, offset},
     };
-    use suilend::lending_market::{Self, LENDING_MARKET};
+    use suilend::{
+        lending_market_tests::{LENDING_MARKET, setup as suilend_setup},
+    };
 
     const ADMIN: address = @0x10;
     const POOL_CREATOR: address = @0x11;
@@ -35,7 +37,7 @@ module steamm::steamm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
@@ -166,7 +168,7 @@ module steamm::steamm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
@@ -340,7 +342,7 @@ module steamm::steamm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
@@ -421,7 +423,7 @@ module steamm::steamm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
@@ -496,7 +498,7 @@ module steamm::steamm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
@@ -596,7 +598,7 @@ module steamm::steamm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
@@ -696,7 +698,7 @@ module steamm::steamm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
@@ -727,7 +729,7 @@ module steamm::steamm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
@@ -766,7 +768,7 @@ module steamm::steamm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
@@ -910,7 +912,7 @@ module steamm::steamm_tests {
     fun test_try_multiple_swap_intents() {
         let mut scenario = test_scenario::begin(ADMIN);
 
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
@@ -996,7 +998,7 @@ module steamm::steamm_tests {
     fun test_try_swap_intent_and_deposit_in_the_middle() {
         let mut scenario = test_scenario::begin(ADMIN);
 
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
@@ -1082,7 +1084,7 @@ module steamm::steamm_tests {
     fun test_try_swap_intent_and_redeem_in_the_middle() {
         let mut scenario = test_scenario::begin(ADMIN);
 
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
@@ -1164,7 +1166,7 @@ module steamm::steamm_tests {
     fun test_pool_unguarded() {
         let mut scenario = test_scenario::begin(ADMIN);
 
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
@@ -1240,7 +1242,7 @@ module steamm::steamm_tests {
     fun test_output_exceeds_liquidity() {
         let mut scenario = test_scenario::begin(ADMIN);
 
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         // Create amm bank
         let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
@@ -1319,7 +1321,7 @@ module steamm::steamm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
@@ -1380,7 +1382,7 @@ module steamm::steamm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
@@ -1443,7 +1445,7 @@ module steamm::steamm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
@@ -1508,7 +1510,7 @@ module steamm::steamm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
@@ -1561,7 +1563,7 @@ module steamm::steamm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
@@ -1628,7 +1630,7 @@ module steamm::steamm_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
