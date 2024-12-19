@@ -1,7 +1,3 @@
-// TODO: Evaluate roundings
-// Evaluate cToken assertions
-// Add prepare for pending withdraw inside burn tokens as a conditional
-// Update tests
 #[allow(lint(share_owned))]
 module steamm::bank {
     use std::{
@@ -39,6 +35,7 @@ module steamm::bank {
     const ECTokenRatioTooLow: u64 = 5;
     const ELendingNotActive: u64 = 6;
     const ECompoundedInterestNotUpdated: u64 = 7;
+    const EInsufficientBankFunds: u64 = 8;
 
     /// Interest bearing token on the underlying Coin<T>. The ctoken can be redeemed for 
     /// the underlying token + any interest earned.
@@ -150,9 +147,11 @@ module steamm::bank {
             bank.prepare_for_pending_withdraw(lending_market, tokens_to_withdraw, clock, ctx);
         };
 
-        // In the edge case where the user burns the last remaining btokens
-        // the amount available in the bank might be off by 1 due to rounding
+        // In the edge case where the utilisation is at 100%, the amount withdrawn from
+        // suilend might be off by 1 due to rounding, in such case, the amount available
+        // will be lower than the amount requested
         let max_available = bank.funds_available.value();
+        assert!(max_available + 1 >= tokens_to_withdraw, EInsufficientBankFunds);
         coin::from_balance(bank.funds_available.split(tokens_to_withdraw.min(max_available)), ctx)
     }
     
@@ -171,14 +170,12 @@ module steamm::bank {
         let funds_deployed = bank.funds_deployed(lending_market, clock).floor();
         let effective_utilisation_bps = bank_math::compute_utilisation_bps(bank.funds_available.value(), funds_deployed);
 
-        // let effective_utilisation_bps = bank.effective_utilisation_bps(lending_market, clock); // replace
         let target_utilisation_bps = bank.target_utilisation_bps_unchecked();
         let buffer_bps = bank.utilisation_buffer_bps();
 
         if (effective_utilisation_bps < target_utilisation_bps - buffer_bps) {
             let amount_to_deploy = bank_math::compute_amount_to_deploy(
                 bank.funds_available.value(),
-                // bank.funds_deployed(lending_market, clock).floor(),
                 funds_deployed,
                 target_utilisation_bps,
             );
@@ -193,7 +190,6 @@ module steamm::bank {
             let amount_to_recall = bank_math::compute_amount_to_recall(
                 bank.funds_available.value(),
                 0,
-                // bank.funds_deployed(lending_market, clock).floor(),
                 funds_deployed,
                 target_utilisation_bps,
             );
@@ -370,10 +366,11 @@ module steamm::bank {
         let reserve = reserves.borrow(lending.reserve_array_index);
         let ctoken_ratio = reserve.ctoken_ratio();
 
+        // Note: the amount of funds deployed is different from the previous assertion
         assert!(decimal::from(lending.ctokens).mul(ctoken_ratio).floor() >= bank.funds_deployed(lending_market, clock).floor(), ECTokenRatioTooLow);
     }
 
-    // Given how much tokens we want to withdraw form the lending market,
+    // Given how much tokens we want to withdraw from the lending market,
     // how many ctokens do we need to burn
     public fun ctoken_amount<P, T>(
         bank: &Bank<P, T>,
@@ -385,6 +382,7 @@ module steamm::bank {
         let reserve = reserves.borrow(lending.reserve_array_index);
         let ctoken_ratio = reserve.ctoken_ratio();
 
+        // TODO: Should this be rounded down? 
         let ctoken_amount = decimal::from(amount).div(ctoken_ratio).floor();
         
         ctoken_amount

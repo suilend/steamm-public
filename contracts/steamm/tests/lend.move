@@ -1,6 +1,5 @@
 #[test_only]
 module steamm::lend_tests {
-    use std::debug::print;
     use std::type_name;
     use sui::test_utils::{Self};
     use steamm::pool::{minimum_liquidity};
