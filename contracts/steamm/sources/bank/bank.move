@@ -468,8 +468,6 @@ module steamm::bank {
     ) {
         if (bank.lending.is_some()) {
             lending_market.compound_interest<P, T>(bank.reserve_array_index(), clock);
-        } else {
-            return
         }
     }
 
