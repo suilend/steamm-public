@@ -101,12 +101,13 @@ module steamm::bank {
 
     public fun mint_btokens<P, T>(
         bank: &mut Bank<P, T>,
-        lending_market: &LendingMarket<P>,
+        lending_market: &mut LendingMarket<P>,
         liquidity: Coin<T>,
         clock: &Clock,
         ctx: &mut TxContext,
     ): Coin<BToken<P, T>> {
         bank.version.assert_version_and_upgrade(CURRENT_VERSION);
+        bank.compound_interest_if_any(lending_market, clock);
 
         let new_btokens = bank.to_btokens(lending_market, liquidity.value(), clock).floor();
 
@@ -145,6 +146,7 @@ module steamm::bank {
         ctx: &mut TxContext,
     ): Coin<T> {
         bank.version.assert_version_and_upgrade(CURRENT_VERSION);
+        bank.compound_interest_if_any(lending_market, clock);
 
         let tokens_to_withdraw = bank.from_btokens(lending_market, btokens.value(), clock).floor();
 
@@ -170,6 +172,7 @@ module steamm::bank {
         ctx: &mut TxContext,
     ) {
         bank.version.assert_version_and_upgrade(CURRENT_VERSION);
+        bank.compound_interest_if_any(lending_market, clock);
 
         if (bank.lending.is_none()) {
             return
@@ -458,11 +461,23 @@ module steamm::bank {
         if (effective_utilisation_bps <= target_utilisation_bps + buffer_bps && effective_utilisation_bps >= target_utilisation_bps - buffer_bps) { false } else { true }
     }
 
+    fun compound_interest_if_any<P, T>(
+        bank: &Bank<P, T>,
+        lending_market: &mut LendingMarket<P>,
+        clock: &Clock,
+    ) {
+        if (bank.lending.is_some()) {
+            lending_market.compound_interest<P, T>(bank.reserve_array_index(), clock);
+        } else {
+            return
+        }
+    }
+
     // ====== Getters Functions =====
 
     public fun lending<P, T>(self: &Bank<P, T>): &Option<Lending<P>> { &self.lending }
 
-    public fun effective_utilisation_bps<P, T>(
+    public(package) fun effective_utilisation_bps<P, T>(
         self: &Bank<P, T>,
         lending_market: &LendingMarket<P>,
         clock: &Clock
