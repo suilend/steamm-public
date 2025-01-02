@@ -68,11 +68,14 @@ module steamm::lend_tests {
         );
 
         // Deposit funds in AMM Pool
-        let coin_a = coin::mint_for_testing<TEST_USDC>(500_000, ctx);
-        let coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
+        let mut coin_a = coin::mint_for_testing<TEST_USDC>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
 
-        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, coin_a, &clock, ctx);
-        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, coin_b, &clock, ctx);
+        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 500_000, &clock, ctx);
+        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 500_000, &clock, ctx);
+
+        destroy(coin_a);
+        destroy(coin_b);
 
         // Test bank effects after minting btokens
         assert_eq(bank_a.funds_deployed(&lending_market, &clock).floor(), 0); // 500_000 * 0%
@@ -171,11 +174,14 @@ module steamm::lend_tests {
         );
 
         // Deposit funds in AMM Pool
-        let coin_a = coin::mint_for_testing<TEST_USDC>(500_000, ctx);
-        let coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
+        let mut coin_a = coin::mint_for_testing<TEST_USDC>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
 
-        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, coin_a, &clock, ctx);
-        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, coin_b, &clock, ctx);
+        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 500_000, &clock, ctx);
+        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 500_000, &clock, ctx);
+
+        destroy(coin_a);
+        destroy(coin_b);
 
         let (lp_coins, _) = pool.deposit_liquidity(
             &mut btoken_a,
@@ -210,10 +216,12 @@ module steamm::lend_tests {
         destroy(btoken_b);
 
         // Swap
-        let coin_a = coin::mint_for_testing<TEST_USDC>(50_000, ctx);
+        let mut coin_a = coin::mint_for_testing<TEST_USDC>(50_000, ctx);
 
-        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, coin_a, &clock, ctx);
+        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 50_000, &clock, ctx);
         let mut btoken_b = coin::zero(ctx);
+
+        destroy(coin_a);
 
         assert_eq(bank_a.funds_deployed(&lending_market, &clock).floor(), 0);
         assert_eq(bank_a.funds_available().value(), 550_000);
@@ -302,11 +310,14 @@ module steamm::lend_tests {
         );
 
         // Deposit funds in AMM Pool
-        let coin_a = coin::mint_for_testing<TEST_USDC>(500_000, ctx);
-        let coin_b = coin::mint_for_testing<TEST_SUI>(500_000, ctx);
+        let mut coin_a = coin::mint_for_testing<TEST_USDC>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<TEST_SUI>(500_000, ctx);
 
-        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, coin_a, &clock, ctx);
-        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, coin_b, &clock, ctx);
+        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 500_000, &clock, ctx);
+        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 500_000, &clock, ctx);
+
+        destroy(coin_a);
+        destroy(coin_b);
 
         // Test bank effects after minting btokens
         assert_eq(bank_a.funds_deployed(&lending_market, &clock).floor(), 0); // 500_000 * 0%
@@ -414,11 +425,14 @@ module steamm::lend_tests {
         );
 
         // Deposit funds in AMM Pool
-        let coin_a = coin::mint_for_testing<TEST_USDC>(500_000, ctx);
-        let coin_b = coin::mint_for_testing<TEST_SUI>(500_000, ctx);
+        let mut coin_a = coin::mint_for_testing<TEST_USDC>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<TEST_SUI>(500_000, ctx);
         
-        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, coin_a, &clock, ctx);
-        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, coin_b, &clock, ctx);
+        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 500_000, &clock, ctx);
+        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 500_000, &clock, ctx);
+
+        destroy(coin_a);
+        destroy(coin_b);
 
         // Test bank effects after minting btokens
         assert_eq(bank_a.funds_deployed(&lending_market, &clock).floor(), 0); // 500_000 * 0%
@@ -472,10 +486,12 @@ module steamm::lend_tests {
         destroy(btoken_b);
 
         // Swap
-        let coin_a = coin::mint_for_testing<TEST_USDC>(50_000, ctx);
+        let mut coin_a = coin::mint_for_testing<TEST_USDC>(50_000, ctx);
 
-        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, coin_a, &clock, ctx);
+        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 50_000, &clock, ctx);
         let mut btoken_b = coin::zero(ctx);
+
+        destroy(coin_a);
 
         // Test bank effects after minting btokens
         assert_eq(bank_a.funds_deployed(&lending_market, &clock).floor(), 400_000); // No change
@@ -507,8 +523,11 @@ module steamm::lend_tests {
         assert_eq(swap_result.amount_out(), 44_999 + 91 + 364);
 
         // Burn btoken
-        let coin_b = bank_b.burn_btokens(&mut lending_market, btoken_b, &clock, ctx);
+        let btoken_b_value = btoken_b.value();
+        let coin_b = bank_b.burn_btokens(&mut lending_market, &mut btoken_b, btoken_b_value, &clock, ctx);
         assert_eq(coin_b.value(), 44_999);
+
+        destroy(btoken_b);
 
         // Confirm that bank DOES NOT need to be rebalanced
         assert!(!bank_a.needs_rebalance(&lending_market, &clock));
@@ -601,11 +620,14 @@ module steamm::lend_tests {
         );
 
         // Deposit funds in AMM Pool
-        let coin_a = coin::mint_for_testing<TEST_USDC>(500_000, ctx);
-        let coin_b = coin::mint_for_testing<TEST_SUI>(500_000, ctx);
+        let mut coin_a = coin::mint_for_testing<TEST_USDC>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<TEST_SUI>(500_000, ctx);
 
-        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, coin_a, &clock, ctx);
-        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, coin_b, &clock, ctx);
+        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 500_000, &clock, ctx);
+        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 500_000, &clock, ctx);
+
+        destroy(coin_a);
+        destroy(coin_b);
 
         // Test bank effects after minting btokens
         assert_eq(bank_a.funds_deployed(&lending_market, &clock).floor(), 0); // 500_000 * 0%
@@ -658,10 +680,12 @@ module steamm::lend_tests {
         destroy(btoken_b);
 
         // Swap
-        let coin_a = coin::mint_for_testing<TEST_USDC>(200_000, ctx);
+        let mut coin_a = coin::mint_for_testing<TEST_USDC>(200_000, ctx);
 
-        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, coin_a, &clock, ctx);
+        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 200_000, &clock, ctx);
         let mut btoken_b = coin::zero(ctx);
+
+        destroy(coin_a);
 
         // Test bank effects after minting btokens
         assert_eq(bank_a.funds_deployed(&lending_market, &clock).floor(), 400_000); // No change
@@ -704,8 +728,11 @@ module steamm::lend_tests {
         assert_eq(bank_b.funds_available().value(), 100000);
 
         // Burn btoken
-        let coin_b = bank_b.burn_btokens(&mut lending_market, btoken_b, &clock, ctx);
+        let btoken_b_value = btoken_b.value();
+        let coin_b = bank_b.burn_btokens(&mut lending_market, &mut btoken_b, btoken_b_value, &clock, ctx);
         assert_eq(coin_b.value(), 141_428);
+
+        destroy(btoken_b);
 
         bank_a.rebalance(
             &mut lending_market,
@@ -778,11 +805,14 @@ module steamm::lend_tests {
         );
 
         // Deposit funds in AMM Pool
-        let coin_a = coin::mint_for_testing<TEST_USDC>(100_000, ctx);
-        let coin_b = coin::mint_for_testing<COIN>(100_000, ctx);
+        let mut coin_a = coin::mint_for_testing<TEST_USDC>(100_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(100_000, ctx);
 
-        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, coin_a, &clock, ctx);
-        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, coin_b, &clock, ctx);
+        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 100_000, &clock, ctx);
+        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 100_000, &clock, ctx);
+
+        destroy(coin_a);
+        destroy(coin_b);
 
         let (lp_coins, _) = pool.deposit_liquidity(
             &mut btoken_a,
@@ -828,11 +858,14 @@ module steamm::lend_tests {
         destroy(lp_coins);
 
         // Deposit funds in AMM Pool - below buffer - does not lend
-        let coin_a = coin::mint_for_testing<TEST_USDC>(5_000, ctx);
-        let coin_b = coin::mint_for_testing<COIN>(5_000, ctx);
+        let mut coin_a = coin::mint_for_testing<TEST_USDC>(5_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(5_000, ctx);
 
-        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, coin_a, &clock, ctx);
-        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, coin_b, &clock, ctx);
+        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 5_000, &clock, ctx);
+        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 5_000, &clock, ctx);
+
+        destroy(coin_a);
+        destroy(coin_b);
 
         let (lp_coins, _) = pool.deposit_liquidity(
             &mut btoken_a,
@@ -864,11 +897,14 @@ module steamm::lend_tests {
         destroy(lp_coins);
         
         // Deposit funds in AMM Pool - above buffer - lend
-        let coin_a = coin::mint_for_testing<TEST_USDC>(5_000_000, ctx);
-        let coin_b = coin::mint_for_testing<COIN>(5_000_000, ctx);
+        let mut coin_a = coin::mint_for_testing<TEST_USDC>(5_000_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(5_000_000, ctx);
 
-        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, coin_a, &clock, ctx);
-        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, coin_b, &clock, ctx);
+        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 5_000_000, &clock, ctx);
+        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 5_000_000, &clock, ctx);
+
+        destroy(coin_a);
+        destroy(coin_b);
 
         let (lp_coins, _) = pool.deposit_liquidity(
             &mut btoken_a,
@@ -952,11 +988,14 @@ module steamm::lend_tests {
         );
 
         // Deposit funds in AMM Pool
-        let coin_a = coin::mint_for_testing<TEST_USDC>(100_000_000_00_000, ctx);
-        let coin_b = coin::mint_for_testing<COIN>(100_000_000_00_000, ctx);
+        let mut coin_a = coin::mint_for_testing<TEST_USDC>(100_000_000_00_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(100_000_000_00_000, ctx);
 
-        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, coin_a, &clock, ctx);
-        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, coin_b, &clock, ctx);
+        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 100_000_000_00_000, &clock, ctx);
+        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 100_000_000_00_000, &clock, ctx);
+
+        destroy(coin_a);
+        destroy(coin_b);
 
         let (lp_coins, _) = pool.deposit_liquidity(
             &mut btoken_a,
@@ -989,11 +1028,14 @@ module steamm::lend_tests {
         while (deposits > 0) {
             let amount_in = rng.generate_u64_in_range(1_000, 100_000);
 
-            let coin_a = coin::mint_for_testing<TEST_USDC>(amount_in, ctx);
-            let coin_b = coin::mint_for_testing<COIN>(amount_in, ctx);
+            let mut coin_a = coin::mint_for_testing<TEST_USDC>(amount_in, ctx);
+            let mut coin_b = coin::mint_for_testing<COIN>(amount_in, ctx);
 
-            let mut btoken_a = bank_a.mint_btokens(&mut lending_market, coin_a, &clock, ctx);
-            let mut btoken_b = bank_b.mint_btokens(&mut lending_market, coin_b, &clock, ctx);
+            let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, amount_in, &clock, ctx);
+            let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, amount_in, &clock, ctx);
+
+            destroy(coin_a);
+            destroy(coin_b);
 
             let (lp_coins, _) = pool.deposit_liquidity(
                 &mut btoken_a,
@@ -1075,11 +1117,14 @@ module steamm::lend_tests {
         );
 
         // Deposit funds in AMM Pool
-        let coin_a = coin::mint_for_testing<TEST_USDC>(100_000, ctx);
-        let coin_b = coin::mint_for_testing<COIN>(100_000, ctx);
+        let mut coin_a = coin::mint_for_testing<TEST_USDC>(100_000, ctx);
+        let mut coin_b = coin::mint_for_testing<COIN>(100_000, ctx);
 
-        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, coin_a, &clock, ctx);
-        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, coin_b, &clock, ctx);
+        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 100_000, &clock, ctx);
+        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 100_000, &clock, ctx);
+
+        destroy(coin_a);
+        destroy(coin_b);
 
         let (mut lp_coins, _) = pool.deposit_liquidity(
             &mut btoken_a,
@@ -1119,17 +1164,22 @@ module steamm::lend_tests {
         destroy(btoken_b);
 
         // Redeem funds in AMM Pool - below buffer - does not recall
-        let (btoken_a, btoken_b, _) = pool.redeem_liquidity(
+        let (mut btoken_a, mut btoken_b, _) = pool.redeem_liquidity(
             lp_coins.split(100, ctx),
             100,
             100,
             ctx,
         );
 
-        let coin_a = bank_a.burn_btokens(&mut lending_market, btoken_a, &clock, ctx);
-        let coin_b = bank_b.burn_btokens(&mut lending_market, btoken_b, &clock, ctx);
+        let btoken_a_value = btoken_a.value();
+        let coin_a = bank_a.burn_btokens(&mut lending_market, &mut btoken_a, btoken_a_value, &clock, ctx);
+        let btoken_b_value = btoken_b.value();
+        let coin_b = bank_b.burn_btokens(&mut lending_market, &mut btoken_b, btoken_b_value, &clock, ctx);
         assert_eq(coin_b.value(), 100);
         assert_eq(coin_b.value(), 100);
+
+        destroy(btoken_a);
+        destroy(btoken_b);
 
         // Dos noes need rebalance
         assert!(!bank_a.needs_rebalance(&lending_market, &clock));
@@ -1206,11 +1256,14 @@ module steamm::lend_tests {
         );
 
         // Deposit funds in AMM Pool
-        let coin_a = coin::mint_for_testing<TEST_USDC>(100_000, ctx);
-        let coin_b = coin::mint_for_testing<TEST_SUI>(100_000, ctx);
+        let mut coin_a = coin::mint_for_testing<TEST_USDC>(100_000, ctx);
+        let mut coin_b = coin::mint_for_testing<TEST_SUI>(100_000, ctx);
 
-        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, coin_a, &clock, ctx);
-        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, coin_b, &clock, ctx);
+        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 100_000, &clock, ctx);
+        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 100_000, &clock, ctx);
+
+        destroy(coin_a);
+        destroy(coin_b);
 
         let (lp_coins, _) = pool.deposit_liquidity(
             &mut btoken_a,
@@ -1236,10 +1289,12 @@ module steamm::lend_tests {
         );
 
         // Swap funds in AMM Pool - below buffer - does not recall
-        let coin_b = coin::mint_for_testing<TEST_SUI>(10, ctx);
+        let mut coin_b = coin::mint_for_testing<TEST_SUI>(10, ctx);
 
         let mut btoken_a = coin::zero(ctx);
-        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, coin_b, &clock, ctx);
+        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 10, &clock, ctx);
+        
+        destroy(coin_b);
 
         let swap_intent = intent_swap(
             &mut pool,
@@ -1277,11 +1332,16 @@ module steamm::lend_tests {
         assert_eq(bank_b.funds_available().value(), 20_000 + 10);
 
         // Burn btoken
-        let coin_b = bank_b.burn_btokens(&mut lending_market, btoken_b, &clock, ctx);
+        let btoken_b_value = btoken_b.value();
+        let coin_b = bank_b.burn_btokens(&mut lending_market, &mut btoken_b, btoken_b_value, &clock, ctx);
         assert_eq(coin_b.value(), 0);
         
-        let coin_a = bank_a.burn_btokens(&mut lending_market, btoken_a, &clock, ctx);
+        let btoken_a_value = btoken_a.value();
+        let coin_a = bank_a.burn_btokens(&mut lending_market, &mut btoken_a, btoken_a_value, &clock, ctx);
         assert_eq(coin_a.value(), 10);
+
+        destroy(btoken_a);
+        destroy(btoken_b);
 
          // Rebalance
         bank_a.rebalance(
@@ -1362,11 +1422,11 @@ module steamm::lend_tests {
         );
 
         // Deposit funds in AMM Pool
-        let coin_a = coin::mint_for_testing<TEST_USDC>(100_000, ctx);
-        let coin_b = coin::mint_for_testing<TEST_SUI>(100_000, ctx);
+        let mut coin_a = coin::mint_for_testing<TEST_USDC>(100_000, ctx);
+        let mut coin_b = coin::mint_for_testing<TEST_SUI>(100_000, ctx);
 
-        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, coin_a, &clock, ctx);
-        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, coin_b, &clock, ctx);
+        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 100_000, &clock, ctx);
+        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 100_000, &clock, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
             &mut btoken_a,
@@ -1378,6 +1438,8 @@ module steamm::lend_tests {
 
         destroy(btoken_a);
         destroy(btoken_b);
+        destroy(coin_a);
+        destroy(coin_b);
 
         bank_a.rebalance(
             &mut lending_market,
@@ -1392,10 +1454,12 @@ module steamm::lend_tests {
         );
 
         // Swap funds in AMM Pool
-        let coin_b = coin::mint_for_testing<TEST_SUI>(20_000, ctx);
+        let mut coin_b = coin::mint_for_testing<TEST_SUI>(20_000, ctx);
 
         let mut btoken_a = coin::zero(ctx);
-        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, coin_b, &clock, ctx);
+        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 20_000, &clock, ctx);
+
+        destroy(coin_b);
 
         let swap_intent = intent_swap(
             &mut pool,
@@ -1433,12 +1497,16 @@ module steamm::lend_tests {
         assert_eq(bank_b.funds_available().value(), 20_000 + 20_000);
 
         // Burn btoken
-        let coin_a = bank_a.burn_btokens(&mut lending_market, btoken_a, &clock, ctx);
+        let btoken_a_value = btoken_a.value();
+        let coin_a = bank_a.burn_btokens(&mut lending_market, &mut btoken_a, btoken_a_value, &clock, ctx);
         assert_eq(coin_a.value(), 20_000);
         
-        let coin_b = bank_b.burn_btokens(&mut lending_market, btoken_b, &clock, ctx);
+        let btoken_b_value = btoken_b.value();
+        let coin_b = bank_b.burn_btokens(&mut lending_market, &mut btoken_b, btoken_b_value, &clock, ctx);
         assert_eq(coin_b.value(), 0);
         
+        destroy(btoken_a);
+        destroy(btoken_b);
 
         // Rebalance
         bank_a.rebalance(
@@ -1519,11 +1587,14 @@ module steamm::lend_tests {
         );
 
         // Deposit funds in AMM Pool
-        let coin_a = coin::mint_for_testing<TEST_USDC>(100_000, ctx);
-        let coin_b = coin::mint_for_testing<TEST_SUI>(100_000, ctx);
+        let mut coin_a = coin::mint_for_testing<TEST_USDC>(100_000, ctx);
+        let mut coin_b = coin::mint_for_testing<TEST_SUI>(100_000, ctx);
 
-        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, coin_a, &clock, ctx);
-        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, coin_b, &clock, ctx);
+        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 100_000, &clock, ctx);
+        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 100_000, &clock, ctx);
+
+        destroy(coin_a);
+        destroy(coin_b);
 
         let (lp_coins, _) = pool.deposit_liquidity(
             &mut btoken_a,
@@ -1549,10 +1620,12 @@ module steamm::lend_tests {
         );
 
         // Swap funds in AMM Pool
-        let coin_b = coin::mint_for_testing<TEST_SUI>(30_000, ctx);
+        let mut coin_b = coin::mint_for_testing<TEST_SUI>(30_000, ctx);
 
         let mut btoken_a = coin::zero(ctx);
-        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, coin_b, &clock, ctx);
+        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 30_000, &clock, ctx);
+
+        destroy(coin_b);
 
         let swap_intent = intent_swap(
             &mut pool,
@@ -1590,12 +1663,16 @@ module steamm::lend_tests {
         assert_eq(bank_b.funds_available().value(), 20_000 + 30_000);
 
         // Burn btoken
-        let coin_a = bank_a.burn_btokens(&mut lending_market, btoken_a, &clock, ctx);
+        let btoken_a_value = btoken_a.value();
+        let coin_a = bank_a.burn_btokens(&mut lending_market, &mut btoken_a, btoken_a_value, &clock, ctx);
         assert_eq(coin_a.value(), 30_000);
         
-        let coin_b = bank_b.burn_btokens(&mut lending_market, btoken_b, &clock, ctx);
+        let btoken_b_value = btoken_b.value();
+        let coin_b = bank_b.burn_btokens(&mut lending_market, &mut btoken_b, btoken_b_value, &clock, ctx);
         assert_eq(coin_b.value(), 0);
         
+        destroy(btoken_a);
+        destroy(btoken_b);
 
         // Rebalance
         bank_a.rebalance(
@@ -1943,11 +2020,14 @@ module steamm::lend_tests {
 
         // Deposit funds in AMM Pool
         let liquidity_amount = 3_000_010; // we add the +10 which is locked forever
-        let coin_a = coin::mint_for_testing<TEST_SUI>(liquidity_amount, ctx);
-        let coin_b = coin::mint_for_testing<TEST_USDC>(liquidity_amount, ctx);
+        let mut coin_a = coin::mint_for_testing<TEST_SUI>(liquidity_amount, ctx);
+        let mut coin_b = coin::mint_for_testing<TEST_USDC>(liquidity_amount, ctx);
 
-        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, coin_a, &clock, ctx);
-        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, coin_b, &clock, ctx);
+        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, liquidity_amount, &clock, ctx);
+        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, liquidity_amount, &clock, ctx);
+
+        destroy(coin_a);
+        destroy(coin_b);
 
         let (lp_coins, _) = pool.deposit_liquidity(
             &mut btoken_a,
@@ -2040,7 +2120,7 @@ module steamm::lend_tests {
         test_utils::destroy(sui_to_repay);
 
         // Redeem liquidity
-        let (btoken_a, btoken_b, _) = pool.redeem_liquidity(
+        let (mut btoken_a, mut btoken_b, _) = pool.redeem_liquidity(
             lp_coins,
             0,
             0,
@@ -2066,9 +2146,14 @@ module steamm::lend_tests {
             mock_pyth::get_price_obj<TEST_SUI>(&prices)
         );
 
-        let coin_a = bank_a.burn_btokens(&mut lending_market, btoken_a, &clock, ctx);
-        let coin_b = bank_b.burn_btokens(&mut lending_market, btoken_b, &clock, ctx);
+        let btoken_a_value = btoken_a.value();
+        let coin_a = bank_a.burn_btokens(&mut lending_market, &mut btoken_a, btoken_a_value, &clock, ctx);
+        let btoken_b_value = btoken_b.value();
+        let coin_b = bank_b.burn_btokens(&mut lending_market, &mut btoken_b, btoken_b_value, &clock, ctx);
 
+        destroy(btoken_a);
+        destroy(btoken_b);
+        
         assert_eq(coin_b.value(), 3_000_000); // No lending on so it stays the same
 
         // Initial funds deposited on the lending market: 1000000
@@ -2129,11 +2214,14 @@ module steamm::lend_tests {
 
         // Deposit funds in AMM Pool
         let liquidity_amount = 1_500_010; // we add the +10 which is locked forever
-        let coin_a = coin::mint_for_testing<TEST_SUI>(liquidity_amount, ctx);
-        let coin_b = coin::mint_for_testing<TEST_USDC>(liquidity_amount, ctx);
+        let mut coin_a = coin::mint_for_testing<TEST_SUI>(liquidity_amount, ctx);
+        let mut coin_b = coin::mint_for_testing<TEST_USDC>(liquidity_amount, ctx);
 
-        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, coin_a, &clock, ctx);
-        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, coin_b, &clock, ctx);
+        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, liquidity_amount, &clock, ctx);
+        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, liquidity_amount, &clock, ctx);
+
+        destroy(coin_a);
+        destroy(coin_b);
 
         let (lp_coins_1, _) = pool.deposit_liquidity(
             &mut btoken_a,
@@ -2147,11 +2235,14 @@ module steamm::lend_tests {
         test_utils::destroy(btoken_b);
         
         let liquidity_amount = 1_500_000;
-        let coin_a = coin::mint_for_testing<TEST_SUI>(liquidity_amount, ctx);
-        let coin_b = coin::mint_for_testing<TEST_USDC>(liquidity_amount, ctx);
+        let mut coin_a = coin::mint_for_testing<TEST_SUI>(liquidity_amount, ctx);
+        let mut coin_b = coin::mint_for_testing<TEST_USDC>(liquidity_amount, ctx);
 
-        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, coin_a, &clock, ctx);
-        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, coin_b, &clock, ctx);
+        let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, liquidity_amount, &clock, ctx);
+        let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, liquidity_amount, &clock, ctx);
+
+        destroy(coin_a);
+        destroy(coin_b);
 
         let (lp_coins_2, _) = pool.deposit_liquidity(
             &mut btoken_a,
@@ -2245,7 +2336,7 @@ module steamm::lend_tests {
         test_utils::destroy(sui_to_repay);
 
         // Redeem liquidity
-        let (btoken_a1, btoken_b1, _) = pool.redeem_liquidity(
+        let (mut btoken_a1, mut btoken_b1, _) = pool.redeem_liquidity(
             lp_coins_1,
             0,
             0,
@@ -2256,7 +2347,7 @@ module steamm::lend_tests {
         assert_eq(btoken_b1.value(), 1_500_000);
         
         
-        let (btoken_a2, btoken_b2, _) = pool.redeem_liquidity(
+        let (mut btoken_a2, mut btoken_b2, _) = pool.redeem_liquidity(
             lp_coins_2,
             0,
             0,
@@ -2282,10 +2373,19 @@ module steamm::lend_tests {
             mock_pyth::get_price_obj<TEST_SUI>(&prices)
         );
 
-        let coin_a1 = bank_a.burn_btokens(&mut lending_market, btoken_a1, &clock, ctx);
-        let coin_b1 = bank_b.burn_btokens(&mut lending_market, btoken_b1, &clock, ctx);
-        let coin_a2 = bank_a.burn_btokens(&mut lending_market, btoken_a2, &clock, ctx);
-        let coin_b2 = bank_b.burn_btokens(&mut lending_market, btoken_b2, &clock, ctx);
+        let btoken_a1_value = btoken_a1.value();
+        let btoken_b1_value = btoken_b1.value();
+        let btoken_a2_value = btoken_a2.value();
+        let btoken_b2_value = btoken_b2.value();
+        let coin_a1 = bank_a.burn_btokens(&mut lending_market, &mut btoken_a1, btoken_a1_value, &clock, ctx);
+        let coin_b1 = bank_b.burn_btokens(&mut lending_market, &mut btoken_b1, btoken_b1_value, &clock, ctx);
+        let coin_a2 = bank_a.burn_btokens(&mut lending_market, &mut btoken_a2, btoken_a2_value, &clock, ctx);
+        let coin_b2 = bank_b.burn_btokens(&mut lending_market, &mut btoken_b2, btoken_b2_value, &clock, ctx);
+
+        destroy(btoken_a1);
+        destroy(btoken_b1);
+        destroy(btoken_a2);
+        destroy(btoken_b2);
 
         assert_eq(coin_b1.value(), 1_500_000); // No lending on so it stays the same
         assert_eq(coin_b2.value(), 1_500_000); // No lending on so it stays the same

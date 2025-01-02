@@ -102,16 +102,18 @@ module steamm::bank {
     public fun mint_btokens<P, T>(
         bank: &mut Bank<P, T>,
         lending_market: &mut LendingMarket<P>,
-        liquidity: Coin<T>,
+        coins: &mut Coin<T>,
+        coin_amount: u64,
         clock: &Clock,
         ctx: &mut TxContext,
     ): Coin<BToken<P, T>> {
         bank.version.assert_version_and_upgrade(CURRENT_VERSION);
         bank.compound_interest_if_any(lending_market, clock);
 
-        let new_btokens = bank.to_btokens(lending_market, liquidity.value(), clock).floor();
+        let coin_input = coins.split(coin_amount, ctx);
+        let new_btokens = bank.to_btokens(lending_market, coin_amount, clock).floor();
 
-        bank.funds_available.join(liquidity.into_balance());
+        bank.funds_available.join(coin_input.into_balance());
         coin::from_balance(bank.btoken_supply.increase_supply(new_btokens), ctx)
     }
 
@@ -142,17 +144,18 @@ module steamm::bank {
     public fun burn_btokens<P, T>(
         bank: &mut Bank<P, T>,
         lending_market: &mut LendingMarket<P>,
-        // TODO: consider having &mut Coin in case we can't fulfill the full requested amount
-        btokens: Coin<BToken<P, T>>,
+        btokens: &mut Coin<BToken<P, T>>,
+        btoken_amount: u64,
         clock: &Clock,
         ctx: &mut TxContext,
     ): Coin<T> {
         bank.version.assert_version_and_upgrade(CURRENT_VERSION);
         bank.compound_interest_if_any(lending_market, clock);
 
-        let tokens_to_withdraw = bank.from_btokens(lending_market, btokens.value(), clock).floor();
+        let btoken_input = btokens.split(btoken_amount, ctx);
+        let tokens_to_withdraw = bank.from_btokens(lending_market, btoken_amount, clock).floor();
 
-        bank.btoken_supply.decrease_supply(btokens.into_balance());
+        bank.btoken_supply.decrease_supply(btoken_input.into_balance());
 
         if (bank.funds_available.value() < tokens_to_withdraw) {
             // TODO: add a slack to the tokens_to_withdraw to handle rounding errs
