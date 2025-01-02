@@ -123,7 +123,7 @@ module steamm::bank {
     ): Decimal {
         let (total_funds, btoken_supply) = bank.btoken_ratio(lending_market, clock);
         // Divides by btoken ratio
-        decimal::from(amount).div(total_funds).mul(btoken_supply)
+        decimal::from(amount).mul(btoken_supply).div(total_funds)
     }
     
     fun from_btokens<P, T>(
@@ -136,6 +136,8 @@ module steamm::bank {
         // Multiplies by btoken ratio
         decimal::from(btoken_amount).mul(total_funds).div(btoken_supply)
     }
+
+    // if a certain amount of btokens are not burned
     
     public fun burn_btokens<P, T>(
         bank: &mut Bank<P, T>,
