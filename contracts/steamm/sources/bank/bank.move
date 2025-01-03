@@ -265,7 +265,8 @@ module steamm::bank {
         bank
     }
     
-    fun prepare_for_pending_withdraw<P, T>(
+    // Package is added to allow testing
+    public(package) fun prepare_for_pending_withdraw<P, T>(
         bank: &mut Bank<P, T>,
         lending_market: &mut LendingMarket<P>,
         withdraw_amount: u64,
@@ -522,6 +523,16 @@ module steamm::bank {
         self.funds_available.split(
             amount
         )
+    }
+    
+    #[test_only]
+    public(package) fun set_utilisation_bps_for_testing<P, T>(
+        self: &mut Bank<P, T>,
+        target_utilisation_bps: u16,
+        utilisation_buffer_bps: u16,
+    ) {
+        self.lending.borrow_mut().target_utilisation_bps = target_utilisation_bps;
+        self.lending.borrow_mut().utilisation_buffer_bps = utilisation_buffer_bps;
     }
 
     #[test_only]
