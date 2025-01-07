@@ -6,10 +6,10 @@ module steamm::cpmm {
         global_admin::GlobalAdmin,
         registry::{Registry},
         quote::SwapQuote,
-        bank::Bank,
+        bank::{BToken},
         pool::{Self, Pool, PoolCap, SwapResult, Intent, assert_liquidity},
         version::{Self, Version},
-        math::{safe_mul_div, checked_mul_div}
+        math::{safe_mul_div, checked_mul_div},
     };
 
     // ===== Constants =====
@@ -57,16 +57,16 @@ module steamm::cpmm {
     ///
     /// This function will panic if `swap_fee_bps` is greater than or equal to
     /// `SWAP_FEE_DENOMINATOR`
-    public fun new_with_offset<A, B, W: drop>(
+    public fun new_with_offset<A, B, W: drop, P>(
         _witness: W,
         registry: &mut Registry,
         swap_fee_bps: u64,
         offset: u64,
         ctx: &mut TxContext,
-    ): (Pool<A, B, CpQuoter<W>>, PoolCap<A, B, CpQuoter<W>>) {
+    ): (Pool<A, B, CpQuoter<W>, P>, PoolCap<A, B, CpQuoter<W>, P>) {
         let quoter = CpQuoter { version: version::new(CURRENT_VERSION), offset };
 
-        let (pool, pool_cap) = pool::new<A, B, CpQuoter<W>>(
+        let (pool, pool_cap) = pool::new<A, B, CpQuoter<W>, P>(
             registry,
             swap_fee_bps,
             quoter,
@@ -76,12 +76,12 @@ module steamm::cpmm {
         (pool, pool_cap)
     }
     
-    public fun new<A, B, W: drop>(
+    public fun new<A, B, W: drop, P>(
         witness: W,
         registry: &mut Registry,
         swap_fee_bps: u64,
         ctx: &mut TxContext,
-    ): (Pool<A, B, CpQuoter<W>>, PoolCap<A, B, CpQuoter<W>>) {
+    ): (Pool<A, B, CpQuoter<W>, P>, PoolCap<A, B, CpQuoter<W>, P>) {
         new_with_offset(
             witness,
             registry,
@@ -91,11 +91,11 @@ module steamm::cpmm {
         )
     }
 
-    public fun intent_swap<A, B, W: drop>(
-        self: &mut Pool<A, B, CpQuoter<W>>,
+    public fun intent_swap<A, B, W: drop, P>(
+        self: &mut Pool<A, B, CpQuoter<W>, P>,
         amount_in: u64,
         a2b: bool,
-    ): Intent<A, B, CpQuoter<W>> {
+    ): Intent<A, B, CpQuoter<W>, P> {
         self.inner_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
         let quote = quote_swap(self, amount_in, a2b);
 
@@ -103,12 +103,10 @@ module steamm::cpmm {
     }
 
     public fun execute_swap<A, B, W: drop, P>(
-        self: &mut Pool<A, B, CpQuoter<W>>,
-        bank_a: &mut Bank<P, A>,
-        bank_b: &mut Bank<P, B>,
-        intent: Intent<A, B, CpQuoter<W>>,
-        coin_a: &mut Coin<A>,
-        coin_b: &mut Coin<B>,
+        self: &mut Pool<A, B, CpQuoter<W>, P>,
+        intent: Intent<A, B, CpQuoter<W>, P>,
+        coin_a: &mut Coin<BToken<P, A>>,
+        coin_b: &mut Coin<BToken<P, B>>,
         min_amount_out: u64,
         ctx: &mut TxContext,
     ): SwapResult {
@@ -117,8 +115,6 @@ module steamm::cpmm {
         let k0 = k(self, offset(self));
 
         let response = self.swap(
-            bank_a,
-            bank_b,
             coin_a,
             coin_b,
             intent,
@@ -134,12 +130,12 @@ module steamm::cpmm {
 
     // cpmm return price, take price that's best for LPs, on top we add dynamic fee
     // fees should always be computed on the output amount;
-    public fun quote_swap<A, B, W: drop>(
-        self: &Pool<A, B, CpQuoter<W>>,
+    public fun quote_swap<A, B, W: drop, P>(
+        self: &Pool<A, B, CpQuoter<W>, P>,
         amount_in: u64,
         a2b: bool,
     ): SwapQuote {
-        let (reserve_a, reserve_b) = self.total_funds();
+        let (reserve_a, reserve_b) = self.btoken_amounts();
 
         let amount_out = quote_swap_impl(
             reserve_a,
@@ -186,44 +182,44 @@ module steamm::cpmm {
 
     // ===== View Functions =====
     
-    public fun offset<A, B, W: drop>(self: &Pool<A, B, CpQuoter<W>>): u64 {
+    public fun offset<A, B, W: drop, P>(self: &Pool<A, B, CpQuoter<W>, P>): u64 {
         self.quoter().offset
     }
     
-    public fun k<A, B, Quoter: store>(
-        self: &Pool<A, B, Quoter>,
+    public fun k<A, B, Quoter: store, P>(
+        self: &Pool<A, B, Quoter, P>,
         offset: u64,
     ): u128 {
-        let (total_funds_a, total_funds_b) = self.total_funds();
+        let (total_funds_a, total_funds_b) = self.btoken_amounts();
         ((total_funds_a as u128) * ((total_funds_b + offset) as u128))
     }
 
     // ===== Versioning =====
     
-    entry fun migrate<A, B, W>(
-        self: &mut Pool<A, B, CpQuoter<W>>,
-        _cap: &PoolCap<A, B, CpQuoter<W>>,
+    entry fun migrate<A, B, W, P>(
+        self: &mut Pool<A, B, CpQuoter<W>, P>,
+        _cap: &PoolCap<A, B, CpQuoter<W>, P>,
     ) {
         migrate_(self);
     }
     
-    entry fun migrate_as_global_admin<A, B, W>(
-        self: &mut Pool<A, B, CpQuoter<W>>,
+    entry fun migrate_as_global_admin<A, B, W, P>(
+        self: &mut Pool<A, B, CpQuoter<W>, P>,
         _admin: &GlobalAdmin,
     ) {
         migrate_(self);
     }
 
-    fun migrate_<A, B, W>(
-        self: &mut Pool<A, B, CpQuoter<W>>,
+    fun migrate_<A, B, W, P>(
+        self: &mut Pool<A, B, CpQuoter<W>, P>,
     ) {
         self.inner_mut().version.migrate_(CURRENT_VERSION);
     }
 
     // ===== Package Functions =====
     
-    public(package) fun check_invariance<A, B, Quoter: store>(
-        self: &Pool<A, B, Quoter>,
+    public(package) fun check_invariance<A, B, Quoter: store, P>(
+        self: &Pool<A, B, Quoter, P>,
         k0: u128,
         offset: u64,
     ) {
@@ -232,10 +228,10 @@ module steamm::cpmm {
         assert!(k1 >= k0, EInvariantViolation);
     }
 
-    public(package) fun max_amount_in_on_a2b<A, B, W: drop>(
-        self: &Pool<A, B, CpQuoter<W>>,
+    public(package) fun max_amount_in_on_a2b<A, B, W: drop, P>(
+        self: &Pool<A, B, CpQuoter<W>, P>,
     ): Option<u64> {
-        let (reserve_in, reserve_out) = self.total_funds();
+        let (reserve_in, reserve_out) = self.btoken_amounts();
         let offset = offset(self);
 
         if (offset == 0) {

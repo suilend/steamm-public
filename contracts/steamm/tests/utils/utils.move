@@ -12,15 +12,15 @@ module steamm::test_utils {
     use std::type_name;
     use suilend::test_usdc::{TEST_USDC};
     use suilend::test_sui::{TEST_SUI};
-    use suilend::lending_market::{Self, LENDING_MARKET};
+    use suilend::{
+        lending_market_tests::{Self, LENDING_MARKET},
+    };
     use suilend::reserve_config;
     use pyth::price_info::{Self, PriceInfoObject};
     use pyth::price_feed;
     use pyth::price_identifier;
     use pyth::price;
     use pyth::i64;
-
-    // reserve_config::default_reserve_config(), // TODO
 
     public fun e9(amt: u64): u64 {
         1_000_000_000 * amt
@@ -30,23 +30,60 @@ module steamm::test_utils {
     public struct COIN has drop {}
 
     #[test_only]
+    public macro fun assert_eq_approx($a: u64, $b: u64, $tolerance_bps: u64) {
+        let diff = if ($a > $b) { $a - $b } else { $b - $a };
+        let max = if ($a > $b) { $a } else { $b };
+        let tolerance = (max * $tolerance_bps) / 10000;
+        assert!(diff <= tolerance, 0);
+    }
+
+    #[test_only]
     public fun reserve_args(scenario: &mut Scenario): Bag {
+        let ctx = test_scenario::ctx(scenario);
+
+        let usdc_config = {
+            let config = reserve_config::default_reserve_config();
+            let mut builder = reserve_config::from(&config, ctx);
+            reserve_config::set_open_ltv_pct(&mut builder, 50);
+            reserve_config::set_close_ltv_pct(&mut builder, 50);
+            reserve_config::set_max_close_ltv_pct(&mut builder, 50);
+            sui::test_utils::destroy(config);
+
+            reserve_config::build(builder, ctx)
+        };
+
+        let sui_config = {
+            let config = reserve_config::default_reserve_config();
+            let mut builder = reserve_config::from(
+                &config,
+                ctx
+            );
+
+            destroy(config);
+
+            // reserve_config::set_borrow_fee_bps(&mut builder, 500);
+            // reserve_config::set_interest_rate_aprs(&mut builder, vector[315360000, 315360000]);
+            reserve_config::set_interest_rate_aprs(&mut builder, vector[500, 500]);
+            reserve_config::build(builder, ctx)
+        };
+
         let mut bag = bag::new(test_scenario::ctx(scenario));
+
         bag::add(
             &mut bag, 
             type_name::get<TEST_USDC>(), 
-            lending_market::new_args(100 * 1_000_000, reserve_config::default_reserve_config()),
+            lending_market_tests::new_args(100 * 10_000, usdc_config),
         );
             
         bag::add(
             &mut bag, 
             type_name::get<TEST_SUI>(), 
-            lending_market::new_args(100 * 1_000_000, reserve_config::default_reserve_config()),
+            lending_market_tests::new_args(100 * 10_000, sui_config),
         );
 
         bag
     }
-    
+
     #[test_only]
     public fun reserve_args_2(scenario: &mut Scenario): Bag {
         let mut bag = bag::new(test_scenario::ctx(scenario));
@@ -60,7 +97,7 @@ module steamm::test_utils {
             sui::test_utils::destroy(config);
             let config = reserve_config::build(builder, test_scenario::ctx(scenario));
 
-            lending_market::new_args(100 * 1_000_000, config)
+            lending_market_tests::new_args(100 * 1_000_000, config)
         };
 
         bag::add(
@@ -71,7 +108,7 @@ module steamm::test_utils {
 
         let reserve_args = {
             let config = reserve_config::default_reserve_config();
-            lending_market::new_args(100 * 1_000_000_000, config)
+            lending_market_tests::new_args(100 * 1_000_000_000, config)
         };
 
         bag::add(
@@ -89,24 +126,24 @@ module steamm::test_utils {
         reserve_b: u64,
         lp_supply: u64,
         swap_fee_bps: u64,
-    ): (Pool<SUI, COIN, CpQuoter<PoolWit>>, Bank<LENDING_MARKET, SUI>, Bank<LENDING_MARKET, COIN>) {
+    ): (Pool<SUI, COIN, CpQuoter<PoolWit>, LENDING_MARKET>, Bank<LENDING_MARKET, SUI>, Bank<LENDING_MARKET, COIN>) {
         let mut scenario = test_scenario::begin(@0x0);
         let ctx = ctx(&mut scenario);
 
         let mut registry = registry::init_for_testing(ctx);
 
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, PoolWit>(
+        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, PoolWit, LENDING_MARKET>(
             PoolWit {},
             &mut registry,
             swap_fee_bps,
             ctx,
         );
 
-        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
+        let bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
+        let bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
 
-        pool.mut_reserve_a(&mut bank_a, reserve_a, true);
-        pool.mut_reserve_b(&mut bank_b, reserve_b, true);
+        pool.mut_reserve_a(reserve_a, true);
+        pool.mut_reserve_b(reserve_b, true);
         let lp = pool.lp_supply_mut_for_testing().increase_supply(lp_supply);
 
         destroy(registry);

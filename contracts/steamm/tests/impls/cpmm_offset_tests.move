@@ -9,14 +9,15 @@ module steamm::cpmm_offset_tests {
     };
     use steamm::{
         registry::{Self, Registry},
-        bank::{Self, Bank},
+        bank::{BToken},
         cpmm::{Self, CpQuoter},
         test_utils::{COIN, reserve_args},
         pool::{Self, Pool, PoolCap},
     };
     use suilend::{
         decimal,
-        lending_market::{Self, LENDING_MARKET, LendingMarketOwnerCap, LendingMarket}
+        lending_market_tests::{LENDING_MARKET, setup as suilend_setup},
+        lending_market::{LendingMarketOwnerCap, LendingMarket}
     };
 
     const ADMIN: address = @0x10;
@@ -29,30 +30,26 @@ module steamm::cpmm_offset_tests {
         LendingMarketOwnerCap<LENDING_MARKET>,
         LendingMarket<LENDING_MARKET>,
         Registry,
-        Pool<COIN, SUI, CpQuoter<Wit>>,
-        PoolCap<COIN, SUI, CpQuoter<Wit>>,
-        Bank<LENDING_MARKET, COIN>,
-        Bank<LENDING_MARKET, SUI>
+        Pool<COIN, SUI, CpQuoter<Wit>, LENDING_MARKET>,
+        PoolCap<COIN, SUI, CpQuoter<Wit>, LENDING_MARKET>,
     ) {
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(scenario), scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(scenario), scenario).destruct_state();
         destroy(bag);
         destroy(prices);
 
-        let (registry, pool, pool_cap, bank_coin, bank_sui) = setup_pool(offset, scenario);
+        let (registry, pool, pool_cap) = setup_pool(offset, scenario);
 
-        (clock, lend_cap, lending_market, registry, pool, pool_cap, bank_coin, bank_sui)
+        (clock, lend_cap, lending_market, registry, pool, pool_cap)
     }
     
     public fun setup_pool(offset: u64, scenario: &mut Scenario): (
         Registry,
-        Pool<COIN, SUI, CpQuoter<Wit>>,
-        PoolCap<COIN, SUI, CpQuoter<Wit>>,
-        Bank<LENDING_MARKET, COIN>,
-        Bank<LENDING_MARKET, SUI>
+        Pool<COIN, SUI, CpQuoter<Wit>, LENDING_MARKET>,
+        PoolCap<COIN, SUI, CpQuoter<Wit>, LENDING_MARKET>,
     ) {
         let mut registry = registry::init_for_testing(ctx(scenario));
 
-        let (pool, pool_cap) = cpmm::new_with_offset<COIN, SUI, Wit>(
+        let (pool, pool_cap) = cpmm::new_with_offset<COIN, SUI, Wit, LENDING_MARKET>(
             Wit {},
             &mut registry,
             0, // admin fees BPS
@@ -60,10 +57,7 @@ module steamm::cpmm_offset_tests {
             ctx(scenario),
         );
 
-        let bank_coin = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(scenario));
-        let bank_sui = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx(scenario));
-
-        (registry, pool, pool_cap, bank_coin, bank_sui)
+        (registry, pool, pool_cap)
     }
 
     #[test]
@@ -73,24 +67,20 @@ module steamm::cpmm_offset_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let offset = 5;
-        let (clock, lend_cap, lending_market, registry, mut pool, pool_cap, mut bank_a, mut bank_b) = setup(offset, &mut scenario);
+        let (clock, lend_cap, lending_market, registry, mut pool, pool_cap) = setup(offset, &mut scenario);
 
         let ctx = ctx(&mut scenario);
 
         pool.no_protocol_fees_for_testing();
         pool.no_redemption_fees_for_testing();
 
-        let mut coin_a = coin::mint_for_testing<COIN>(500_000, ctx);
-        let mut coin_b = coin::mint_for_testing<SUI>(0, ctx);
+        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut bank_a,
-            &mut bank_b,
             &mut coin_a,
             &mut coin_b,
             500_000,
-            0,
-            0,
             0,
             ctx,
         );
@@ -119,8 +109,6 @@ module steamm::cpmm_offset_tests {
             pow_n = pow_n + 1;
         };
 
-        destroy(bank_a);
-        destroy(bank_b);
         destroy(registry);
         destroy(pool);
         destroy(pool_cap);
@@ -139,7 +127,7 @@ module steamm::cpmm_offset_tests {
         // Init Pool
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let mut pow_n = 0;
         let mut price = decimal::from(0);
@@ -147,22 +135,18 @@ module steamm::cpmm_offset_tests {
 
         while (pow_n <= 5) {
             let offset = default_offset * 10_u64.pow(pow_n);
-            let (registry, mut pool, pool_cap, mut bank_a, mut bank_b) = setup_pool(offset, &mut scenario);
+            let (registry, mut pool, pool_cap) = setup_pool(offset, &mut scenario);
 
             pool.no_protocol_fees_for_testing();
             pool.no_redemption_fees_for_testing();
 
-            let mut coin_a = coin::mint_for_testing<COIN>(500_000, ctx(&mut scenario));
-            let mut coin_b = coin::mint_for_testing<SUI>(0, ctx(&mut scenario));
+            let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx(&mut scenario));
+            let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx(&mut scenario));
 
             let (lp_coins, _) = pool.deposit_liquidity(
-                &mut bank_a,
-                &mut bank_b,
                 &mut coin_a,
                 &mut coin_b,
                 500_000,
-                0,
-                0,
                 0,
                 ctx(&mut scenario),
             );
@@ -178,8 +162,6 @@ module steamm::cpmm_offset_tests {
             );
 
             destroy(registry);
-            destroy(bank_a);
-            destroy(bank_b);
             destroy(coin_a);
             destroy(coin_b);
             destroy(lp_coins);
@@ -206,7 +188,7 @@ module steamm::cpmm_offset_tests {
         let mut scenario = test_scenario::begin(ADMIN);
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let mut pow_n = 0;
         let mut price = decimal::from_scaled_val(50000040000080000160); // arbitrarily large number
@@ -214,24 +196,20 @@ module steamm::cpmm_offset_tests {
         let default_outlay = 500_000;
 
         while (pow_n <= 5) {
-            let (registry, mut pool, pool_cap, mut bank_a, mut bank_b) = setup_pool(offset, &mut scenario);
+            let (registry, mut pool, pool_cap) = setup_pool(offset, &mut scenario);
             
             let outlay = default_outlay * 10_u64.pow(pow_n);
 
             pool.no_protocol_fees_for_testing();
             pool.no_redemption_fees_for_testing();
 
-            let mut coin_a = coin::mint_for_testing<COIN>(outlay, ctx(&mut scenario));
-            let mut coin_b = coin::mint_for_testing<SUI>(0, ctx(&mut scenario));
+            let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(outlay, ctx(&mut scenario));
+            let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx(&mut scenario));
 
             let (lp_coins, _) = pool.deposit_liquidity(
-                &mut bank_a,
-                &mut bank_b,
                 &mut coin_a,
                 &mut coin_b,
                 outlay,
-                0,
-                0,
                 0,
                 ctx(&mut scenario),
             );
@@ -247,8 +225,6 @@ module steamm::cpmm_offset_tests {
             );
 
             destroy(registry);
-            destroy(bank_a);
-            destroy(bank_b);
             destroy(coin_a);
             destroy(coin_b);
             destroy(lp_coins);
@@ -276,24 +252,20 @@ module steamm::cpmm_offset_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let offset = 5;
-        let (clock, lend_cap, lending_market, registry, mut pool, pool_cap, mut bank_a, mut bank_b) = setup(offset, &mut scenario);
+        let (clock, lend_cap, lending_market, registry, mut pool, pool_cap) = setup(offset, &mut scenario);
 
         pool.no_protocol_fees_for_testing();
         pool.no_redemption_fees_for_testing();
 
         let ctx = ctx(&mut scenario);
-        let mut coin_a = coin::mint_for_testing<COIN>(500_000, ctx);
-        let mut coin_b = coin::mint_for_testing<SUI>(0, ctx);
+        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx);
         
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut bank_a,
-            &mut bank_b,
             &mut coin_a,
             &mut coin_b,
             500_000,
-            0,
-            0,
             0,
             ctx,
         );
@@ -301,8 +273,8 @@ module steamm::cpmm_offset_tests {
         destroy(coin_a);
         destroy(coin_b);
         
-        let mut coin_a = coin::mint_for_testing<COIN>(0, ctx);
-        let mut coin_b = coin::mint_for_testing<SUI>(1_000, ctx);
+        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
+        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(1_000, ctx);
         
         let swap_intent = pool.cpmm_intent_swap(
             10,
@@ -310,8 +282,6 @@ module steamm::cpmm_offset_tests {
         );
 
         let swap_result_1 = pool.cpmm_execute_swap(
-            &mut bank_a,
-            &mut bank_b,
             swap_intent,
             &mut coin_a,
             &mut coin_b,
@@ -325,8 +295,6 @@ module steamm::cpmm_offset_tests {
         );
 
         let swap_result_2 = pool.cpmm_execute_swap(
-            &mut bank_a,
-            &mut bank_b,
             swap_intent,
             &mut coin_a,
             &mut coin_b,
@@ -339,9 +307,6 @@ module steamm::cpmm_offset_tests {
 
         destroy(coin_a);
         destroy(coin_b);
-
-        destroy(bank_a);
-        destroy(bank_b);
         destroy(registry);
         destroy(pool);
         destroy(pool_cap);
@@ -361,24 +326,20 @@ module steamm::cpmm_offset_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let offset = 5;
-        let (clock, lend_cap, lending_market, registry, mut pool, pool_cap, mut bank_a, mut bank_b) = setup(offset, &mut scenario);
+        let (clock, lend_cap, lending_market, registry, mut pool, pool_cap) = setup(offset, &mut scenario);
         
         let ctx = ctx(&mut scenario);
 
         pool.no_protocol_fees_for_testing();
         pool.no_redemption_fees_for_testing();
 
-        let mut coin_a = coin::mint_for_testing<COIN>(500_000, ctx);
-        let mut coin_b = coin::mint_for_testing<SUI>(0, ctx);
+        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut bank_a,
-            &mut bank_b,
             &mut coin_a,
             &mut coin_b,
             500_000,
-            0,
-            0,
             0,
             ctx,
         );
@@ -387,8 +348,8 @@ module steamm::cpmm_offset_tests {
         destroy(coin_b);
 
         let mut trades = 1_000;
-        let mut coin_a = coin::mint_for_testing<COIN>(0, ctx);
-        let mut coin_b = coin::mint_for_testing<SUI>(10_000_000_000, ctx);
+        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
+        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(10_000_000_000, ctx);
 
         while (trades > 0) {
             let swap_intent = pool.cpmm_intent_swap(
@@ -397,8 +358,6 @@ module steamm::cpmm_offset_tests {
             );
 
             pool.cpmm_execute_swap(
-                &mut bank_a,
-                &mut bank_b,
                 swap_intent,
                 &mut coin_a,
                 &mut coin_b,
@@ -406,7 +365,7 @@ module steamm::cpmm_offset_tests {
                 ctx,
             );
 
-            let (reserve_a, _) = pool.total_funds();
+            let (reserve_a, _) = pool.btoken_amounts();
             assert!(reserve_a > 0, 0);
 
             trades = trades - 1;
@@ -415,8 +374,6 @@ module steamm::cpmm_offset_tests {
 
         destroy(coin_a);
         destroy(coin_b);
-        destroy(bank_a);
-        destroy(bank_b);
         destroy(registry);
         destroy(pool);
         destroy(pool_cap);
@@ -436,24 +393,20 @@ module steamm::cpmm_offset_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let offset = 5;
-        let (clock, lend_cap, lending_market, registry, mut pool, pool_cap, mut bank_a, mut bank_b) = setup(offset, &mut scenario);
+        let (clock, lend_cap, lending_market, registry, mut pool, pool_cap) = setup(offset, &mut scenario);
         
         let ctx = ctx(&mut scenario);
 
         pool.no_protocol_fees_for_testing();
         pool.no_redemption_fees_for_testing();
 
-        let mut coin_a = coin::mint_for_testing<COIN>(500_000, ctx);
-        let mut coin_b = coin::mint_for_testing<SUI>(0, ctx);
+        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut bank_a,
-            &mut bank_b,
             &mut coin_a,
             &mut coin_b,
             500_000,
-            0,
-            0,
             0,
             ctx,
         );
@@ -462,8 +415,8 @@ module steamm::cpmm_offset_tests {
         destroy(coin_b);
 
         // Initial trade that leaves the pool with only 1 COIN
-        let mut coin_a = coin::mint_for_testing<COIN>(0, ctx);
-        let mut coin_b = coin::mint_for_testing<SUI>(10_000_000, ctx);
+        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
+        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(10_000_000, ctx);
 
         let swap_intent = pool.cpmm_intent_swap(
             10_000_000,
@@ -471,8 +424,6 @@ module steamm::cpmm_offset_tests {
         );
 
         pool.cpmm_execute_swap(
-            &mut bank_a,
-            &mut bank_b,
             swap_intent,
             &mut coin_a,
             &mut coin_b,
@@ -498,7 +449,7 @@ module steamm::cpmm_offset_tests {
             pow_n = pow_n + 1;
         };
 
-        let (_, reserve_b) = pool.total_funds();
+        let (_, reserve_b) = pool.btoken_amounts();
 
         let quote = pool.cpmm_quote_swap(
             18_446_744_073_709_551_615u64 - reserve_b - offset, // U64::MAX
@@ -507,8 +458,6 @@ module steamm::cpmm_offset_tests {
 
         assert_eq(quote.amount_out(), 0);
 
-        destroy(bank_a);
-        destroy(bank_b);
         destroy(registry);
         destroy(pool);
         destroy(pool_cap);
@@ -528,24 +477,20 @@ module steamm::cpmm_offset_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let offset = 5;
-        let (clock, lend_cap, lending_market, registry, mut pool, pool_cap, mut bank_a, mut bank_b) = setup(offset, &mut scenario);
+        let (clock, lend_cap, lending_market, registry, mut pool, pool_cap) = setup(offset, &mut scenario);
         
         let ctx = ctx(&mut scenario);
 
         pool.no_protocol_fees_for_testing();
         pool.no_redemption_fees_for_testing();
 
-        let mut coin_a = coin::mint_for_testing<COIN>(500_000, ctx);
-        let mut coin_b = coin::mint_for_testing<SUI>(0, ctx);
+        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut bank_a,
-            &mut bank_b,
             &mut coin_a,
             &mut coin_b,
             500_000,
-            0,
-            0,
             0,
             ctx,
         );
@@ -558,8 +503,6 @@ module steamm::cpmm_offset_tests {
             true, // a2b
         );
 
-        destroy(bank_a);
-        destroy(bank_b);
         destroy(registry);
         destroy(pool);
         destroy(pool_cap);
@@ -579,24 +522,20 @@ module steamm::cpmm_offset_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let offset = 5;
-        let (clock, lend_cap, lending_market, registry, mut pool, pool_cap, mut bank_a, mut bank_b) = setup(offset, &mut scenario);
+        let (clock, lend_cap, lending_market, registry, mut pool, pool_cap) = setup(offset, &mut scenario);
         
         let ctx = ctx(&mut scenario);
 
         pool.no_protocol_fees_for_testing();
         pool.no_redemption_fees_for_testing();
 
-        let mut coin_a = coin::mint_for_testing<COIN>(500_000, ctx);
-        let mut coin_b = coin::mint_for_testing<SUI>(0, ctx);
+        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
+        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut bank_a,
-            &mut bank_b,
             &mut coin_a,
             &mut coin_b,
             500_000,
-            0,
-            0,
             0,
             ctx,
         );
@@ -604,8 +543,8 @@ module steamm::cpmm_offset_tests {
         destroy(coin_a);
         destroy(coin_b);
         
-        let mut coin_a = coin::mint_for_testing<COIN>(0, ctx);
-        let mut coin_b = coin::mint_for_testing<SUI>(1_000, ctx);
+        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
+        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(1_000, ctx);
         
         let swap_intent = pool.cpmm_intent_swap(
             10_000_000,
@@ -613,8 +552,6 @@ module steamm::cpmm_offset_tests {
         );
 
         pool.cpmm_execute_swap(
-            &mut bank_a,
-            &mut bank_b,
             swap_intent,
             &mut coin_a,
             &mut coin_b,
@@ -625,8 +562,6 @@ module steamm::cpmm_offset_tests {
         destroy(coin_a);
         destroy(coin_b);
 
-        destroy(bank_a);
-        destroy(bank_b);
         destroy(registry);
         destroy(pool);
         destroy(pool_cap);

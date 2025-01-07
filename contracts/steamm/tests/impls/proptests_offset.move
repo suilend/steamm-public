@@ -2,7 +2,7 @@
 module steamm::proptests_offset {
     use steamm::registry;
     use steamm::cpmm::{Self};
-    use steamm::bank;
+    use steamm::bank::{BToken};
     use steamm::test_utils::reserve_args;
     use steamm::test_utils::COIN;
     use sui::test_scenario::{Self, ctx};
@@ -10,7 +10,9 @@ module steamm::proptests_offset {
     use sui::random;
     use sui::coin::{Self};
     use sui::test_utils::{destroy};
-    use suilend::lending_market::{Self, LENDING_MARKET};
+    use suilend::{
+        lending_market_tests::{LENDING_MARKET, setup as suilend_setup},
+    };
 
     const ADMIN: address = @0x10;
     const POOL_CREATOR: address = @0x11;
@@ -31,11 +33,11 @@ module steamm::proptests_offset {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new_with_offset<SUI, COIN, Wit>(
+        let (mut pool, pool_cap) = cpmm::new_with_offset<SUI, COIN, Wit, LENDING_MARKET>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
@@ -43,20 +45,13 @@ module steamm::proptests_offset {
             ctx,
         );
 
-        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
-
-        let mut coin_a = coin::mint_for_testing<SUI>(e9(100_000), ctx);
-        let mut coin_b = coin::mint_for_testing<COIN>(e9(100_000), ctx);
+        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(e9(100_000), ctx);
+        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(e9(100_000), ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut bank_a,
-            &mut bank_b,
             &mut coin_a,
             &mut coin_b,
             e9(100_000),
-            0,
-            0,
             0,
             ctx,
         );
@@ -90,8 +85,8 @@ module steamm::proptests_offset {
                     rng.generate_u64_in_range(1_000, 100_000_000_000_000_000)
                 };
 
-            let mut coin_a = coin::mint_for_testing<SUI>(if (a2b) { amount_in } else {0}, ctx);
-            let mut coin_b = coin::mint_for_testing<COIN>(if (a2b) { 0 } else {amount_in}, ctx);
+            let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(if (a2b) { amount_in } else {0}, ctx);
+            let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(if (a2b) { 0 } else {amount_in}, ctx);
 
             let quote = pool.cpmm_quote_swap(
                 amount_in,
@@ -110,8 +105,6 @@ module steamm::proptests_offset {
             );
 
             pool.cpmm_execute_swap(
-                &mut bank_a,
-                &mut bank_b,
                 swap_intent,
                 &mut coin_a,
                 &mut coin_b,
@@ -127,8 +120,6 @@ module steamm::proptests_offset {
 
         destroy(registry);
         destroy(pool);
-        destroy(bank_a);
-        destroy(bank_b);
         destroy(lp_coins);
         destroy(pool_cap);
         destroy(lend_cap);
@@ -147,11 +138,11 @@ module steamm::proptests_offset {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new_with_offset<SUI, COIN, Wit>(
+        let (mut pool, pool_cap) = cpmm::new_with_offset<SUI, COIN, Wit, LENDING_MARKET>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
@@ -159,20 +150,13 @@ module steamm::proptests_offset {
             ctx,
         );
 
-        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
-
-        let mut coin_a = coin::mint_for_testing<SUI>(e9(100_000), ctx);
-        let mut coin_b = coin::mint_for_testing<COIN>(e9(100_000), ctx);
+        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(e9(100_000), ctx);
+        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(e9(100_000), ctx);
 
         let (lp_coins, _) = pool.deposit_liquidity(
-            &mut bank_a,
-            &mut bank_b,
             &mut coin_a,
             &mut coin_b,
             e9(100_000),
-            0,
-            0,
             0,
             ctx,
         );
@@ -191,17 +175,13 @@ module steamm::proptests_offset {
         while (trades > 0) {
             let amount_in = rng.generate_u64_in_range(1_000, 100_000_000_000_000);
 
-            let mut coin_a = coin::mint_for_testing<SUI>(amount_in, ctx);
-            let mut coin_b = coin::mint_for_testing<COIN>(amount_in, ctx);
+            let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(amount_in, ctx);
+            let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(amount_in, ctx);
 
             let (lp_coins, _) = pool.deposit_liquidity(
-                &mut bank_a,
-                &mut bank_b,
                 &mut coin_a,
                 &mut coin_b,
                 amount_in,
-                0,
-                0,
                 0,
                 ctx,
             );
@@ -215,8 +195,6 @@ module steamm::proptests_offset {
 
         destroy(registry);
         destroy(pool);
-        destroy(bank_a);
-        destroy(bank_b);
         destroy(lp_coins);
         destroy(pool_cap);
         destroy(lend_cap);
@@ -235,11 +213,11 @@ module steamm::proptests_offset {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
         let mut registry = registry::init_for_testing(ctx(&mut scenario));
-        let (clock, lend_cap, lending_market, prices, bag) = lending_market::setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
+        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
         
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new_with_offset<SUI, COIN, Wit>(
+        let (mut pool, pool_cap) = cpmm::new_with_offset<SUI, COIN, Wit, LENDING_MARKET>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
@@ -249,20 +227,13 @@ module steamm::proptests_offset {
 
         pool.no_redemption_fees_for_testing();
 
-        let mut bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
-        let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
-
-        let mut coin_a = coin::mint_for_testing<SUI>(10_000_000_000_000_000_000, ctx);
-        let mut coin_b = coin::mint_for_testing<COIN>(10_000_000_000_000_000_000, ctx);
+        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(10_000_000_000_000_000_000, ctx);
+        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(10_000_000_000_000_000_000, ctx);
 
         let (mut lp_coins, _) = pool.deposit_liquidity(
-            &mut bank_a,
-            &mut bank_b,
             &mut coin_a,
             &mut coin_b,
             1_000_000_000_000_000_000,
-            0,
-            0,
             0,
             ctx,
         );
@@ -282,8 +253,6 @@ module steamm::proptests_offset {
             let lp_burn = rng.generate_u64_in_range(1, lp_tokens_balance);
 
             let (coin_a, coin_b, _) = pool.redeem_liquidity(
-                &mut bank_a,
-                &mut bank_b,
                 lp_coins.split(lp_burn, ctx),
                 0,
                 0,
@@ -298,8 +267,6 @@ module steamm::proptests_offset {
 
         destroy(registry);
         destroy(pool);
-        destroy(bank_a);
-        destroy(bank_b);
         destroy(lp_coins);
         destroy(pool_cap);
         destroy(lend_cap);
