@@ -75,22 +75,22 @@ module steamm::bank {
     }
     
     public fun init_lending<P, T>(
-        self: &mut Bank<P, T>,
+        bank: &mut Bank<P, T>,
         _: &GlobalAdmin,
         lending_market: &mut LendingMarket<P>,
         target_utilisation_bps: u16,
         utilisation_buffer_bps: u16,
         ctx: &mut TxContext,
     ) {
-        self.version.assert_version_and_upgrade(CURRENT_VERSION);
-        assert!(self.lending.is_none(), ELendingAlreadyActive);
+        bank.version.assert_version_and_upgrade(CURRENT_VERSION);
+        assert!(bank.lending.is_none(), ELendingAlreadyActive);
         assert!(target_utilisation_bps + utilisation_buffer_bps <= 10_000, EUtilisationRangeAboveHundredPercent);
         assert!(target_utilisation_bps >= utilisation_buffer_bps, EUtilisationRangeBelowHundredPercent);
 
         let obligation_cap = lending_market.create_obligation(ctx);
         let reserve_array_index = lending_market.reserve_array_index<P, T>();
 
-        self.lending.fill(Lending {
+        bank.lending.fill(Lending {
             ctokens: 0,
             target_utilisation_bps,
             utilisation_buffer_bps,
@@ -222,27 +222,27 @@ module steamm::bank {
     // ====== Admin Functions =====
 
     public fun set_utilisation_bps<P, T>(
-        self: &mut Bank<P, T>,
+        bank: &mut Bank<P, T>,
         _: &GlobalAdmin,
         target_utilisation_bps: u16,
         utilisation_buffer_bps: u16,
     ) {
-        self.version.assert_version_and_upgrade(CURRENT_VERSION);
-        assert!(self.lending.is_some(), ELendingNotActive);
+        bank.version.assert_version_and_upgrade(CURRENT_VERSION);
+        assert!(bank.lending.is_some(), ELendingNotActive);
         assert!(target_utilisation_bps + utilisation_buffer_bps <= 10_000, EUtilisationRangeAboveHundredPercent);
         assert!(target_utilisation_bps >= utilisation_buffer_bps, EUtilisationRangeBelowHundredPercent);
 
-        let lending = self.lending.borrow_mut();
+        let lending = bank.lending.borrow_mut();
 
         lending.target_utilisation_bps = target_utilisation_bps;
         lending.utilisation_buffer_bps = utilisation_buffer_bps;
     }
     
-    entry fun migrate_as_global_admin<P, T>(
-        self: &mut Bank<P, T>,
+    entry fun migrate<P, T>(
+        bank: &mut Bank<P, T>,
         _admin: &GlobalAdmin,
     ) {
-        self.version.migrate_(CURRENT_VERSION);
+        bank.version.migrate_(CURRENT_VERSION);
     }
     
     // ====== Package Functions =====
@@ -479,60 +479,60 @@ module steamm::bank {
 
     // ====== Getters Functions =====
 
-    public fun lending<P, T>(self: &Bank<P, T>): &Option<Lending<P>> { &self.lending }
+    public fun lending<P, T>(bank: &Bank<P, T>): &Option<Lending<P>> { &bank.lending }
 
     public(package) fun effective_utilisation_bps<P, T>(
-        self: &Bank<P, T>,
+        bank: &Bank<P, T>,
         lending_market: &LendingMarket<P>,
         clock: &Clock
     ): u64 { 
-        bank_math::compute_utilisation_bps(self.funds_available.value(), self.funds_deployed(lending_market, clock).floor())
+        bank_math::compute_utilisation_bps(bank.funds_available.value(), bank.funds_deployed(lending_market, clock).floor())
     }
     
-    public fun target_utilisation_bps<P, T>(self: &Bank<P, T>): u64 {
-        if (self.lending.is_some()) {
-            self.target_utilisation_bps_unchecked()
+    public fun target_utilisation_bps<P, T>(bank: &Bank<P, T>): u64 {
+        if (bank.lending.is_some()) {
+            bank.target_utilisation_bps_unchecked()
         } else { 0 }
     }
     
-    public fun utilisation_buffer_bps<P, T>(self: &Bank<P, T>): u64 {
-        if (self.lending.is_some()) {
-            self.utilisation_buffer_bps_unchecked()
+    public fun utilisation_buffer_bps<P, T>(bank: &Bank<P, T>): u64 {
+        if (bank.lending.is_some()) {
+            bank.utilisation_buffer_bps_unchecked()
         } else { 0 }
     }
     
-    public fun funds_available<P, T>(self: &Bank<P, T>): &Balance<T> { &self.funds_available }
-    public fun target_utilisation_bps_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().target_utilisation_bps as u64}
-    public fun utilisation_buffer_bps_unchecked<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().utilisation_buffer_bps as u64 }
-    public fun reserve_array_index<P, T>(self: &Bank<P, T>): u64 { self.lending.borrow().reserve_array_index }
+    public fun funds_available<P, T>(bank: &Bank<P, T>): &Balance<T> { &bank.funds_available }
+    public fun target_utilisation_bps_unchecked<P, T>(bank: &Bank<P, T>): u64 { bank.lending.borrow().target_utilisation_bps as u64}
+    public fun utilisation_buffer_bps_unchecked<P, T>(bank: &Bank<P, T>): u64 { bank.lending.borrow().utilisation_buffer_bps as u64 }
+    public fun reserve_array_index<P, T>(bank: &Bank<P, T>): u64 { bank.lending.borrow().reserve_array_index }
 
     // ===== Test-Only Functions =====
     
     #[test_only]
-    public(package) fun mock_min_token_block_size<P, T>(self: &mut Bank<P, T>, amount: u64){ self.min_token_block_size = amount; }
+    public(package) fun mock_min_token_block_size<P, T>(bank: &mut Bank<P, T>, amount: u64){ bank.min_token_block_size = amount; }
     
     #[test_only]
-    public(package) fun deposit_for_testing<P, T>(self: &mut Bank<P, T>, amount: u64) {
-        self.funds_available.join(
+    public(package) fun deposit_for_testing<P, T>(bank: &mut Bank<P, T>, amount: u64) {
+        bank.funds_available.join(
             balance::create_for_testing(amount)
         );
     }
     
     #[test_only]
-    public(package) fun withdraw_for_testing<P, T>(self: &mut Bank<P, T>, amount: u64): Balance<T> {
-        self.funds_available.split(
+    public(package) fun withdraw_for_testing<P, T>(bank: &mut Bank<P, T>, amount: u64): Balance<T> {
+        bank.funds_available.split(
             amount
         )
     }
     
     #[test_only]
     public(package) fun set_utilisation_bps_for_testing<P, T>(
-        self: &mut Bank<P, T>,
+        bank: &mut Bank<P, T>,
         target_utilisation_bps: u16,
         utilisation_buffer_bps: u16,
     ) {
-        self.lending.borrow_mut().target_utilisation_bps = target_utilisation_bps;
-        self.lending.borrow_mut().utilisation_buffer_bps = utilisation_buffer_bps;
+        bank.lending.borrow_mut().target_utilisation_bps = target_utilisation_bps;
+        bank.lending.borrow_mut().utilisation_buffer_bps = utilisation_buffer_bps;
     }
 
     #[test_only]
