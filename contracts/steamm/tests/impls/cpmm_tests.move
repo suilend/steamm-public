@@ -31,8 +31,8 @@ module steamm::cpmm_tests {
         LendingMarketOwnerCap<LENDING_MARKET>,
         LendingMarket<LENDING_MARKET>,
         Registry,
-        Pool<SUI, COIN, CpQuoter<Wit>, LENDING_MARKET>,
-        PoolCap<SUI, COIN, CpQuoter<Wit>, LENDING_MARKET>,
+        Pool<BToken<LENDING_MARKET, SUI>, BToken<LENDING_MARKET, COIN>, CpQuoter<Wit>>,
+        PoolCap<BToken<LENDING_MARKET, SUI>, BToken<LENDING_MARKET, COIN>, CpQuoter<Wit>>,
     ) {
         let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(scenario), scenario).destruct_state();
         destroy(bag);
@@ -45,12 +45,12 @@ module steamm::cpmm_tests {
     
     public fun setup_pool(fees: u64, scenario: &mut Scenario): (
         Registry,
-        Pool<SUI, COIN, CpQuoter<Wit>, LENDING_MARKET>,
-        PoolCap<SUI, COIN, CpQuoter<Wit>, LENDING_MARKET>,
+        Pool<BToken<LENDING_MARKET, SUI>, BToken<LENDING_MARKET, COIN>, CpQuoter<Wit>>,
+        PoolCap<BToken<LENDING_MARKET, SUI>, BToken<LENDING_MARKET, COIN>, CpQuoter<Wit>>,
     ) {
         let mut registry = registry::init_for_testing(ctx(scenario));
 
-        let (pool, pool_cap) = cpmm::new_with_offset<SUI, COIN, Wit, LENDING_MARKET>(
+        let (pool, pool_cap) = cpmm::new_with_offset<BToken<LENDING_MARKET, SUI>, BToken<LENDING_MARKET,COIN>, Wit>(
             Wit {},
             &mut registry,
             fees, // admin fees BPS
@@ -84,7 +84,7 @@ module steamm::cpmm_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
         let reserve_ratio_0 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
 
         assert_eq(pool.cpmm_k(0), 500_000 * 500_000);
@@ -118,7 +118,7 @@ module steamm::cpmm_tests {
         assert_eq(lp_coins_2.value(), 500_000);
         assert_eq(pool.lp_supply_val(), 500_000 + 500_000);
 
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
         let reserve_ratio_1 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
         assert_eq(reserve_ratio_0, reserve_ratio_1);
 
@@ -140,7 +140,7 @@ module steamm::cpmm_tests {
         assert_eq(coin_a.value(), 500_000);
         assert_eq(coin_b.value(), 500_000);
 
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
         let reserve_ratio_2 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
         assert_eq(reserve_ratio_0, reserve_ratio_2);
 
@@ -186,7 +186,7 @@ module steamm::cpmm_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
 
         // Guarantees that roundings are in favour of the pool
         assert_eq(coin_a.value(), 549_989);
@@ -252,7 +252,7 @@ module steamm::cpmm_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
         let reserve_ratio_0 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
 
         assert_eq(pool.cpmm_k(0), 500000000000000000000000000);
@@ -285,7 +285,7 @@ module steamm::cpmm_tests {
         assert_eq(coin_b.value(), 0);
         assert_eq(lp_coins_2.value(), 447213595);
 
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
         let reserve_ratio_1 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
         assert_eq(reserve_ratio_0, reserve_ratio_1);
 
@@ -307,7 +307,7 @@ module steamm::cpmm_tests {
         assert_eq(coin_a.value(), 20_000_000 - 1); // -1 for the rounddown
         assert_eq(coin_b.value(), e9(10) - 12); // double rounddown: inital lp tokens minted + redeem
 
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
         let reserve_ratio_2 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
         assert_eq(reserve_ratio_0, reserve_ratio_2);
 
@@ -546,7 +546,7 @@ module steamm::cpmm_tests {
         
         let ctx = ctx(&mut scenario);
 
-        let (mut pool_2, pool_cap_2) = cpmm::new<SUI, COIN, Wit2, LENDING_MARKET>(
+        let (mut pool_2, pool_cap_2) = cpmm::new<BToken<LENDING_MARKET, SUI>, BToken<LENDING_MARKET, COIN>, Wit2>(
             Wit2 {},
             &mut registry,
             100, // admin fees BPS

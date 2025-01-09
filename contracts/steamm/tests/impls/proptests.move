@@ -37,7 +37,7 @@ module steamm::proptests {
         
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit, LENDING_MARKET>(
+        let (mut pool, pool_cap) = cpmm::new<BToken<LENDING_MARKET, SUI>, BToken<LENDING_MARKET, COIN>, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
@@ -116,7 +116,7 @@ module steamm::proptests {
         
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit, LENDING_MARKET>(
+        let (mut pool, pool_cap) = cpmm::new<BToken<LENDING_MARKET, SUI>, BToken<LENDING_MARKET, COIN>, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
@@ -190,7 +190,7 @@ module steamm::proptests {
         
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, Wit, LENDING_MARKET>(
+        let (mut pool, pool_cap) = cpmm::new<BToken<LENDING_MARKET, SUI>, BToken<LENDING_MARKET, COIN>, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS

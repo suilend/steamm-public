@@ -37,7 +37,7 @@ module steamm::proptests_offset {
         
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new_with_offset<SUI, COIN, Wit, LENDING_MARKET>(
+        let (mut pool, pool_cap) = cpmm::new_with_offset<BToken<LENDING_MARKET, SUI>, BToken<LENDING_MARKET, COIN>, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
@@ -142,7 +142,7 @@ module steamm::proptests_offset {
         
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new_with_offset<SUI, COIN, Wit, LENDING_MARKET>(
+        let (mut pool, pool_cap) = cpmm::new_with_offset<BToken<LENDING_MARKET, SUI>, BToken<LENDING_MARKET, COIN>, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
@@ -217,7 +217,7 @@ module steamm::proptests_offset {
         
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new_with_offset<SUI, COIN, Wit, LENDING_MARKET>(
+        let (mut pool, pool_cap) = cpmm::new_with_offset<BToken<LENDING_MARKET, SUI>, BToken<LENDING_MARKET, COIN>, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS

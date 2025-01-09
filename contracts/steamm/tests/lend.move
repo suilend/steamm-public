@@ -8,7 +8,7 @@ module steamm::lend_tests {
     use steamm::cpmm::{Self};
     use steamm::dummy_hook::{Self, intent_swap, execute_swap};
     use steamm::test_utils::{COIN, reserve_args, reserve_args_2, assert_eq_approx};
-    use steamm::bank;
+    use steamm::bank::{Self, BToken};
     use sui::{
         test_scenario::{Self, ctx},
         coin,
@@ -60,7 +60,7 @@ module steamm::lend_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new<TEST_USDC, COIN, Wit, LENDING_MARKET>(
+        let (mut pool, pool_cap) = cpmm::new<BToken<LENDING_MARKET, TEST_USDC>, BToken<LENDING_MARKET, COIN>, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
@@ -91,7 +91,7 @@ module steamm::lend_tests {
         );
 
         // Test deposit effects
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
 
         assert_eq(pool.cpmm_k(0), 500_000 * 500_000);
         assert_eq(pool.lp_supply_val(), 500_000);
@@ -101,7 +101,7 @@ module steamm::lend_tests {
         assert_eq(pool.trading_data().pool_fees_a(), 0);
         assert_eq(pool.trading_data().pool_fees_b(), 0);
 
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
@@ -166,7 +166,7 @@ module steamm::lend_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new<TEST_USDC, COIN, Wit, LENDING_MARKET>(
+        let (mut pool, pool_cap) = cpmm::new<BToken<LENDING_MARKET, TEST_USDC>, BToken<LENDING_MARKET, COIN>, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
@@ -191,7 +191,7 @@ module steamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
 
         assert_eq(pool.cpmm_k(0), 500_000 * 500_000);
         assert_eq(pool.lp_supply_val(), 500_000);
@@ -201,7 +201,7 @@ module steamm::lend_tests {
         assert_eq(pool.trading_data().pool_fees_a(), 0);
         assert_eq(pool.trading_data().pool_fees_b(), 0);
 
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
@@ -239,7 +239,7 @@ module steamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
 
         assert_eq(reserve_a, 550_000);
         assert_eq(reserve_b, 454_910);
@@ -302,7 +302,7 @@ module steamm::lend_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new<TEST_USDC, TEST_SUI, Wit, LENDING_MARKET>(
+        let (mut pool, pool_cap) = cpmm::new<BToken<LENDING_MARKET, TEST_USDC>, BToken<LENDING_MARKET, TEST_SUI>, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
@@ -334,7 +334,7 @@ module steamm::lend_tests {
         );
 
         // Test deposit effects
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
 
         assert_eq(pool.cpmm_k(0), 500_000 * 500_000);
         assert_eq(pool.lp_supply_val(), 500_000);
@@ -344,7 +344,7 @@ module steamm::lend_tests {
         assert_eq(pool.trading_data().pool_fees_a(), 0);
         assert_eq(pool.trading_data().pool_fees_b(), 0);
 
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
@@ -417,7 +417,7 @@ module steamm::lend_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new<TEST_USDC, TEST_SUI, Wit, LENDING_MARKET>(
+        let (mut pool, pool_cap) = cpmm::new<BToken<LENDING_MARKET, TEST_USDC>, BToken<LENDING_MARKET, TEST_SUI>, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
@@ -449,7 +449,7 @@ module steamm::lend_tests {
         );
 
         // Test deposit effects
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
 
         assert_eq(pool.cpmm_k(0), 500_000 * 500_000);
         assert_eq(pool.lp_supply_val(), 500_000);
@@ -459,7 +459,7 @@ module steamm::lend_tests {
         assert_eq(pool.trading_data().pool_fees_a(), 0);
         assert_eq(pool.trading_data().pool_fees_b(), 0);
 
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
@@ -513,7 +513,7 @@ module steamm::lend_tests {
         );
 
         // Test swap effects
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
         assert_eq(reserve_a, 550_000);
         assert_eq(reserve_b, 454_910);
         
@@ -612,7 +612,7 @@ module steamm::lend_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = cpmm::new<TEST_USDC, TEST_SUI, Wit, LENDING_MARKET>(
+        let (mut pool, pool_cap) = cpmm::new<BToken<LENDING_MARKET, TEST_USDC>, BToken<LENDING_MARKET, TEST_SUI>, Wit>(
             Wit {},
             &mut registry,
             100, // admin fees BPS
@@ -644,7 +644,7 @@ module steamm::lend_tests {
         );
 
         // Test deposit effects
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
 
         assert_eq(pool.cpmm_k(0), 500_000 * 500_000);
         assert_eq(pool.lp_supply_val(), 500_000);
@@ -654,7 +654,7 @@ module steamm::lend_tests {
         assert_eq(pool.trading_data().pool_fees_a(), 0);
         assert_eq(pool.trading_data().pool_fees_b(), 0);
 
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
         assert_eq(reserve_a, 500_000);
         assert_eq(reserve_b, 500_000);
 
@@ -707,7 +707,7 @@ module steamm::lend_tests {
         );
 
         // Test swap effects
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
         assert_eq(reserve_a, 700_000);
         assert_eq(reserve_b, 358_286);
         assert_eq(reserve_b + pool.trading_data().protocol_fees_b(), 358_572);
@@ -797,7 +797,7 @@ module steamm::lend_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = dummy_hook::new_no_fees<TEST_USDC, COIN, Wit, LENDING_MARKET>(
+        let (mut pool, pool_cap) = dummy_hook::new_no_fees<BToken<LENDING_MARKET, TEST_USDC>, BToken<LENDING_MARKET, COIN>, Wit>(
             Wit {},
             &mut registry,
             0, // admin fees BPS
@@ -823,7 +823,7 @@ module steamm::lend_tests {
         );
 
         // Deposit effects
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
         assert_eq(pool.lp_supply_val(), 100_000);
         assert_eq(reserve_a, 100_000);
         assert_eq(reserve_b, 100_000);
@@ -876,7 +876,7 @@ module steamm::lend_tests {
         );
 
         // Deposit effects
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
         assert_eq(pool.lp_supply_val(), 105_000);
         assert_eq(reserve_a, 105_000);
         assert_eq(reserve_b, 105_000);
@@ -923,7 +923,7 @@ module steamm::lend_tests {
             ctx
         );
 
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
         assert_eq(pool.lp_supply_val(), 5_105_000);
         assert_eq(reserve_a, 5_105_000);
         assert_eq(reserve_b, 5_105_000);
@@ -980,7 +980,7 @@ module steamm::lend_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = dummy_hook::new_no_fees<TEST_USDC, COIN, Wit, LENDING_MARKET>(
+        let (mut pool, pool_cap) = dummy_hook::new_no_fees<BToken<LENDING_MARKET, TEST_USDC>, BToken<LENDING_MARKET, COIN>, Wit>(
             Wit {},
             &mut registry,
             0, // admin fees BPS
@@ -1109,7 +1109,7 @@ module steamm::lend_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = dummy_hook::new_no_fees<TEST_USDC, COIN, Wit, LENDING_MARKET>(
+        let (mut pool, pool_cap) = dummy_hook::new_no_fees<BToken<LENDING_MARKET, TEST_USDC>, BToken<LENDING_MARKET, COIN>, Wit>(
             Wit {},
             &mut registry,
             0, // admin fees BPS
@@ -1146,7 +1146,7 @@ module steamm::lend_tests {
             ctx
         );
 
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
         assert_eq(pool.lp_supply_val(), 100_000);
         assert_eq(reserve_a, 100_000);
         assert_eq(reserve_b, 100_000);
@@ -1184,7 +1184,7 @@ module steamm::lend_tests {
         // Dos noes need rebalance
         assert!(!bank_a.needs_rebalance(&lending_market, &clock));
 
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
         assert_eq(pool.lp_supply_val(), 100_000 - 100);
         assert_eq(reserve_a, 100_000 - 100);
         assert_eq(reserve_b, 100_000 - 100);
@@ -1248,7 +1248,7 @@ module steamm::lend_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = dummy_hook::new_no_fees<TEST_USDC, TEST_SUI, Wit, LENDING_MARKET>(
+        let (mut pool, pool_cap) = dummy_hook::new_no_fees<BToken<LENDING_MARKET, TEST_USDC>, BToken<LENDING_MARKET, TEST_SUI>, Wit>(
             Wit {},
             &mut registry,
             0, // admin fees BPS
@@ -1311,7 +1311,7 @@ module steamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
         assert_eq(reserve_a, 100000 - 10);
         assert_eq(reserve_b, 100000 + 10);
 
@@ -1414,7 +1414,7 @@ module steamm::lend_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = dummy_hook::new_no_fees<TEST_USDC, TEST_SUI, Wit, LENDING_MARKET>(
+        let (mut pool, pool_cap) = dummy_hook::new_no_fees<BToken<LENDING_MARKET, TEST_USDC>, BToken<LENDING_MARKET, TEST_SUI>, Wit>(
             Wit {},
             &mut registry,
             0, // admin fees BPS
@@ -1476,7 +1476,7 @@ module steamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
         assert_eq(reserve_a, 100000 - 20_000);
         assert_eq(reserve_b, 100000 + 20_000);
 
@@ -1579,7 +1579,7 @@ module steamm::lend_tests {
         test_scenario::next_tx(&mut scenario, POOL_CREATOR);
         let ctx = ctx(&mut scenario);
 
-        let (mut pool, pool_cap) = dummy_hook::new_no_fees<TEST_USDC, TEST_SUI, Wit, LENDING_MARKET>(
+        let (mut pool, pool_cap) = dummy_hook::new_no_fees<BToken<LENDING_MARKET, TEST_USDC>, BToken<LENDING_MARKET, TEST_SUI>, Wit>(
             Wit {},
             &mut registry,
             0, // admin fees BPS
@@ -1642,7 +1642,7 @@ module steamm::lend_tests {
             ctx,
         );
 
-        let (reserve_a, reserve_b) = pool.btoken_amounts();
+        let (reserve_a, reserve_b) = pool.balance_amounts();
         assert_eq(reserve_a, 100000 - 30_000);
         assert_eq(reserve_b, 100000 + 30_000);
 
@@ -2007,7 +2007,7 @@ module steamm::lend_tests {
             ctx,
         );
 
-        let (mut pool, pool_cap) = dummy_hook::new_no_fees<TEST_SUI, TEST_USDC, Wit, LENDING_MARKET>(
+        let (mut pool, pool_cap) = dummy_hook::new_no_fees<BToken<LENDING_MARKET, TEST_SUI>, BToken<LENDING_MARKET, TEST_USDC>, Wit>(
             Wit {},
             &mut registry,
             0, // admin fees BPS
@@ -2201,7 +2201,7 @@ module steamm::lend_tests {
             ctx,
         );
 
-        let (mut pool, pool_cap) = dummy_hook::new_no_fees<TEST_SUI, TEST_USDC, Wit, LENDING_MARKET>(
+        let (mut pool, pool_cap) = dummy_hook::new_no_fees<BToken<LENDING_MARKET, TEST_SUI>, BToken<LENDING_MARKET, TEST_USDC>, Wit>(
             Wit {},
             &mut registry,
             0, // admin fees BPS
