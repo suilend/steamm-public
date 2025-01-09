@@ -3,22 +3,21 @@ module steamm::dummy_hook {
     use sui::coin::Coin;
     use steamm::registry::{Registry};
     use steamm::quote::SwapQuote;
-    use steamm::bank::{BToken};
     use steamm::pool::{Self, Pool, PoolCap, SwapResult, Intent};
 
     public struct DummyQuoter<phantom W> has store {}
 
     // ===== Public Methods =====
 
-    public fun new_no_fees<A, B, W: drop, P>(
+    public fun new_no_fees<A, B, W: drop>(
         _witness: W,
         registry: &mut Registry,
         swap_fee_bps: u64,
         ctx: &mut TxContext,
-    ): (Pool<A, B, DummyQuoter<W>, P>, PoolCap<A, B, DummyQuoter<W>, P>) {
+    ): (Pool<A, B, DummyQuoter<W>>, PoolCap<A, B, DummyQuoter<W>>) {
         let quoter = DummyQuoter {};
 
-        let (mut pool, pool_cap) = pool::new<A, B, DummyQuoter<W>, P>(
+        let (mut pool, pool_cap) = pool::new<A, B, DummyQuoter<W>>(
             registry,
             swap_fee_bps,
             quoter,
@@ -31,15 +30,15 @@ module steamm::dummy_hook {
         (pool, pool_cap)
     }
     
-    public fun new<A, B, W: drop, P>(
+    public fun new<A, B, W: drop>(
         _witness: W,
         registry: &mut Registry,
         swap_fee_bps: u64,
         ctx: &mut TxContext,
-    ): (Pool<A, B, DummyQuoter<W>, P>, PoolCap<A, B, DummyQuoter<W>, P>) {
+    ): (Pool<A, B, DummyQuoter<W>>, PoolCap<A, B, DummyQuoter<W>>) {
         let quoter = DummyQuoter {};
 
-        let (pool, pool_cap) = pool::new<A, B, DummyQuoter<W>, P>(
+        let (pool, pool_cap) = pool::new<A, B, DummyQuoter<W>>(
             registry,
             swap_fee_bps,
             quoter,
@@ -49,10 +48,10 @@ module steamm::dummy_hook {
         (pool, pool_cap)
     }
 
-    public fun swap<A, B, W: drop, P>(
-        self: &mut Pool<A, B, DummyQuoter<W>, P>,
-        coin_a: &mut Coin<BToken<P, A>>,
-        coin_b: &mut Coin<BToken<P, B>>,
+    public fun swap<A, B, W: drop>(
+        self: &mut Pool<A, B, DummyQuoter<W>>,
+        coin_a: &mut Coin<A>,
+        coin_b: &mut Coin<B>,
         amount_in: u64,
         min_amount_out: u64,
         a2b: bool,
@@ -76,21 +75,21 @@ module steamm::dummy_hook {
         result
     }
 
-    public fun intent_swap<A, B, W: drop, P>(
-        self: &mut Pool<A, B, DummyQuoter<W>, P>,
+    public fun intent_swap<A, B, W: drop>(
+        self: &mut Pool<A, B, DummyQuoter<W>>,
         amount_in: u64,
         a2b: bool,
-    ): Intent<A, B, DummyQuoter<W>, P> {
+    ): Intent<A, B, DummyQuoter<W>> {
         let quote = quote_swap(self, amount_in, a2b);
 
         quote.as_intent(self)
     }
 
-    public fun execute_swap<A, B, W: drop, P>(
-        self: &mut Pool<A, B, DummyQuoter<W>, P>,
-        intent: Intent<A, B, DummyQuoter<W>, P>,
-        coin_a: &mut Coin<BToken<P, A>>,
-        coin_b: &mut Coin<BToken<P, B>>,
+    public fun execute_swap<A, B, W: drop>(
+        self: &mut Pool<A, B, DummyQuoter<W>>,
+        intent: Intent<A, B, DummyQuoter<W>>,
+        coin_a: &mut Coin<A>,
+        coin_b: &mut Coin<B>,
         min_amount_out: u64,
         ctx: &mut TxContext,
     ): SwapResult {
@@ -105,8 +104,8 @@ module steamm::dummy_hook {
         response
     }
 
-    public fun quote_swap<A, B, W: drop, P>(
-        self: &Pool<A, B, DummyQuoter<W>, P>,
+    public fun quote_swap<A, B, W: drop>(
+        self: &Pool<A, B, DummyQuoter<W>>,
         amount_in: u64,
         a2b: bool,
     ): SwapQuote {

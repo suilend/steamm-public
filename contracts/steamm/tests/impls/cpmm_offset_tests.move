@@ -30,8 +30,8 @@ module steamm::cpmm_offset_tests {
         LendingMarketOwnerCap<LENDING_MARKET>,
         LendingMarket<LENDING_MARKET>,
         Registry,
-        Pool<COIN, SUI, CpQuoter<Wit>, LENDING_MARKET>,
-        PoolCap<COIN, SUI, CpQuoter<Wit>, LENDING_MARKET>,
+        Pool<BToken<LENDING_MARKET, COIN>, BToken<LENDING_MARKET, SUI>, CpQuoter<Wit>>,
+        PoolCap<BToken<LENDING_MARKET, COIN>, BToken<LENDING_MARKET, SUI>, CpQuoter<Wit>>,
     ) {
         let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(scenario), scenario).destruct_state();
         destroy(bag);
@@ -44,12 +44,12 @@ module steamm::cpmm_offset_tests {
     
     public fun setup_pool(offset: u64, scenario: &mut Scenario): (
         Registry,
-        Pool<COIN, SUI, CpQuoter<Wit>, LENDING_MARKET>,
-        PoolCap<COIN, SUI, CpQuoter<Wit>, LENDING_MARKET>,
+        Pool<BToken<LENDING_MARKET, COIN>, BToken<LENDING_MARKET, SUI>, CpQuoter<Wit>>,
+        PoolCap<BToken<LENDING_MARKET, COIN>, BToken<LENDING_MARKET, SUI>, CpQuoter<Wit>>,
     ) {
         let mut registry = registry::init_for_testing(ctx(scenario));
 
-        let (pool, pool_cap) = cpmm::new_with_offset<COIN, SUI, Wit, LENDING_MARKET>(
+        let (pool, pool_cap) = cpmm::new_with_offset<BToken<LENDING_MARKET, COIN>, BToken<LENDING_MARKET, SUI>, Wit>(
             Wit {},
             &mut registry,
             0, // admin fees BPS
@@ -365,7 +365,7 @@ module steamm::cpmm_offset_tests {
                 ctx,
             );
 
-            let (reserve_a, _) = pool.btoken_amounts();
+            let (reserve_a, _) = pool.balance_amounts();
             assert!(reserve_a > 0, 0);
 
             trades = trades - 1;
@@ -449,7 +449,7 @@ module steamm::cpmm_offset_tests {
             pow_n = pow_n + 1;
         };
 
-        let (_, reserve_b) = pool.btoken_amounts();
+        let (_, reserve_b) = pool.balance_amounts();
 
         let quote = pool.cpmm_quote_swap(
             18_446_744_073_709_551_615u64 - reserve_b - offset, // U64::MAX

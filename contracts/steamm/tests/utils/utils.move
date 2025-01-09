@@ -2,7 +2,7 @@
 module steamm::test_utils {
     use steamm::cpmm::{Self, CpQuoter};
     use steamm::registry;
-    use steamm::bank::{Self, Bank};
+    use steamm::bank::{Self, Bank, BToken};
     use steamm::pool::{Pool};
     use sui::test_utils::destroy;
     use sui::clock::Clock;
@@ -126,13 +126,13 @@ module steamm::test_utils {
         reserve_b: u64,
         lp_supply: u64,
         swap_fee_bps: u64,
-    ): (Pool<SUI, COIN, CpQuoter<PoolWit>, LENDING_MARKET>, Bank<LENDING_MARKET, SUI>, Bank<LENDING_MARKET, COIN>) {
+    ): (Pool<BToken<LENDING_MARKET, SUI>, BToken<LENDING_MARKET, COIN>, CpQuoter<PoolWit>>, Bank<LENDING_MARKET, SUI>, Bank<LENDING_MARKET, COIN>) {
         let mut scenario = test_scenario::begin(@0x0);
         let ctx = ctx(&mut scenario);
 
         let mut registry = registry::init_for_testing(ctx);
 
-        let (mut pool, pool_cap) = cpmm::new<SUI, COIN, PoolWit, LENDING_MARKET>(
+        let (mut pool, pool_cap) = cpmm::new<BToken<LENDING_MARKET, SUI>, BToken<LENDING_MARKET,COIN>, PoolWit>(
             PoolWit {},
             &mut registry,
             swap_fee_bps,
