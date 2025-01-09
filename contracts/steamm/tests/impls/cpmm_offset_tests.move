@@ -1,554 +1,580 @@
 #[test_only]
-module steamm::cpmm_offset_tests {
-    use sui::{
-        test_scenario::{Self, Scenario, ctx},
-        sui::SUI,
-        coin::{Self},
-        test_utils::{destroy, assert_eq},
-        clock::Clock,
-    };
-    use steamm::{
-        registry::{Self, Registry},
-        bank::{BToken},
-        cpmm::{Self, CpQuoter},
-        test_utils::{COIN, reserve_args},
-        pool::{Self, Pool, PoolCap},
-    };
-    use suilend::{
-        decimal,
-        lending_market_tests::{LENDING_MARKET, setup as suilend_setup},
-        lending_market::{LendingMarketOwnerCap, LendingMarket}
-    };
+module steamm::cpmm_offset_tests;
 
-    const ADMIN: address = @0x10;
-    const POOL_CREATOR: address = @0x11;
+use steamm::bank::BToken;
+use steamm::cpmm::{Self, CpQuoter};
+use steamm::pool::{Self, Pool, PoolCap};
+use steamm::registry::{Self, Registry};
+use steamm::test_utils::{COIN, reserve_args};
+use sui::clock::Clock;
+use sui::coin;
+use sui::sui::SUI;
+use sui::test_scenario::{Self, Scenario, ctx};
+use sui::test_utils::{destroy, assert_eq};
+use suilend::decimal;
+use suilend::lending_market::{LendingMarketOwnerCap, LendingMarket};
+use suilend::lending_market_tests::{LENDING_MARKET, setup as suilend_setup};
 
-    public struct Wit has drop {}
+const ADMIN: address = @0x10;
+const POOL_CREATOR: address = @0x11;
 
-    public fun setup(offset: u64, scenario: &mut Scenario): (
-        Clock,
-        LendingMarketOwnerCap<LENDING_MARKET>,
-        LendingMarket<LENDING_MARKET>,
-        Registry,
-        Pool<BToken<LENDING_MARKET, COIN>, BToken<LENDING_MARKET, SUI>, CpQuoter<Wit>>,
-        PoolCap<BToken<LENDING_MARKET, COIN>, BToken<LENDING_MARKET, SUI>, CpQuoter<Wit>>,
-    ) {
-        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(scenario), scenario).destruct_state();
-        destroy(bag);
-        destroy(prices);
+public struct Wit has drop {}
 
-        let (registry, pool, pool_cap) = setup_pool(offset, scenario);
+public fun setup(
+    offset: u64,
+    scenario: &mut Scenario,
+): (
+    Clock,
+    LendingMarketOwnerCap<LENDING_MARKET>,
+    LendingMarket<LENDING_MARKET>,
+    Registry,
+    Pool<BToken<LENDING_MARKET, COIN>, BToken<LENDING_MARKET, SUI>, CpQuoter<Wit>>,
+    PoolCap<BToken<LENDING_MARKET, COIN>, BToken<LENDING_MARKET, SUI>, CpQuoter<Wit>>,
+) {
+    let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
+        reserve_args(scenario),
+        scenario,
+    ).destruct_state();
+    destroy(bag);
+    destroy(prices);
 
-        (clock, lend_cap, lending_market, registry, pool, pool_cap)
-    }
-    
-    public fun setup_pool(offset: u64, scenario: &mut Scenario): (
-        Registry,
-        Pool<BToken<LENDING_MARKET, COIN>, BToken<LENDING_MARKET, SUI>, CpQuoter<Wit>>,
-        PoolCap<BToken<LENDING_MARKET, COIN>, BToken<LENDING_MARKET, SUI>, CpQuoter<Wit>>,
-    ) {
-        let mut registry = registry::init_for_testing(ctx(scenario));
+    let (registry, pool, pool_cap) = setup_pool(offset, scenario);
 
-        let (pool, pool_cap) = cpmm::new_with_offset<BToken<LENDING_MARKET, COIN>, BToken<LENDING_MARKET, SUI>, Wit>(
-            Wit {},
-            &mut registry,
-            0, // admin fees BPS
-            offset,
-            ctx(scenario),
-        );
+    (clock, lend_cap, lending_market, registry, pool, pool_cap)
+}
 
-        (registry, pool, pool_cap)
-    }
+public fun setup_pool(
+    offset: u64,
+    scenario: &mut Scenario,
+): (
+    Registry,
+    Pool<BToken<LENDING_MARKET, COIN>, BToken<LENDING_MARKET, SUI>, CpQuoter<Wit>>,
+    PoolCap<BToken<LENDING_MARKET, COIN>, BToken<LENDING_MARKET, SUI>, CpQuoter<Wit>>,
+) {
+    let mut registry = registry::init_for_testing(ctx(scenario));
 
-    #[test]
-    fun test_quotes_with_consecutive_price_increase() {
-        let mut scenario = test_scenario::begin(ADMIN);
+    let (pool, pool_cap) = cpmm::new_with_offset<
+        BToken<LENDING_MARKET, COIN>,
+        BToken<LENDING_MARKET, SUI>,
+        Wit,
+    >(
+        Wit {},
+        &mut registry,
+        0, // admin fees BPS
+        offset,
+        ctx(scenario),
+    );
 
-        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+    (registry, pool, pool_cap)
+}
 
-        let offset = 5;
-        let (clock, lend_cap, lending_market, registry, mut pool, pool_cap) = setup(offset, &mut scenario);
+#[test]
+fun test_quotes_with_consecutive_price_increase() {
+    let mut scenario = test_scenario::begin(ADMIN);
 
-        let ctx = ctx(&mut scenario);
+    test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
-        pool.no_protocol_fees_for_testing();
-        pool.no_redemption_fees_for_testing();
+    let offset = 5;
+    let (clock, lend_cap, lending_market, registry, mut pool, pool_cap) = setup(
+        offset,
+        &mut scenario,
+    );
 
-        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
-        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx);
+    let ctx = ctx(&mut scenario);
 
-        let (lp_coins, _) = pool.deposit_liquidity(
-            &mut coin_a,
-            &mut coin_b,
-            500_000,
-            0,
-            ctx,
-        );
+    pool.no_protocol_fees_for_testing();
+    pool.no_redemption_fees_for_testing();
 
-        destroy(coin_a);
-        destroy(coin_b);
+    let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
+    let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx);
 
-        let mut pow_n = 0;
+    let (lp_coins, _) = pool.deposit_liquidity(
+        &mut coin_a,
+        &mut coin_b,
+        500_000,
+        0,
+        ctx,
+    );
 
-        let mut price = decimal::from(0);
+    destroy(coin_a);
+    destroy(coin_b);
 
-        while (pow_n <= 14) {
-            let sui_in = 10_u64.pow(pow_n);
+    let mut pow_n = 0;
 
-            let quote = pool.cpmm_quote_swap(
-                sui_in,
-                false, // a2b
-            );
+    let mut price = decimal::from(0);
 
-            let new_price = decimal::from(quote.amount_in()).div(decimal::from(quote.amount_out()));
-            assert!(
-                new_price.gt(price), 0
-            );
+    while (pow_n <= 14) {
+        let sui_in = 10_u64.pow(pow_n);
 
-            price = new_price;
-            pow_n = pow_n + 1;
-        };
-
-        destroy(registry);
-        destroy(pool);
-        destroy(pool_cap);
-        destroy(lp_coins);
-        destroy(lend_cap);
-        destroy(clock);
-        destroy(lending_market);
-        test_scenario::end(scenario);
-    }
-    
-    // Tests that the initial instant price increases as the offset increases
-    #[test]
-    fun test_quote_lateral_price_increase_with_increasing_offset() {
-        let mut scenario = test_scenario::begin(ADMIN);
-
-        // Init Pool
-        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-
-        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
-        
-        let mut pow_n = 0;
-        let mut price = decimal::from(0);
-        let default_offset = 5;
-
-        while (pow_n <= 5) {
-            let offset = default_offset * 10_u64.pow(pow_n);
-            let (registry, mut pool, pool_cap) = setup_pool(offset, &mut scenario);
-
-            pool.no_protocol_fees_for_testing();
-            pool.no_redemption_fees_for_testing();
-
-            let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx(&mut scenario));
-            let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx(&mut scenario));
-
-            let (lp_coins, _) = pool.deposit_liquidity(
-                &mut coin_a,
-                &mut coin_b,
-                500_000,
-                0,
-                ctx(&mut scenario),
-            );
-
-            let quote = pool.cpmm_quote_swap(
-                10_000_000,
-                false, // a2b
-            );
-
-            let new_price = decimal::from(quote.amount_in()).div(decimal::from(quote.amount_out()));
-            assert!(
-                new_price.gt(price), 0
-            );
-
-            destroy(registry);
-            destroy(coin_a);
-            destroy(coin_b);
-            destroy(lp_coins);
-            destroy(pool_cap);
-            destroy(pool);
-
-            price = new_price;
-            pow_n = pow_n + 1;
-        };
-
-        
-        destroy(lend_cap);
-        destroy(prices);
-        destroy(clock);
-        destroy(bag);
-        destroy(lending_market);
-        test_scenario::end(scenario);
-    }
-
-
-    // Tests that the initial instant price decreases as the initial pool coin supply increases
-    #[test]
-    fun test_quote_lateral_price_decrease_with_increasing_initial_coin_supply() {
-        let mut scenario = test_scenario::begin(ADMIN);
-        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-
-        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
-        
-        let mut pow_n = 0;
-        let mut price = decimal::from_scaled_val(50000040000080000160); // arbitrarily large number
-        let offset = 5;
-        let default_outlay = 500_000;
-
-        while (pow_n <= 5) {
-            let (registry, mut pool, pool_cap) = setup_pool(offset, &mut scenario);
-            
-            let outlay = default_outlay * 10_u64.pow(pow_n);
-
-            pool.no_protocol_fees_for_testing();
-            pool.no_redemption_fees_for_testing();
-
-            let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(outlay, ctx(&mut scenario));
-            let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx(&mut scenario));
-
-            let (lp_coins, _) = pool.deposit_liquidity(
-                &mut coin_a,
-                &mut coin_b,
-                outlay,
-                0,
-                ctx(&mut scenario),
-            );
-
-            let quote = pool.cpmm_quote_swap(
-                10_000_000,
-                false, // a2b
-            );
-
-            let new_price = decimal::from(quote.amount_in()).div(decimal::from(quote.amount_out()));
-            assert!(
-                new_price.lt(price), 0
-            );
-
-            destroy(registry);
-            destroy(coin_a);
-            destroy(coin_b);
-            destroy(lp_coins);
-            destroy(pool_cap);
-            destroy(pool);
-
-            price = new_price;
-            pow_n = pow_n + 1;
-        };
-
-        
-        destroy(lend_cap);
-        destroy(prices);
-        destroy(clock);
-        destroy(bag);
-        destroy(lending_market);
-        test_scenario::end(scenario);
-    }
-    
-    #[test]
-    fun test_one_sided_deposit_swap_back_and_forth() {
-        let mut scenario = test_scenario::begin(ADMIN);
-
-        // Init Pool
-        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-
-        let offset = 5;
-        let (clock, lend_cap, lending_market, registry, mut pool, pool_cap) = setup(offset, &mut scenario);
-
-        pool.no_protocol_fees_for_testing();
-        pool.no_redemption_fees_for_testing();
-
-        let ctx = ctx(&mut scenario);
-        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
-        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx);
-        
-
-        let (lp_coins, _) = pool.deposit_liquidity(
-            &mut coin_a,
-            &mut coin_b,
-            500_000,
-            0,
-            ctx,
-        );
-
-        destroy(coin_a);
-        destroy(coin_b);
-        
-        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
-        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(1_000, ctx);
-
-        let swap_result_1 = pool.cpmm_swap(
-            &mut coin_a,
-            &mut coin_b,
+        let quote = pool.cpmm_quote_swap(
+            sui_in,
             false, // a2b
-            10,
-            0,
-            ctx,
         );
 
-        let swap_result_2 = pool.cpmm_swap(
-            &mut coin_a,
-            &mut coin_b,
-            true, // a2b
-            333333,
-            0,
-            ctx,
-        );
+        let new_price = decimal::from(quote.amount_in()).div(decimal::from(quote.amount_out()));
+        assert!(new_price.gt(price), 0);
 
-        assert!(swap_result_1.amount_in() >= swap_result_2.amount_out(), 0);
-        assert!(swap_result_2.amount_out() == 10 - 1, 0); // -1 due to rounddown
+        price = new_price;
+        pow_n = pow_n + 1;
+    };
 
-        destroy(coin_a);
-        destroy(coin_b);
-        destroy(registry);
-        destroy(pool);
-        destroy(pool_cap);
-        destroy(lp_coins);
-        destroy(lend_cap);
-        destroy(clock);
-        destroy(lending_market);
-        test_scenario::end(scenario);
-    }
-    
-    #[expected_failure(abort_code = pool::ESwapOutputAmountIsZero)]
-    #[test]
-    fun test_try_exaust_pool() {
-        let mut scenario = test_scenario::begin(ADMIN);
+    destroy(registry);
+    destroy(pool);
+    destroy(pool_cap);
+    destroy(lp_coins);
+    destroy(lend_cap);
+    destroy(clock);
+    destroy(lending_market);
+    test_scenario::end(scenario);
+}
 
-        // Init Pool
-        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+// Tests that the initial instant price increases as the offset increases
+#[test]
+fun test_quote_lateral_price_increase_with_increasing_offset() {
+    let mut scenario = test_scenario::begin(ADMIN);
 
-        let offset = 5;
-        let (clock, lend_cap, lending_market, registry, mut pool, pool_cap) = setup(offset, &mut scenario);
-        
-        let ctx = ctx(&mut scenario);
+    // Init Pool
+    test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+
+    let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
+        reserve_args(&mut scenario),
+        &mut scenario,
+    ).destruct_state();
+
+    let mut pow_n = 0;
+    let mut price = decimal::from(0);
+    let default_offset = 5;
+
+    while (pow_n <= 5) {
+        let offset = default_offset * 10_u64.pow(pow_n);
+        let (registry, mut pool, pool_cap) = setup_pool(offset, &mut scenario);
 
         pool.no_protocol_fees_for_testing();
         pool.no_redemption_fees_for_testing();
 
-        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
-        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx);
+        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(
+            500_000,
+            ctx(&mut scenario),
+        );
+        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx(&mut scenario));
 
         let (lp_coins, _) = pool.deposit_liquidity(
             &mut coin_a,
             &mut coin_b,
             500_000,
             0,
-            ctx,
+            ctx(&mut scenario),
         );
 
-        destroy(coin_a);
-        destroy(coin_b);
+        let quote = pool.cpmm_quote_swap(
+            10_000_000,
+            false, // a2b
+        );
 
-        let mut trades = 1_000;
-        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
-        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(10_000_000_000, ctx);
+        let new_price = decimal::from(quote.amount_in()).div(decimal::from(quote.amount_out()));
+        assert!(new_price.gt(price), 0);
 
-        while (trades > 0) {
-            pool.cpmm_swap(
-                &mut coin_a,
-                &mut coin_b,
-                false, // a2b
-                1_000,
-                0,
-                ctx,
-            );
-
-            let (reserve_a, _) = pool.balance_amounts();
-            assert!(reserve_a > 0, 0);
-
-            trades = trades - 1;
-
-        };
-
-        destroy(coin_a);
-        destroy(coin_b);
         destroy(registry);
-        destroy(pool);
-        destroy(pool_cap);
+        destroy(coin_a);
+        destroy(coin_b);
         destroy(lp_coins);
-        destroy(lend_cap);
-        destroy(clock);
-        destroy(lending_market);
-        test_scenario::end(scenario);
-    }
+        destroy(pool_cap);
+        destroy(pool);
 
-    // - Tests that quotes will always lead to 0 amount out in the limit
-    #[test]
-    fun test_try_exaust_pool_2() {
-        let mut scenario = test_scenario::begin(ADMIN);
+        price = new_price;
+        pow_n = pow_n + 1;
+    };
 
-        // Init Pool
-        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+    destroy(lend_cap);
+    destroy(prices);
+    destroy(clock);
+    destroy(bag);
+    destroy(lending_market);
+    test_scenario::end(scenario);
+}
 
-        let offset = 5;
-        let (clock, lend_cap, lending_market, registry, mut pool, pool_cap) = setup(offset, &mut scenario);
-        
-        let ctx = ctx(&mut scenario);
+// Tests that the initial instant price decreases as the initial pool coin supply increases
+#[test]
+fun test_quote_lateral_price_decrease_with_increasing_initial_coin_supply() {
+    let mut scenario = test_scenario::begin(ADMIN);
+    test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+
+    let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
+        reserve_args(&mut scenario),
+        &mut scenario,
+    ).destruct_state();
+
+    let mut pow_n = 0;
+    let mut price = decimal::from_scaled_val(50000040000080000160); // arbitrarily large number
+    let offset = 5;
+    let default_outlay = 500_000;
+
+    while (pow_n <= 5) {
+        let (registry, mut pool, pool_cap) = setup_pool(offset, &mut scenario);
+
+        let outlay = default_outlay * 10_u64.pow(pow_n);
 
         pool.no_protocol_fees_for_testing();
         pool.no_redemption_fees_for_testing();
 
-        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
-        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx);
+        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(
+            outlay,
+            ctx(&mut scenario),
+        );
+        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx(&mut scenario));
 
         let (lp_coins, _) = pool.deposit_liquidity(
             &mut coin_a,
             &mut coin_b,
-            500_000,
+            outlay,
             0,
-            ctx,
+            ctx(&mut scenario),
         );
 
+        let quote = pool.cpmm_quote_swap(
+            10_000_000,
+            false, // a2b
+        );
+
+        let new_price = decimal::from(quote.amount_in()).div(decimal::from(quote.amount_out()));
+        assert!(new_price.lt(price), 0);
+
+        destroy(registry);
         destroy(coin_a);
         destroy(coin_b);
+        destroy(lp_coins);
+        destroy(pool_cap);
+        destroy(pool);
 
-        // Initial trade that leaves the pool with only 1 COIN
-        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
-        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(10_000_000, ctx);
+        price = new_price;
+        pow_n = pow_n + 1;
+    };
 
+    destroy(lend_cap);
+    destroy(prices);
+    destroy(clock);
+    destroy(bag);
+    destroy(lending_market);
+    test_scenario::end(scenario);
+}
+
+#[test]
+fun test_one_sided_deposit_swap_back_and_forth() {
+    let mut scenario = test_scenario::begin(ADMIN);
+
+    // Init Pool
+    test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+
+    let offset = 5;
+    let (clock, lend_cap, lending_market, registry, mut pool, pool_cap) = setup(
+        offset,
+        &mut scenario,
+    );
+
+    pool.no_protocol_fees_for_testing();
+    pool.no_redemption_fees_for_testing();
+
+    let ctx = ctx(&mut scenario);
+    let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
+    let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx);
+
+    let (lp_coins, _) = pool.deposit_liquidity(
+        &mut coin_a,
+        &mut coin_b,
+        500_000,
+        0,
+        ctx,
+    );
+
+    destroy(coin_a);
+    destroy(coin_b);
+
+    let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
+    let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(1_000, ctx);
+
+    let swap_result_1 = pool.cpmm_swap(
+        &mut coin_a,
+        &mut coin_b,
+        false, // a2b
+        10,
+        0,
+        ctx,
+    );
+
+    let swap_result_2 = pool.cpmm_swap(
+        &mut coin_a,
+        &mut coin_b,
+        true, // a2b
+        333333,
+        0,
+        ctx,
+    );
+
+    assert!(swap_result_1.amount_in() >= swap_result_2.amount_out(), 0);
+    assert!(swap_result_2.amount_out() == 10 - 1, 0); // -1 due to rounddown
+
+    destroy(coin_a);
+    destroy(coin_b);
+    destroy(registry);
+    destroy(pool);
+    destroy(pool_cap);
+    destroy(lp_coins);
+    destroy(lend_cap);
+    destroy(clock);
+    destroy(lending_market);
+    test_scenario::end(scenario);
+}
+
+#[expected_failure(abort_code = pool::ESwapOutputAmountIsZero)]
+#[test]
+fun test_try_exaust_pool() {
+    let mut scenario = test_scenario::begin(ADMIN);
+
+    // Init Pool
+    test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+
+    let offset = 5;
+    let (clock, lend_cap, lending_market, registry, mut pool, pool_cap) = setup(
+        offset,
+        &mut scenario,
+    );
+
+    let ctx = ctx(&mut scenario);
+
+    pool.no_protocol_fees_for_testing();
+    pool.no_redemption_fees_for_testing();
+
+    let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
+    let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx);
+
+    let (lp_coins, _) = pool.deposit_liquidity(
+        &mut coin_a,
+        &mut coin_b,
+        500_000,
+        0,
+        ctx,
+    );
+
+    destroy(coin_a);
+    destroy(coin_b);
+
+    let mut trades = 1_000;
+    let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
+    let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(10_000_000_000, ctx);
+
+    while (trades > 0) {
         pool.cpmm_swap(
             &mut coin_a,
             &mut coin_b,
             false, // a2b
-            10_000_000,
+            1_000,
             0,
             ctx,
         );
 
-        destroy(coin_a);
-        destroy(coin_b);
+        let (reserve_a, _) = pool.balance_amounts();
+        assert!(reserve_a > 0, 0);
 
-        let mut pow_n = 0;
-        
-        while (pow_n < 20) {
-            let sui_in = 10_u64.pow(pow_n);
+        trades = trades - 1;
+    };
 
-            let quote = pool.cpmm_quote_swap(
-                sui_in,
-                false, // a2b
-            );
+    destroy(coin_a);
+    destroy(coin_b);
+    destroy(registry);
+    destroy(pool);
+    destroy(pool_cap);
+    destroy(lp_coins);
+    destroy(lend_cap);
+    destroy(clock);
+    destroy(lending_market);
+    test_scenario::end(scenario);
+}
 
-            assert_eq(quote.amount_out(), 0);
+// - Tests that quotes will always lead to 0 amount out in the limit
+#[test]
+fun test_try_exaust_pool_2() {
+    let mut scenario = test_scenario::begin(ADMIN);
 
-            pow_n = pow_n + 1;
-        };
+    // Init Pool
+    test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
-        let (_, reserve_b) = pool.balance_amounts();
+    let offset = 5;
+    let (clock, lend_cap, lending_market, registry, mut pool, pool_cap) = setup(
+        offset,
+        &mut scenario,
+    );
+
+    let ctx = ctx(&mut scenario);
+
+    pool.no_protocol_fees_for_testing();
+    pool.no_redemption_fees_for_testing();
+
+    let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
+    let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx);
+
+    let (lp_coins, _) = pool.deposit_liquidity(
+        &mut coin_a,
+        &mut coin_b,
+        500_000,
+        0,
+        ctx,
+    );
+
+    destroy(coin_a);
+    destroy(coin_b);
+
+    // Initial trade that leaves the pool with only 1 COIN
+    let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
+    let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(10_000_000, ctx);
+
+    pool.cpmm_swap(
+        &mut coin_a,
+        &mut coin_b,
+        false, // a2b
+        10_000_000,
+        0,
+        ctx,
+    );
+
+    destroy(coin_a);
+    destroy(coin_b);
+
+    let mut pow_n = 0;
+
+    while (pow_n < 20) {
+        let sui_in = 10_u64.pow(pow_n);
 
         let quote = pool.cpmm_quote_swap(
-            18_446_744_073_709_551_615u64 - reserve_b - offset, // U64::MAX
+            sui_in,
             false, // a2b
         );
 
         assert_eq(quote.amount_out(), 0);
 
-        destroy(registry);
-        destroy(pool);
-        destroy(pool_cap);
-        destroy(lp_coins);
-        destroy(lend_cap);
-        destroy(clock);
-        destroy(lending_market);
-        test_scenario::end(scenario);
-    }
+        pow_n = pow_n + 1;
+    };
 
-    #[expected_failure(abort_code = pool::EOutputExceedsLiquidity)]
-    #[test]
-    fun test_one_sided_deposit_quote_swap_against_liquidity() {
-        let mut scenario = test_scenario::begin(ADMIN);
+    let (_, reserve_b) = pool.balance_amounts();
 
-        // Init Pool
-        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+    let quote = pool.cpmm_quote_swap(
+        18_446_744_073_709_551_615u64 - reserve_b - offset, // U64::MAX
+        false, // a2b
+    );
 
-        let offset = 5;
-        let (clock, lend_cap, lending_market, registry, mut pool, pool_cap) = setup(offset, &mut scenario);
-        
-        let ctx = ctx(&mut scenario);
+    assert_eq(quote.amount_out(), 0);
 
-        pool.no_protocol_fees_for_testing();
-        pool.no_redemption_fees_for_testing();
+    destroy(registry);
+    destroy(pool);
+    destroy(pool_cap);
+    destroy(lp_coins);
+    destroy(lend_cap);
+    destroy(clock);
+    destroy(lending_market);
+    test_scenario::end(scenario);
+}
 
-        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
-        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx);
+#[expected_failure(abort_code = pool::EOutputExceedsLiquidity)]
+#[test]
+fun test_one_sided_deposit_quote_swap_against_liquidity() {
+    let mut scenario = test_scenario::begin(ADMIN);
 
-        let (lp_coins, _) = pool.deposit_liquidity(
-            &mut coin_a,
-            &mut coin_b,
-            500_000,
-            0,
-            ctx,
-        );
+    // Init Pool
+    test_scenario::next_tx(&mut scenario, POOL_CREATOR);
 
-        destroy(coin_a);
-        destroy(coin_b);
-        
-        pool.cpmm_quote_swap(
-            10_000_000,
-            true, // a2b
-        );
+    let offset = 5;
+    let (clock, lend_cap, lending_market, registry, mut pool, pool_cap) = setup(
+        offset,
+        &mut scenario,
+    );
 
-        destroy(registry);
-        destroy(pool);
-        destroy(pool_cap);
-        destroy(lp_coins);
-        destroy(lend_cap);
-        destroy(clock);
-        destroy(lending_market);
-        test_scenario::end(scenario);
-    }
-    
-    #[expected_failure(abort_code = pool::EOutputExceedsLiquidity)]
-    #[test]
-    fun test_one_sided_deposit_swap_against_liquidity() {
-        let mut scenario = test_scenario::begin(ADMIN);
+    let ctx = ctx(&mut scenario);
 
-        // Init Pool
-        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+    pool.no_protocol_fees_for_testing();
+    pool.no_redemption_fees_for_testing();
 
-        let offset = 5;
-        let (clock, lend_cap, lending_market, registry, mut pool, pool_cap) = setup(offset, &mut scenario);
-        
-        let ctx = ctx(&mut scenario);
+    let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
+    let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx);
 
-        pool.no_protocol_fees_for_testing();
-        pool.no_redemption_fees_for_testing();
+    let (lp_coins, _) = pool.deposit_liquidity(
+        &mut coin_a,
+        &mut coin_b,
+        500_000,
+        0,
+        ctx,
+    );
 
-        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
-        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx);
+    destroy(coin_a);
+    destroy(coin_b);
 
-        let (lp_coins, _) = pool.deposit_liquidity(
-            &mut coin_a,
-            &mut coin_b,
-            500_000,
-            0,
-            ctx,
-        );
+    pool.cpmm_quote_swap(
+        10_000_000,
+        true, // a2b
+    );
 
-        destroy(coin_a);
-        destroy(coin_b);
-        
-        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
-        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(1_000, ctx);
-        
-        pool.cpmm_swap(
-            &mut coin_a,
-            &mut coin_b,
-            true, // a2b
-            10_000_000,
-            0,
-            ctx,
-        );
+    destroy(registry);
+    destroy(pool);
+    destroy(pool_cap);
+    destroy(lp_coins);
+    destroy(lend_cap);
+    destroy(clock);
+    destroy(lending_market);
+    test_scenario::end(scenario);
+}
 
-        destroy(coin_a);
-        destroy(coin_b);
+#[expected_failure(abort_code = pool::EOutputExceedsLiquidity)]
+#[test]
+fun test_one_sided_deposit_swap_against_liquidity() {
+    let mut scenario = test_scenario::begin(ADMIN);
 
-        destroy(registry);
-        destroy(pool);
-        destroy(pool_cap);
-        destroy(lp_coins);
-        destroy(lend_cap);
-        destroy(clock);
-        destroy(lending_market);
-        test_scenario::end(scenario);
-    }
+    // Init Pool
+    test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+
+    let offset = 5;
+    let (clock, lend_cap, lending_market, registry, mut pool, pool_cap) = setup(
+        offset,
+        &mut scenario,
+    );
+
+    let ctx = ctx(&mut scenario);
+
+    pool.no_protocol_fees_for_testing();
+    pool.no_redemption_fees_for_testing();
+
+    let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
+    let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(0, ctx);
+
+    let (lp_coins, _) = pool.deposit_liquidity(
+        &mut coin_a,
+        &mut coin_b,
+        500_000,
+        0,
+        ctx,
+    );
+
+    destroy(coin_a);
+    destroy(coin_b);
+
+    let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
+    let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(1_000, ctx);
+
+    pool.cpmm_swap(
+        &mut coin_a,
+        &mut coin_b,
+        true, // a2b
+        10_000_000,
+        0,
+        ctx,
+    );
+
+    destroy(coin_a);
+    destroy(coin_b);
+
+    destroy(registry);
+    destroy(pool);
+    destroy(pool_cap);
+    destroy(lp_coins);
+    destroy(lend_cap);
+    destroy(clock);
+    destroy(lending_market);
+    test_scenario::end(scenario);
 }
