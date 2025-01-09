@@ -275,29 +275,21 @@ module steamm::cpmm_offset_tests {
         
         let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
         let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(1_000, ctx);
-        
-        let swap_intent = pool.cpmm_intent_swap(
-            10,
-            false, // a2b
-        );
 
-        let swap_result_1 = pool.cpmm_execute_swap(
-            swap_intent,
+        let swap_result_1 = pool.cpmm_swap(
             &mut coin_a,
             &mut coin_b,
+            false, // a2b
+            10,
             0,
             ctx,
         );
 
-        let swap_intent = pool.cpmm_intent_swap(
-            333333,
-            true, // a2b
-        );
-
-        let swap_result_2 = pool.cpmm_execute_swap(
-            swap_intent,
+        let swap_result_2 = pool.cpmm_swap(
             &mut coin_a,
             &mut coin_b,
+            true, // a2b
+            333333,
             0,
             ctx,
         );
@@ -352,15 +344,11 @@ module steamm::cpmm_offset_tests {
         let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(10_000_000_000, ctx);
 
         while (trades > 0) {
-            let swap_intent = pool.cpmm_intent_swap(
-                1_000,
-                false, // a2b
-            );
-
-            pool.cpmm_execute_swap(
-                swap_intent,
+            pool.cpmm_swap(
                 &mut coin_a,
                 &mut coin_b,
+                false, // a2b
+                1_000,
                 0,
                 ctx,
             );
@@ -418,15 +406,11 @@ module steamm::cpmm_offset_tests {
         let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
         let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(10_000_000, ctx);
 
-        let swap_intent = pool.cpmm_intent_swap(
-            10_000_000,
-            false, // a2b
-        );
-
-        pool.cpmm_execute_swap(
-            swap_intent,
+        pool.cpmm_swap(
             &mut coin_a,
             &mut coin_b,
+            false, // a2b
+            10_000_000,
             0,
             ctx,
         );
@@ -546,15 +530,11 @@ module steamm::cpmm_offset_tests {
         let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
         let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(1_000, ctx);
         
-        let swap_intent = pool.cpmm_intent_swap(
-            10_000_000,
-            true, // a2b
-        );
-
-        pool.cpmm_execute_swap(
-            swap_intent,
+        pool.cpmm_swap(
             &mut coin_a,
             &mut coin_b,
+            true, // a2b
+            10_000_000,
             0,
             ctx,
         );
