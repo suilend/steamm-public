@@ -84,55 +84,55 @@ module steamm::quote {
     }
 
     public(package) fun add_extra_fees(
-        self: &mut SwapQuote,
+        swap_quote: &mut SwapQuote,
         protocol_fees: u64,
         pool_fees: u64
     ) {
-        self.output_fees.protocol_fees = self.output_fees.protocol_fees + protocol_fees;
-        self.output_fees.pool_fees = self.output_fees.pool_fees + pool_fees;
+        swap_quote.output_fees.protocol_fees = swap_quote.output_fees.protocol_fees + protocol_fees;
+        swap_quote.output_fees.pool_fees = swap_quote.output_fees.pool_fees + pool_fees;
     }
     
 
     // ===== Public View Methods =====
 
-    public fun protocol_fees(self: &SwapFee): u64 { self.protocol_fees }
-    public fun pool_fees(self: &SwapFee): u64 { self.pool_fees }
+    public fun protocol_fees(swap_fee: &SwapFee): u64 { swap_fee.protocol_fees }
+    public fun pool_fees(swap_fee: &SwapFee): u64 { swap_fee.pool_fees }
 
-    public fun amount_in(self: &SwapQuote): u64 { self.amount_in }
-    public fun amount_out(self: &SwapQuote): u64 { self.amount_out }
-    public fun a2b(self: &SwapQuote): bool { self.a2b }
+    public fun amount_in(swap_quote: &SwapQuote): u64 { swap_quote.amount_in }
+    public fun amount_out(swap_quote: &SwapQuote): u64 { swap_quote.amount_out }
+    public fun a2b(swap_quote: &SwapQuote): bool { swap_quote.a2b }
     
-    public fun amount_out_net(self: &SwapQuote): u64 {
-        self.amount_out - self.output_fees.protocol_fees - self.output_fees.pool_fees
+    public fun amount_out_net(swap_quote: &SwapQuote): u64 {
+        swap_quote.amount_out - swap_quote.output_fees.protocol_fees - swap_quote.output_fees.pool_fees
     }
    
-    public fun amount_out_net_of_protocol_fees(self: &SwapQuote): u64 {
-        self.amount_out - self.output_fees.protocol_fees
+    public fun amount_out_net_of_protocol_fees(swap_quote: &SwapQuote): u64 {
+        swap_quote.amount_out - swap_quote.output_fees.protocol_fees
     }
     
-    public fun amount_out_net_of_pool_fees(self: &SwapQuote): u64 {
-        self.amount_out - self.output_fees.pool_fees
+    public fun amount_out_net_of_pool_fees(swap_quote: &SwapQuote): u64 {
+        swap_quote.amount_out - swap_quote.output_fees.pool_fees
     }
     
-    public fun output_fee_rate(self: &SwapQuote): Decimal {
+    public fun output_fee_rate(swap_quote: &SwapQuote): Decimal {
         let total_fees = decimal::from(
-            self.output_fees().pool_fees() + self.output_fees().protocol_fees()
+            swap_quote.output_fees().pool_fees() + swap_quote.output_fees().protocol_fees()
         );
 
-        total_fees.div(decimal::from(self.amount_out()))
+        total_fees.div(decimal::from(swap_quote.amount_out()))
     }
-    public fun output_fees(self: &SwapQuote): &SwapFee { &self.output_fees }
+    public fun output_fees(swap_quote: &SwapQuote): &SwapFee { &swap_quote.output_fees }
     
-    public fun initial_deposit(self: &DepositQuote): bool { self.initial_deposit }
-    public fun deposit_a(self: &DepositQuote): u64 { self.deposit_a }
-    public fun deposit_b(self: &DepositQuote): u64 { self.deposit_b }
-    public fun mint_lp(self: &DepositQuote): u64 { self.mint_lp }
+    public fun initial_deposit(deposit_quote: &DepositQuote): bool { deposit_quote.initial_deposit }
+    public fun deposit_a(deposit_quote: &DepositQuote): u64 { deposit_quote.deposit_a }
+    public fun deposit_b(deposit_quote: &DepositQuote): u64 { deposit_quote.deposit_b }
+    public fun mint_lp(deposit_quote: &DepositQuote): u64 { deposit_quote.mint_lp }
     
-    public fun withdraw_a(self: &RedeemQuote): u64 { self.withdraw_a }
-    public fun withdraw_b(self: &RedeemQuote): u64 { self.withdraw_b }
-    public fun redemption_fee_a(self: &RedeemQuote): u64 { self.fees_a }
-    public fun redemption_fee_b(self: &RedeemQuote): u64 { self.fees_b }
-    public fun burn_lp(self: &RedeemQuote): u64 { self.burn_lp }
+    public fun withdraw_a(redeem_quote: &RedeemQuote): u64 { redeem_quote.withdraw_a }
+    public fun withdraw_b(redeem_quote: &RedeemQuote): u64 { redeem_quote.withdraw_b }
+    public fun redemption_fee_a(redeem_quote: &RedeemQuote): u64 { redeem_quote.fees_a }
+    public fun redemption_fee_b(redeem_quote: &RedeemQuote): u64 { redeem_quote.fees_b }
+    public fun burn_lp(redeem_quote: &RedeemQuote): u64 { redeem_quote.burn_lp }
 
 
     #[test_only]

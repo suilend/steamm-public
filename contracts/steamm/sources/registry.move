@@ -54,11 +54,11 @@ module steamm::registry {
     // ===== Versioning =====
     
 
-    entry fun migrate_as_global_admin(
-        self: &mut Registry,
+    entry fun migrate(
+        registry: &mut Registry,
         _admin: &GlobalAdmin,
     ) {
-        self.version.migrate_(CURRENT_VERSION);
+        registry.version.migrate_(CURRENT_VERSION);
     }
 
     // ===== Tests =====

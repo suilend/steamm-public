@@ -49,7 +49,7 @@ module steamm::dummy_hook {
     }
 
     public fun swap<A, B, W: drop>(
-        self: &mut Pool<A, B, DummyQuoter<W>>,
+        pool: &mut Pool<A, B, DummyQuoter<W>>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
         a2b: bool,
@@ -57,9 +57,9 @@ module steamm::dummy_hook {
         min_amount_out: u64,
         ctx: &mut TxContext,
     ): SwapResult {
-        let quote = quote_swap(self, amount_in, a2b);
+        let quote = quote_swap(pool, amount_in, a2b);
 
-        let response = self.swap(
+        let response = pool.swap(
             coin_a,
             coin_b,
             quote,
@@ -71,12 +71,12 @@ module steamm::dummy_hook {
     }
 
     public fun quote_swap<A, B, W: drop>(
-        self: &Pool<A, B, DummyQuoter<W>>,
+        pool: &Pool<A, B, DummyQuoter<W>>,
         amount_in: u64,
         a2b: bool,
     ): SwapQuote {
         let amount_out = amount_in;
 
-        self.get_quote(amount_in, amount_out, a2b)
+        pool.get_quote(amount_in, amount_out, a2b)
     }
 }
