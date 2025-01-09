@@ -73,15 +73,11 @@ module steamm::proptests {
             let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(if (a2b) { amount_in } else {0}, ctx);
             let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(if (a2b) { 0 } else {amount_in}, ctx);
 
-            let swap_intent = pool.cpmm_intent_swap(
-                amount_in,
-                a2b, // a2b
-            );
-
-            pool.cpmm_execute_swap(
-                swap_intent,
+            pool.cpmm_swap(
                 &mut coin_a,
                 &mut coin_b,
+                a2b, // a2b
+                amount_in,
                 0,
                 ctx,
             );

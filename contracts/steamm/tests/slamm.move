@@ -14,7 +14,7 @@ module steamm::steamm_tests {
         global_admin,
         bank::{BToken},
         test_utils::{e9, COIN, reserve_args},
-        dummy_hook::{Self, swap, intent_swap, execute_swap, quote_swap},
+        dummy_hook::{Self, swap as dummy_swap, quote_swap},
         cpmm::{Self, offset},
     };
     use suilend::{
@@ -131,13 +131,13 @@ module steamm::steamm_tests {
         let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(e9(200), ctx);
         let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
 
-        let swap_result = swap(
+        let swap_result = dummy_swap(
             &mut pool,
             &mut coin_a,
             &mut coin_b,
+            true, // a2b
             e9(200),
             0,
-            true, // a2b
             ctx,
         );
 
@@ -262,13 +262,13 @@ module steamm::steamm_tests {
         let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(e9(200), ctx);
         let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
 
-        let swap_result = swap(
+        let swap_result = dummy_swap(
             &mut pool,
             &mut coin_a,
             &mut coin_b,
+            true, // a2b
             50_000,
             0,
-            true, // a2b
             ctx,
         );
 
@@ -390,13 +390,13 @@ module steamm::steamm_tests {
             true, // a2b
         );
 
-        let _ = swap(
+        let _ = dummy_swap(
             &mut pool,
             &mut coin_a,
             &mut coin_b,
+            true, // a2b
             e9(200),
             swap_result.amount_out() + 1,
-            true, // a2b
             ctx,
         );
 
@@ -465,13 +465,13 @@ module steamm::steamm_tests {
         let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(e9(199), ctx);
         let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
 
-        let _ = swap(
+        let _ = dummy_swap(
             &mut pool,
             &mut coin_a,
             &mut coin_b,
+            true, // a2b
             e9(200),
             0,
-            true, // a2b
             ctx,
         );
 
@@ -818,13 +818,13 @@ module steamm::steamm_tests {
         let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(e9(1_000_000), ctx);
         let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
 
-        let swap_result = swap(
+        let swap_result = dummy_swap(
             &mut pool,
             &mut coin_a,
             &mut coin_b,
+            true, // a2b
             e9(1_000_000),
             0,
-            true, // a2b
             ctx,
         );
 
@@ -848,13 +848,13 @@ module steamm::steamm_tests {
         let mut acc_pool_fees = 0;
 
         while (len > 0) {
-            let swap_result = swap(
+            let swap_result = dummy_swap(
                 &mut pool_2,
                 &mut coin_a,
                 &mut coin_b,
+                true, // a2b
                 e9(10_00),
                 0,
-                true, // a2b
                 ctx,
             );
 
@@ -908,336 +908,6 @@ module steamm::steamm_tests {
     }
 
     #[test]
-    #[expected_failure(abort_code = pool::EPoolGuarded)]
-    fun test_try_multiple_swap_intents() {
-        let mut scenario = test_scenario::begin(ADMIN);
-
-        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
-        // Create amm bank
-        let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
-
-        let mut registry = registry::init_for_testing(ctx(&mut scenario));
-
-        // Init Pool
-        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-        let ctx = ctx(&mut scenario);
-
-        let (mut pool, pool_cap) = dummy_hook::new<BToken<LENDING_MARKET, SUI>, BToken<LENDING_MARKET, COIN>, Wit>(
-            Wit {},
-            &mut registry,
-            100, // admin fees BPS
-            ctx,
-        );
-
-        // Deposit funds in AMM Pool
-        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(500_000, ctx);
-        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
-
-        let (lp_coins, _) = pool.deposit_liquidity(
-            &mut coin_a,
-            &mut coin_b,
-            500_000,
-            500_000,
-            ctx,
-        );
-
-        destroy(coin_a);
-        destroy(coin_b);
-
-        // Swap
-        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(50_000, ctx);
-        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
-
-        let swap_intent = intent_swap(
-            &mut pool,
-            50_000,
-            true, // a2b
-        );
-        
-        let swap_intent_2 = intent_swap(
-            &mut pool,
-            50_000,
-            true, // a2b
-        );
-
-        execute_swap(
-            &mut pool,
-            swap_intent,
-            &mut coin_a,
-            &mut coin_b,
-            0,
-            ctx,
-        );
-        
-        execute_swap(
-            &mut pool,
-            swap_intent_2,
-            &mut coin_a,
-            &mut coin_b,
-            0,
-            ctx,
-        );
-
-        destroy(coin_a);
-        destroy(coin_b);
-        destroy(lp_coins);
-        destroy(registry);
-        destroy(pool);
-        destroy(pool_cap);
-        destroy(global_admin);
-        destroy(lending_market);
-        destroy(lend_cap);
-        destroy(prices);
-        destroy(bag);
-        destroy(clock);
-        test_scenario::end(scenario);
-    }
-    
-    #[test]
-    #[expected_failure(abort_code = pool::EPoolGuarded)]
-    fun test_try_swap_intent_and_deposit_in_the_middle() {
-        let mut scenario = test_scenario::begin(ADMIN);
-
-        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
-        // Create amm bank
-        let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
-
-        let mut registry = registry::init_for_testing(ctx(&mut scenario));
-
-        // Init Pool
-        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-        let ctx = ctx(&mut scenario);
-
-        let (mut pool, pool_cap) = dummy_hook::new<BToken<LENDING_MARKET, SUI>, BToken<LENDING_MARKET, COIN>, Wit>(
-            Wit {},
-            &mut registry,
-            100, // admin fees BPS
-            ctx,
-        );
-
-        // Deposit funds in AMM Pool
-        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(500_000, ctx);
-        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
-
-        let (lp_coins, _) = pool.deposit_liquidity(
-            &mut coin_a,
-            &mut coin_b,
-            500_000,
-            500_000,
-            ctx,
-        );
-
-        destroy(coin_a);
-        destroy(coin_b);
-        destroy(lp_coins);
-
-        // Swap
-        let swap_intent = intent_swap(
-            &mut pool,
-            50_000,
-            true, // a2b
-        );
-
-        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(500_000, ctx);
-        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
-
-        let (lp_coins, _) = pool.deposit_liquidity(
-            &mut coin_a,
-            &mut coin_b,
-            500_000,
-            500_000,
-            ctx,
-        );
-
-        destroy(coin_a);
-        destroy(coin_b);
-
-        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(50_000, ctx);
-        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
-
-        execute_swap(
-            &mut pool,
-            swap_intent,
-            &mut coin_a,
-            &mut coin_b,
-            0,
-            ctx,
-        );
-        
-        destroy(coin_a);
-        destroy(coin_b);
-        destroy(lp_coins);
-        destroy(registry);
-        destroy(pool);
-        destroy(pool_cap);
-        destroy(global_admin);
-        destroy(lending_market);
-        destroy(lend_cap);
-        destroy(prices);
-        destroy(bag);
-        destroy(clock);
-        test_scenario::end(scenario);
-    }
-    
-    #[test]
-    #[expected_failure(abort_code = pool::EPoolGuarded)]
-    fun test_try_swap_intent_and_redeem_in_the_middle() {
-        let mut scenario = test_scenario::begin(ADMIN);
-
-        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
-        // Create amm bank
-        let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
-
-        let mut registry = registry::init_for_testing(ctx(&mut scenario));
-
-        // Init Pool
-        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-        let ctx = ctx(&mut scenario);
-
-        let (mut pool, pool_cap) = dummy_hook::new<BToken<LENDING_MARKET, SUI>, BToken<LENDING_MARKET, COIN>, Wit>(
-            Wit {},
-            &mut registry,
-            100, // admin fees BPS
-            ctx,
-        );
-
-        // Deposit funds in AMM Pool
-        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(500_000, ctx);
-        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
-
-        let (lp_coins, _) = pool.deposit_liquidity(
-            &mut coin_a,
-            &mut coin_b,
-            500_000,
-            500_000,
-            ctx,
-        );
-
-        destroy(coin_a);
-        destroy(coin_b);
-
-        // Swap
-        let swap_intent = intent_swap(
-            &mut pool,
-            50_000,
-            true, // a2b
-        );
-
-        let (coin_a_, coin_b_, _) = pool.redeem_liquidity(
-            lp_coins,
-            0,
-            0,
-            ctx,
-        );
-
-        destroy(coin_a_);
-        destroy(coin_b_);
-
-        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(50_000, ctx);
-        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
-
-        execute_swap(
-            &mut pool,
-            swap_intent,
-            &mut coin_a,
-            &mut coin_b,
-            0,
-            ctx,
-        );
-        
-        destroy(coin_a);
-        destroy(coin_b);
-        destroy(registry);
-        destroy(pool);
-        destroy(pool_cap);
-        destroy(global_admin);
-        destroy(lending_market);
-        destroy(lend_cap);
-        destroy(prices);
-        destroy(bag);
-        destroy(clock);
-        test_scenario::end(scenario);
-    }
-    
-    // Note: This error cannot occur unless there is a bug in the contract.
-    // It provides an extra layer of security
-    #[test]
-    #[expected_failure(abort_code = pool::EPoolUnguarded)]
-    fun test_pool_unguarded() {
-        let mut scenario = test_scenario::begin(ADMIN);
-
-        let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(reserve_args(&mut scenario), &mut scenario).destruct_state();
-        // Create amm bank
-        let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
-
-        let mut registry = registry::init_for_testing(ctx(&mut scenario));
-
-        // Init Pool
-        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
-        let ctx = ctx(&mut scenario);
-
-        let (mut pool, pool_cap) = dummy_hook::new<BToken<LENDING_MARKET, SUI>, BToken<LENDING_MARKET, COIN>, Wit>(
-            Wit {},
-            &mut registry,
-            100, // admin fees BPS
-            ctx,
-        );
-
-        // Deposit funds in AMM Pool
-        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(500_000, ctx);
-        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(500_000, ctx);
-
-        let (lp_coins, _) = pool.deposit_liquidity(
-            &mut coin_a,
-            &mut coin_b,
-            500_000,
-            500_000,
-            ctx,
-        );
-
-        destroy(coin_a);
-        destroy(coin_b);
-
-        // create fake intent<
-        let intent = pool.intent_for_testing(
-            quote::quote_for_testing(
-                100,
-                100,
-                0,
-                0,
-                true,
-            ),
-            false
-        );
-
-        let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(50_000, ctx);
-        let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
-
-        execute_swap(
-            &mut pool,
-            intent,
-            &mut coin_a,
-            &mut coin_b,
-            0,
-            ctx,
-        );
-        
-        destroy(coin_a);
-        destroy(coin_b);
-        destroy(registry);
-        destroy(lp_coins);
-        destroy(pool);
-        destroy(pool_cap);
-        destroy(global_admin);
-        destroy(lending_market);
-        destroy(lend_cap);
-        destroy(prices);
-        destroy(bag);
-        destroy(clock);
-        test_scenario::end(scenario);
-    }
-    
-    #[test]
     #[expected_failure(abort_code = pool::EOutputExceedsLiquidity)]
     fun test_output_exceeds_liquidity() {
         let mut scenario = test_scenario::begin(ADMIN);
@@ -1274,26 +944,22 @@ module steamm::steamm_tests {
         destroy(coin_a);
         destroy(coin_b);
 
-        // create fake intent<
-        let intent = pool.intent_for_testing(
-            quote::quote_for_testing(
-                100,
-                500_001, // amount above available reserve
-                0,
-                0,
-                true,
-            ),
-            true
+        let quote = quote::quote_for_testing(
+            100,
+            500_001, // amount above available reserve
+            0,
+            0,
+            true,
         );
 
         let mut coin_a = coin::mint_for_testing<BToken<LENDING_MARKET, SUI>>(50_000, ctx);
         let mut coin_b = coin::mint_for_testing<BToken<LENDING_MARKET, COIN>>(0, ctx);
 
-        execute_swap(
+        pool::swap(
             &mut pool,
-            intent,
             &mut coin_a,
             &mut coin_b,
+            quote,
             0,
             ctx,
         );

@@ -20,9 +20,7 @@ module steamm::pool {
         quote::{Self, SwapQuote, SwapFee, DepositQuote, RedeemQuote},
     };
     
-    public use fun steamm::pool::intent_quote as Intent.quote;
-    public use fun steamm::cpmm::intent_swap as Pool.cpmm_intent_swap;
-    public use fun steamm::cpmm::execute_swap as Pool.cpmm_execute_swap;
+    public use fun steamm::cpmm::swap as Pool.cpmm_swap;
     public use fun steamm::cpmm::quote_swap as Pool.cpmm_quote_swap;
     public use fun steamm::cpmm::k as Pool.cpmm_k;
 
@@ -58,12 +56,8 @@ module steamm::pool {
     const ELpSupplyToReserveRatioViolation: u64 = 4;
     // The swap leads to zero output amount
     const ESwapOutputAmountIsZero: u64 = 5;
-    // There cannot be two intents concurrently
-    const EPoolGuarded: u64 = 6;
-    // Attempting to unguard pool that is already unguarded
-    const EPoolUnguarded: u64 = 7;
     // When the user coin object does not have enough balance to fulfil the swap
-    const EInsufficientFunds: u64 = 8;
+    const EInsufficientFunds: u64 = 6;
 
     /// Marker type for the LP coins of a pool. There can only be one
     /// pool per type, albeit given the permissionless aspect of the pool
@@ -117,10 +111,6 @@ module steamm::pool {
         redemption_fees: Fees<A, B>,
         // Lifetime trading and fee data
         trading_data: TradingData,
-        // Provides Write-lock style guard in the swap intent process.
-        // When a user initialises a swap the pool will lock and not allow
-        // concurrent intents to take place.
-        lock_guard: bool,
         version: Version,
     }
 
@@ -140,13 +130,6 @@ module steamm::pool {
         // pool fees
         pool_fees_a: u64,
         pool_fees_b: u64,
-    }
-
-    /// Intent object signaling that a swap is taking place. This object is a
-    /// hot-potato and therefore needs to be consumed by the swap function, which
-    /// in turn is called by the hook module `execute_swap`
-    public struct Intent<phantom A, phantom B, phantom Quoter: store> {
-        quote: SwapQuote,
     }
     
     // ===== Quoter-Exposed Methods =====
@@ -200,7 +183,6 @@ module steamm::pool {
                 pool_fees_a: 0,
                 pool_fees_b: 0,
             },
-            lock_guard: false,
             version: version::new(CURRENT_VERSION),
         };
 
@@ -246,13 +228,11 @@ module steamm::pool {
         self: &mut Pool<A, B, Quoter>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
-        intent: Intent<A, B, Quoter>,
+        quote: SwapQuote,
         min_amount_out: u64,
         ctx: &mut TxContext,
     ): SwapResult {
         self.version.assert_version_and_upgrade(CURRENT_VERSION);
-
-        let quote = self.consume(intent);
 
         assert!(quote.amount_out() > 0, ESwapOutputAmountIsZero);
         assert!(quote.amount_out() >= min_amount_out, ESwapExceedsSlippage);
@@ -332,7 +312,6 @@ module steamm::pool {
         ctx:  &mut TxContext,
     ): (Coin<LP<A, B, Quoter>>, DepositResult) {
         self.version.assert_version_and_upgrade(CURRENT_VERSION);
-        self.assert_unguarded();
 
         // Compute token deposits and delta lp tokens
         let quote = quote_deposit_impl(
@@ -417,7 +396,6 @@ module steamm::pool {
         ctx:  &mut TxContext,
     ): (Coin<A>, Coin<B>, RedeemResult) {
         self.version.assert_version_and_upgrade(CURRENT_VERSION);
-        self.assert_unguarded();
 
         // Compute amounts to withdraw
         let quote = quote_redeem_impl(
@@ -586,7 +564,6 @@ module steamm::pool {
     public fun pool_fees_b(self: &TradingData): u64 { self.pool_fees_b }
 
     public fun minimum_liquidity(): u64 { MINIMUM_LIQUIDITY }
-    public fun intent_quote<A, B, Quoter: store>(self: &Intent<A, B, Quoter>): &SwapQuote { &self.quote }
 
     // ===== Package functions =====
 
@@ -640,54 +617,6 @@ module steamm::pool {
         self: &mut Pool<A, B, Quoter>,
     ): &mut Quoter {
         &mut self.quoter
-    }
-    
-    public(package) fun as_intent<A, B, Quoter: store>(
-        quote: SwapQuote,
-        pool: &mut Pool<A, B, Quoter>,
-    ): Intent<A, B, Quoter> {
-        pool.guard();
-        
-        Intent {
-            quote,
-        }
-    }
-
-    fun consume<A, B, Quoter: store>(
-        pool: &mut Pool<A, B, Quoter>,
-        intent: Intent<A, B, Quoter>,
-    ): SwapQuote {
-        pool.unguard();
-
-        let Intent { quote } = intent;
-
-        quote
-    }
-
-    fun guard<A, B, Quoter: store>(
-        pool: &mut Pool<A, B, Quoter>,
-    ) {
-        pool.assert_unguarded();
-        pool.lock_guard = true
-    }
-    
-    fun unguard<A, B, Quoter: store>(
-        pool: &mut Pool<A, B, Quoter>,
-    ) {
-        pool.assert_guarded();
-        pool.lock_guard = false
-    }
-
-    fun assert_unguarded<A, B, Quoter: store>(
-        pool: &Pool<A, B, Quoter>,
-    ) {
-        assert!(pool.lock_guard == false, EPoolGuarded);
-    }
-    
-    fun assert_guarded<A, B, Quoter: store>(
-        pool: &Pool<A, B, Quoter>,
-    ) {
-        assert!(pool.lock_guard == true, EPoolUnguarded);
     }
 
     // ===== Admin endpoints =====
@@ -938,21 +867,6 @@ module steamm::pool {
     public fun redeem_result_burn_lp(self: &RedeemResult): u64 { self.burn_lp }
 
     // ===== Test-Only =====
-    
-    #[test_only]
-    public(package) fun intent_for_testing<A, B, Quoter: store>(
-        self: &mut Pool<A, B, Quoter>,
-        quote: SwapQuote,
-        with_guard: bool,
-    ): Intent<A, B, Quoter> {
-        if (with_guard) {
-            self.guard();
-        };
-
-        Intent {
-            quote,
-        }
-    }
     
     #[test_only]
     public(package) fun no_protocol_fees_for_testing<A, B, Quoter: store>(

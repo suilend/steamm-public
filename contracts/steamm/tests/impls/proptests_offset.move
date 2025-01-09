@@ -99,15 +99,11 @@ module steamm::proptests_offset {
                 continue
             };
 
-            let swap_intent = pool.cpmm_intent_swap(
-                amount_in,
-                a2b, // a2b
-            );
-
-            pool.cpmm_execute_swap(
-                swap_intent,
+            pool.cpmm_swap(
                 &mut coin_a,
                 &mut coin_b,
+                a2b, // a2b
+                amount_in,
                 0,
                 ctx,
             );

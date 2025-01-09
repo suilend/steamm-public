@@ -6,7 +6,7 @@ module steamm::cpmm {
         global_admin::GlobalAdmin,
         registry::{Registry},
         quote::SwapQuote,
-        pool::{Self, Pool, PoolCap, SwapResult, Intent, assert_liquidity},
+        pool::{Self, Pool, PoolCap, SwapResult, assert_liquidity},
         version::{Self, Version},
         math::{safe_mul_div, checked_mul_div},
     };
@@ -90,33 +90,24 @@ module steamm::cpmm {
         )
     }
 
-    public fun intent_swap<A, B, W: drop>(
+    public fun swap<A, B, W: drop>(
         self: &mut Pool<A, B, CpQuoter<W>>,
-        amount_in: u64,
-        a2b: bool,
-    ): Intent<A, B, CpQuoter<W>> {
-        self.inner_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
-        let quote = quote_swap(self, amount_in, a2b);
-
-        quote.as_intent(self)
-    }
-
-    public fun execute_swap<A, B, W: drop>(
-        self: &mut Pool<A, B, CpQuoter<W>>,
-        intent: Intent<A, B, CpQuoter<W>>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
+        a2b: bool,
+        amount_in: u64,
         min_amount_out: u64,
         ctx: &mut TxContext,
     ): SwapResult {
         self.inner_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
-
+        
+        let quote = quote_swap(self, amount_in, a2b);
         let k0 = k(self, offset(self));
 
         let response = self.swap(
             coin_a,
             coin_b,
-            intent,
+            quote,
             min_amount_out,
             ctx,
         );

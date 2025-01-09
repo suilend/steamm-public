@@ -6,7 +6,7 @@ module steamm::lend_tests {
     use steamm::registry;
     use steamm::global_admin;
     use steamm::cpmm::{Self};
-    use steamm::dummy_hook::{Self, intent_swap, execute_swap};
+    use steamm::dummy_hook::{Self, swap as dummy_swap};
     use steamm::test_utils::{COIN, reserve_args, reserve_args_2, assert_eq_approx};
     use steamm::bank::{Self, BToken};
     use sui::{
@@ -226,15 +226,11 @@ module steamm::lend_tests {
         assert_eq(bank_a.funds_deployed(&lending_market, &clock).floor(), 0);
         assert_eq(bank_a.funds_available().value(), 550_000);
 
-        let swap_intent = pool.cpmm_intent_swap(
-            50_000,
-            true, // a2b
-        );
-
-        pool.cpmm_execute_swap(
-            swap_intent,
+        pool.cpmm_swap(
             &mut btoken_a,
             &mut btoken_b,
+            true, // a2b
+            50_000,
             0,
             ctx,
         );
@@ -499,15 +495,11 @@ module steamm::lend_tests {
         assert_eq(bank_b.funds_deployed(&lending_market, &clock).floor(), 400_000); // No change
         assert_eq(bank_b.funds_available().value(), 100_000); // No change
 
-        let swap_intent = pool.cpmm_intent_swap(
-            50_000,
-            true, // a2b
-        );
-
-        let swap_result = pool.cpmm_execute_swap(
-            swap_intent,
+        let swap_result = pool.cpmm_swap(
             &mut btoken_a,
             &mut btoken_b,
+            true, // a2b
+            50_000,
             0,
             ctx,
         );
@@ -693,15 +685,11 @@ module steamm::lend_tests {
         assert_eq(bank_b.funds_deployed(&lending_market, &clock).floor(), 400_000); // No change
         assert_eq(bank_b.funds_available().value(), 100_000); // No change
 
-        let swap_intent = pool.cpmm_intent_swap(
-            200_000,
-            true, // a2b
-        );
-
-        let swap_result = pool.cpmm_execute_swap(
-            swap_intent,
+        let swap_result = pool.cpmm_swap(
             &mut btoken_a,
             &mut btoken_b,
+            true, // a2b
+            200_000,
             0,
             ctx,
         );
@@ -1295,18 +1283,13 @@ module steamm::lend_tests {
         let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 10, &clock, ctx);
         
         destroy(coin_b);
-
-        let swap_intent = intent_swap(
+        
+        let swap_result = dummy_swap(
             &mut pool,
-            10,
-            false, // a2b
-        );
-
-        let swap_result = execute_swap(
-            &mut pool,
-            swap_intent,
             &mut btoken_a,
             &mut btoken_b,
+            false, // a2b
+            10,
             0,
             ctx,
         );
@@ -1461,17 +1444,12 @@ module steamm::lend_tests {
 
         destroy(coin_b);
 
-        let swap_intent = intent_swap(
+        let swap_result = dummy_swap(
             &mut pool,
-            20_000,
-            false, // a2b
-        );
-
-        let swap_result = execute_swap(
-            &mut pool,
-            swap_intent,
             &mut btoken_a,
             &mut btoken_b,
+            false, // a2b
+            20_000,
             0,
             ctx,
         );
@@ -1627,17 +1605,12 @@ module steamm::lend_tests {
 
         destroy(coin_b);
 
-        let swap_intent = intent_swap(
+        let swap_result = dummy_swap(
             &mut pool,
-            30_000,
-            false, // a2b
-        );
-
-        let swap_result = execute_swap(
-            &mut pool,
-            swap_intent,
             &mut btoken_a,
             &mut btoken_b,
+            false, // a2b
+            30_000,
             0,
             ctx,
         );

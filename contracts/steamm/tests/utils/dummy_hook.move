@@ -3,7 +3,7 @@ module steamm::dummy_hook {
     use sui::coin::Coin;
     use steamm::registry::{Registry};
     use steamm::quote::SwapQuote;
-    use steamm::pool::{Self, Pool, PoolCap, SwapResult, Intent};
+    use steamm::pool::{Self, Pool, PoolCap, SwapResult};
 
     public struct DummyQuoter<phantom W> has store {}
 
@@ -52,51 +52,17 @@ module steamm::dummy_hook {
         self: &mut Pool<A, B, DummyQuoter<W>>,
         coin_a: &mut Coin<A>,
         coin_b: &mut Coin<B>,
+        a2b: bool,
         amount_in: u64,
         min_amount_out: u64,
-        a2b: bool,
         ctx: &mut TxContext,
     ): SwapResult {
-        let intent = intent_swap(
-            self,
-            amount_in,
-            a2b,
-        );
-
-        let result = execute_swap(
-            self,
-            intent,
-            coin_a,
-            coin_b,
-            min_amount_out,
-            ctx
-        );
-
-        result
-    }
-
-    public fun intent_swap<A, B, W: drop>(
-        self: &mut Pool<A, B, DummyQuoter<W>>,
-        amount_in: u64,
-        a2b: bool,
-    ): Intent<A, B, DummyQuoter<W>> {
         let quote = quote_swap(self, amount_in, a2b);
 
-        quote.as_intent(self)
-    }
-
-    public fun execute_swap<A, B, W: drop>(
-        self: &mut Pool<A, B, DummyQuoter<W>>,
-        intent: Intent<A, B, DummyQuoter<W>>,
-        coin_a: &mut Coin<A>,
-        coin_b: &mut Coin<B>,
-        min_amount_out: u64,
-        ctx: &mut TxContext,
-    ): SwapResult {
         let response = self.swap(
             coin_a,
             coin_b,
-            intent,
+            quote,
             min_amount_out,
             ctx,
         );
