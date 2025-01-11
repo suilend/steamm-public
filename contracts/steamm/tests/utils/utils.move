@@ -126,21 +126,23 @@ public fun new_for_testing(
     lp_supply: u64,
     swap_fee_bps: u64,
 ): (
-    Pool<BToken<LENDING_MARKET, SUI>, BToken<LENDING_MARKET, COIN>, CpQuoter<PoolWit>>,
-    Bank<LENDING_MARKET, SUI>,
+    Pool<BToken<LENDING_MARKET, TEST_SUI>, BToken<LENDING_MARKET, TEST_USDC>, CpQuoter<PoolWit>>,
+    Bank<LENDING_MARKET, TEST_SUI>,
     Bank<LENDING_MARKET, COIN>,
 ) {
     let mut scenario = test_scenario::begin(@0x0);
     let ctx = ctx(&mut scenario);
 
     let mut registry = registry::init_for_testing(ctx);
+    let (treasury_cap_sui, meta_sui) = suilend::test_sui::create_currency(ctx);
+    let (treasury_cap_sui, meta_sui) = steamm::lp_coin::create_currency(ctx);
 
     let (mut pool, pool_cap) = cpmm::new<
-        BToken<LENDING_MARKET, SUI>,
-        BToken<LENDING_MARKET, COIN>,
+        BToken<LENDING_MARKET, TEST_SUI>,
+        BToken<LENDING_MARKET, TEST_USDC>,
         PoolWit,
     >(
-        PoolWit {},
+
         &mut registry,
         swap_fee_bps,
         ctx,

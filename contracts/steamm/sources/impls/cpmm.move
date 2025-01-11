@@ -8,7 +8,7 @@ use steamm::pool::{Self, Pool, PoolCap, SwapResult, assert_liquidity};
 use steamm::quote::SwapQuote;
 use steamm::registry::Registry;
 use steamm::version::{Self, Version};
-use sui::coin::Coin;
+use sui::coin::{Coin, TreasuryCap, CoinMetadata};
 
 // ===== Constants =====
 
@@ -19,21 +19,9 @@ const CURRENT_VERSION: u16 = 1;
 const EInvariantViolation: u64 = 1;
 const EZeroInvariant: u64 = 2;
 
-/// Hook type for the constant-product AMM implementation. Serves as both
-/// the hook's witness (authentication) as well as it wraps around the pool
-/// creator's witness.
-///
-/// This has the advantage that we do not require an extra generic
-/// type on the `Pool` object.
-///
-/// Other hook implementations can decide to leverage this property and
-/// provide pathways for the inner witness contract to add further logic,
-/// therefore making the hook extendable.
-// public struct Hook<phantom W> has drop {}
-
 /// Constant-Product AMM specific state. We do not store the invariant,
 /// instead we compute it at runtime.
-public struct CpQuoter<phantom W> has store {
+public struct CpQuoter has store {
     version: Version,
     offset: u64,
 }
@@ -48,23 +36,30 @@ public struct CpQuoter<phantom W> has store {
 /// # Returns
 ///
 /// A tuple containing:
-/// - `Pool<A, B, CpQuoter<W>>`: The created AMM pool object.
-/// - `PoolCap<A, B, CpQuoter<W>>`: The associated pool capability object.
+/// - `Pool<A, B, CpQuoter`: The created AMM pool object.
+/// - `PoolCap<A, B, CpQuoter`: The associated pool capability object.
 ///
 /// # Panics
 ///
 /// This function will panic if `swap_fee_bps` is greater than or equal to
 /// `SWAP_FEE_DENOMINATOR`
-public fun new_with_offset<A, B, W: drop>(
-    _witness: W,
+public fun new<A, B, LpType: drop>(
+    lp_treasury: TreasuryCap<LpType>,
+    meta_a: &CoinMetadata<A>,
+    meta_b: &CoinMetadata<B>,
+    meta_lp: &CoinMetadata<LpType>,
     registry: &mut Registry,
     swap_fee_bps: u64,
     offset: u64,
     ctx: &mut TxContext,
-): (Pool<A, B, CpQuoter<W>>, PoolCap<A, B, CpQuoter<W>>) {
+): (Pool<A, B, CpQuoter, LpType>, PoolCap<A, B, CpQuoter, LpType>) {
     let quoter = CpQuoter { version: version::new(CURRENT_VERSION), offset };
 
-    let (pool, pool_cap) = pool::new<A, B, CpQuoter<W>>(
+    let (pool, pool_cap) = pool::new<A, B, CpQuoter, LpType>(
+        lp_treasury,
+        meta_a,
+        meta_b,
+        meta_lp,
         registry,
         swap_fee_bps,
         quoter,
@@ -74,23 +69,8 @@ public fun new_with_offset<A, B, W: drop>(
     (pool, pool_cap)
 }
 
-public fun new<A, B, W: drop>(
-    witness: W,
-    registry: &mut Registry,
-    swap_fee_bps: u64,
-    ctx: &mut TxContext,
-): (Pool<A, B, CpQuoter<W>>, PoolCap<A, B, CpQuoter<W>>) {
-    new_with_offset(
-        witness,
-        registry,
-        swap_fee_bps,
-        0,
-        ctx,
-    )
-}
-
-public fun swap<A, B, W: drop>(
-    pool: &mut Pool<A, B, CpQuoter<W>>,
+public fun swap<A, B, LpType: drop>(
+    pool: &mut Pool<A, B, CpQuoter, LpType>,
     coin_a: &mut Coin<A>,
     coin_b: &mut Coin<B>,
     a2b: bool,
@@ -119,8 +99,8 @@ public fun swap<A, B, W: drop>(
 
 // cpmm return price, take price that's best for LPs, on top we add dynamic fee
 // fees should always be computed on the output amount;
-public fun quote_swap<A, B, W: drop>(
-    pool: &Pool<A, B, CpQuoter<W>>,
+public fun quote_swap<A, B, LpType: drop>(
+    pool: &Pool<A, B, CpQuoter, LpType>,
     amount_in: u64,
     a2b: bool,
 ): SwapQuote {
@@ -171,25 +151,25 @@ public(package) fun quote_swap_impl(
 
 // ===== View Functions =====
 
-public fun offset<A, B, W: drop>(pool: &Pool<A, B, CpQuoter<W>>): u64 {
+public fun offset<A, B, LpType: drop>(pool: &Pool<A, B, CpQuoter, LpType>): u64 {
     pool.quoter().offset
 }
 
-public fun k<A, B, Quoter: store>(pool: &Pool<A, B, Quoter>, offset: u64): u128 {
+public fun k<A, B, Quoter: store, LpType: drop>(pool: &Pool<A, B, Quoter, LpType>, offset: u64): u128 {
     let (total_funds_a, total_funds_b) = pool.balance_amounts();
     ((total_funds_a as u128) * ((total_funds_b + offset) as u128))
 }
 
 // ===== Versioning =====
 
-entry fun migrate<A, B, W>(pool: &mut Pool<A, B, CpQuoter<W>>, _admin: &GlobalAdmin) {
+entry fun migrate<A, B, LpType: drop>(pool: &mut Pool<A, B, CpQuoter, LpType>, _admin: &GlobalAdmin) {
     pool.quoter_mut().version.migrate_(CURRENT_VERSION);
 }
 
 // ===== Package Functions =====
 
-public(package) fun check_invariance<A, B, Quoter: store>(
-    pool: &Pool<A, B, Quoter>,
+public(package) fun check_invariance<A, B, Quoter: store, LpType: drop>(
+    pool: &Pool<A, B, Quoter, LpType>,
     k0: u128,
     offset: u64,
 ) {
@@ -198,8 +178,8 @@ public(package) fun check_invariance<A, B, Quoter: store>(
     assert!(k1 >= k0, EInvariantViolation);
 }
 
-public(package) fun max_amount_in_on_a2b<A, B, W: drop>(
-    pool: &Pool<A, B, CpQuoter<W>>,
+public(package) fun max_amount_in_on_a2b<A, B, LpType: drop>(
+    pool: &Pool<A, B, CpQuoter, LpType>,
 ): Option<u64> {
     let (reserve_in, reserve_out) = pool.balance_amounts();
     let offset = offset(pool);
