@@ -12,7 +12,7 @@ use std::string::utf8;
 use steamm::bank::{Self, Bank};
 use steamm::cpmm::{Self, CpQuoter};
 use steamm::pool::Pool;
-use steamm::dummy_hook::{Self, DummyQuoter};
+use steamm::dummy_quoter::{Self, DummyQuoter};
 use steamm::lp_usdc_sui::{LP_USDC_SUI};
 use steamm::b_test_sui::{B_TEST_SUI};
 use steamm::b_test_usdc::{B_TEST_USDC};
@@ -196,7 +196,7 @@ public fun test_setup_dummy(
     
     // Create pool
 
-    let (pool, pool_cap) = dummy_hook::new<
+    let (pool, pool_cap) = dummy_quoter::new<
         B_TEST_USDC,
         B_TEST_SUI,
         LP_USDC_SUI,

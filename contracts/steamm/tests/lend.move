@@ -2,7 +2,7 @@
 module steamm::lend_tests;
 
 use std::type_name;
-use steamm::dummy_hook::{swap as dummy_swap};
+use steamm::dummy_quoter::{swap as dummy_swap};
 use steamm::global_admin;
 use steamm::pool::minimum_liquidity;
 use steamm::test_utils::{reserve_args, reserve_args_2, assert_eq_approx, test_setup_cpmm, test_setup_dummy_no_fees};

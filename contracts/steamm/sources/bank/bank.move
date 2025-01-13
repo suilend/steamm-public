@@ -60,6 +60,19 @@ public struct Lending<phantom P> has store {
 
 // ====== Entry Functions =====
 
+/// Creates a new bank and shares it as a shared object on-chain.
+/// The bank is initialized with zero balances and a new BToken supply.
+///
+/// # Arguments
+///
+/// * `meta_t` - Coin metadata for the underlying token T
+/// * `meta_b` - Mutable coin metadata for the bank token BToken
+/// * `btoken_treasury` - Treasury capability for minting BTokens
+/// * `ctx` - Transaction context
+///
+/// # Returns
+///
+/// * `ID` - The object ID of the created bank
 #[allow(lint(share_owned))]
 public entry fun create_bank_and_share<P, T, BToken: drop>(
     meta_t: &CoinMetadata<T>,
@@ -79,6 +92,24 @@ public entry fun create_bank_and_share<P, T, BToken: drop>(
     bank_id
 }
 
+/// Initializes lending functionality for a bank by setting up utilization parameters and creating
+/// an obligation in the lending market. This allows the bank to participate in lending activities.
+///
+/// # Arguments
+///
+/// * `bank` - The bank to initialize lending for
+/// * `_` - Global admin capability for authorization
+/// * `lending_market` - The lending market to create an obligation in
+/// * `target_utilisation_bps` - Target utilization rate in basis points (100 = 1%)
+/// * `utilisation_buffer_bps` - Buffer around target utilization in basis points
+/// * `ctx` - Transaction context
+///
+/// # Panics
+///
+/// This function will panic if:
+/// - Lending is already initialized for the bank
+/// - Target utilization + buffer exceeds 100%
+/// - Target utilization is less than the buffer
 public fun init_lending<P, T, BToken>(
     bank: &mut Bank<P, T, BToken>,
     _: &GlobalAdmin,
@@ -109,6 +140,28 @@ public fun init_lending<P, T, BToken>(
         })
 }
 
+/// Mints bank tokens (BTokens) in exchange for deposited coins. The amount of BTokens minted
+/// is calculated based on the current exchange rate between coins and BTokens, which takes into
+/// account accumulated interest.
+///
+/// # Arguments
+///
+/// * `bank` - The bank to mint BTokens from
+/// * `lending_market` - The lending market the bank participates in
+/// * `coins` - The coins to deposit in exchange for BTokens
+/// * `coin_amount` - Amount of coins to deposit
+/// * `clock` - Clock for time-based calculations
+/// * `ctx` - Transaction context
+///
+/// # Returns
+///
+/// `Coin<BToken>`: The newly minted BTokens
+///
+/// # Panics
+///
+/// This function will panic if:
+/// - The bank version is not current
+/// - The coin amount exceeds the available balance
 public fun mint_btokens<P, T, BToken>(
     bank: &mut Bank<P, T, BToken>,
     lending_market: &mut LendingMarket<P>,
@@ -157,6 +210,25 @@ fun from_btokens<P, T, BToken>(
     decimal::from(btoken_amount).mul(total_funds).div(btoken_supply)
 }
 
+/// Burns bank tokens (BTokens) to withdraw the underlying tokens from the bank.
+/// The amount of underlying tokens received depends on the current exchange rate
+/// between BTokens and underlying tokens.
+///
+/// # Arguments
+/// * `bank` - The bank to withdraw from
+/// * `lending_market` - The lending market associated with the bank
+/// * `btokens` - The BTokens to burn
+/// * `btoken_amount` - Amount of BTokens to burn
+/// * `clock` - Clock for timing
+/// * `ctx` - Transaction context
+///
+/// # Returns
+/// * `Coin<T>` - The withdrawn underlying tokens
+///
+/// # Panics
+/// * If the bank version is not current
+/// * If there are insufficient funds in the bank to fulfill the withdrawal
+/// * If the withdrawal amount exceeds the bank's available balance
 public fun burn_btokens<P, T, BToken>(
     bank: &mut Bank<P, T, BToken>,
     lending_market: &mut LendingMarket<P>,
@@ -197,6 +269,21 @@ public fun burn_btokens<P, T, BToken>(
     coin::from_balance(bank.funds_available.split(tokens_to_withdraw), ctx)
 }
 
+/// Rebalances the bank's funds between available balance and deployed funds in the lending market
+/// to maintain the target utilization rate within the specified buffer range.
+///
+/// If the effective utilization is below target - buffer, deploys additional funds to the lending market.
+/// If the effective utilization is above target + buffer, recalls funds from the lending market.
+/// Does nothing if utilization is within the target range or if lending is not initialized.
+///
+/// # Arguments
+/// * `bank` - The bank to rebalance
+/// * `lending_market` - The lending market where funds are deployed
+/// * `clock` - Clock for timing
+/// * `ctx` - Transaction context
+///
+/// # Panics
+/// * If the bank version is not current
 public fun rebalance<P, T, BToken>(
     bank: &mut Bank<P, T, BToken>,
     lending_market: &mut LendingMarket<P>,

@@ -1,7 +1,7 @@
 /// AMM Pool module. It contains the core logic of the of the AMM,
 /// such as the deposit and redeem logic, which is exposed and should be
 /// called directly. Is also exports an intializer and swap method to be
-/// called by the hook modules.
+/// called by the quoter modules.
 module steamm::pool;
 
 use steamm::events::emit_event;
@@ -71,27 +71,26 @@ public struct PoolCap<phantom A, phantom B, phantom Quoter: store, phantom LpTyp
 
 /// AMM pool object. This object is the top-level object and sits at the
 /// core of the protocol. The generic types `A` and `B` correspond to the
-/// associated coin types of the AMM. The `Hook` type corresponds to the
-/// witness type of the associated hook module, whereas the `State` type
-/// corresponds the hooks state object, meant to store implementation-specific
-/// data. The pool object contains the core of the AMM logic, which all hooks
-/// rely on.
+/// associated coin types of the AMM. The `Quoter` type corresponds to the
+/// type of the associated quoter module, which is itself the state object of said
+/// quoter, meant to store implementation-specific data. The pool object contains
+/// the core of the AMM logic, which all quoters rely on.
 ///
 /// It stores the pool's liquidity, protocol fees, the lp supply object
-/// as well as the inner state of the associated Hook.
+/// as well as the inner state of the associated Quoter.
 ///
 /// The pool object is mostly responsible to providing the liquidity depositing
-/// and withdrawal logic, which can be directly called without relying on a hook's wrapper,
+/// and withdrawal logic, which can be directly called without relying on a quoter's wrapper,
 /// as well as the computation of the fees for a given swap. From a perspective of the pool
-/// module, the Pool does not rely on the hook as a trustfull oracle for computing fees.
+/// module, the Pool does not rely on the quoter as a trustfull oracle for computing fees.
 /// Instead the Pool will compute fees on the amount_out of the swap and therefore
-/// inform the hook on what the fees will be for the given swap.
+/// inform the quoter on what the fees will be for the given swap.
 ///
 /// Moreover this object also exports an initalizer and a swap method which
-/// are meant to be called by the associated hook module.
+/// are meant to be called by the associated quoter module.
 public struct Pool<phantom A, phantom B, Quoter: store, phantom LpType: drop> has key, store {
     id: UID,
-    // Inner state of the hook
+    // Inner state of the quoter
     quoter: Quoter,
     balance_a: Balance<A>,
     balance_b: Balance<B>,
@@ -132,19 +131,29 @@ public struct TradingData has store {
 /// specified protocol fees, and the provided swap fee. The pool's LP supply
 /// object is initialized at zero supply.
 ///
-/// This function is meant to be called by the hook module and therefore it
+/// This function is meant to be called by the quoter module and therefore it
 /// it witness-protected.
+///
+/// # Arguments
+/// 
+/// * `meta_a` - Coin metadata for token A
+/// * `meta_b` - Coin metadata for token B  
+/// * `meta_lp` - Mutable coin metadata for LP token
+/// * `lp_treasury` - Treasury capability for LP token
+/// * `swap_fee_bps` - Pool swap fee in basis points
+/// * `quoter` - Quoter implementation for pool
 ///
 /// # Returns
 ///
 /// A tuple containing:
-/// - `Pool<A, B, Quoter, P>`: The created AMM pool object.
-/// - `PoolCap<A, B, Quoter, P>`: The associated pool capability object.
+/// - `Pool<A, B, Quoter, LpType>`: The created AMM pool object.
+/// - `PoolCap<A, B, Quoter, LpType>`: The associated pool capability object.
 ///
 /// # Panics
 ///
-/// This function will panic if `swap_fee_bps` is greater than or equal to
-/// `SWAP_FEE_DENOMINATOR`
+/// This function will panic if:
+/// - `swap_fee_bps` is greater than or equal to `BPS_DENOMINATOR`
+/// - `lp_treasury` has non-zero total supply
 public(package) fun new<A, B, Quoter: store, LpType: drop>(
     meta_a: &CoinMetadata<A>,
     meta_b: &CoinMetadata<B>,
@@ -209,12 +218,20 @@ public(package) fun new<A, B, Quoter: store, LpType: drop>(
     (pool, pool_cap)
 }
 
-/// Executes inner swap logic that is generalised accross all hooks. It takes
+/// Executes inner swap logic that is generalised accross all quoters. It takes
 /// care of fee handling, management of fund inputs and outputs as well
 /// as slippage protections.
 ///
-/// This function is meant to be called by the hook module and therefore it
+/// This function is meant to be called by the quoter module and therefore it
 /// it witness-protected.
+///
+/// # Arguments
+///
+/// * `pool` - The pool object containing balances and trading data
+/// * `coin_a` - Coin A to be swapped
+/// * `coin_b` - Coin B to be swapped  
+/// * `quote` - Quote object containing swap parameters and amounts
+/// * `min_amount_out` - Minimum output amount for slippage protection
 ///
 /// # Returns
 ///
@@ -295,6 +312,14 @@ public(package) fun swap<A, B, Quoter: store, LpType: drop>(
 /// is frozen to prevent inflation attacks.
 /// This function ensures that liquidity is added to the pool in a
 /// balanced manner, maintaining the pool's reserves and LP supply ratio.
+///
+/// # Arguments
+///
+/// * `pool` - The AMM pool to deposit liquidity into
+/// * `coin_a` - The first coin to deposit
+/// * `coin_b` - The second coin to deposit  
+/// * `max_a` - Maximum amount of coin A to deposit
+/// * `max_b` - Maximum amount of coin B to deposit
 ///
 /// # Returns
 ///
@@ -378,6 +403,13 @@ public fun deposit_liquidity<A, B, Quoter: store, LpType: drop>(
 ///
 /// Liquidity is redeemed from the pool in a balanced manner,
 /// maintaining the pool's reserves and LP supply ratio.
+///
+/// # Arguments
+///
+/// * `pool` - The pool object to redeem liquidity from
+/// * `lp_tokens` - The LP tokens to burn
+/// * `min_a` - Minimum amount of coin A to receive (for slippage protection)
+/// * `min_b` - Minimum amount of coin B to receive (for slippage protection)
 ///
 /// # Returns
 ///
@@ -468,7 +500,19 @@ public fun redeem_liquidity<A, B, Quoter: store, LpType: drop>(
     (tokens_a, tokens_b, result)
 }
 
-// TODO: Remove unnecessary wrapper
+
+/// Quotes the amount of LP tokens that will be minted for a given deposit of tokens A and B.
+/// This function calculates the optimal deposit amounts while respecting the maximum amounts specified.
+///
+/// # Arguments
+///
+/// * `pool` - The pool object containing current reserves and LP supply
+/// * `max_a` - Maximum amount of token A to deposit
+/// * `max_b` - Maximum amount of token B to deposit
+///
+/// # Returns
+///
+/// `DepositQuote`: A quote containing the optimal deposit amounts and expected LP tokens to be minted
 public fun quote_deposit<A, B, Quoter: store, LpType: drop>(
     pool: &Pool<A, B, Quoter, LpType>,
     max_a: u64,
@@ -481,6 +525,17 @@ public fun quote_deposit<A, B, Quoter: store, LpType: drop>(
     )
 }
 
+/// Quotes the redemption of LP tokens for underlying tokens A and B.
+/// This function calculates how many tokens A and B will be received when burning LP tokens.
+///
+/// # Arguments
+///
+/// * `pool` - The pool object containing current reserves and LP supply
+/// * `lp_tokens` - Amount of LP tokens to burn
+///
+/// # Returns
+///
+/// `RedeemQuote`: A quote containing the amounts of tokens A and B to be received and any fees
 public fun quote_redeem<A, B, Quoter: store, LpType: drop>(
     pool: &mut Pool<A, B, Quoter, LpType>,
     lp_tokens: u64,
@@ -495,6 +550,19 @@ public fun quote_redeem<A, B, Quoter: store, LpType: drop>(
 
 // ===== Pool Cap Adming Endpoints =====
 
+/// Updates the pool's swap fee configuration. The swap fee is charged on each trade and is split
+/// between the protocol and the pool's liquidity providers.
+///
+/// # Arguments
+///
+/// * `pool` - The pool object to update fees for
+/// * `_pool_cap` - Capability object proving authority to modify pool parameters
+/// * `swap_fee_bps` - New swap fee in basis points (1 bp = 0.01%)
+///
+/// # Panics
+///
+/// This function will panic if:
+/// - `swap_fee_bps` is greater than or equal to `BPS_DENOMINATOR` (100%)
 public fun set_pool_swap_fees<A, B, Quoter: store, LpType: drop>(
     pool: &mut Pool<A, B, Quoter, LpType>,
     _pool_cap: &PoolCap<A, B, Quoter, LpType>,
@@ -504,6 +572,19 @@ public fun set_pool_swap_fees<A, B, Quoter: store, LpType: drop>(
     pool.pool_fee_config = fees::new_config(swap_fee_bps, BPS_DENOMINATOR, 0);
 }
 
+/// Updates the pool's redemption fee configuration. The redemption fee is charged when liquidity
+/// providers withdraw their funds from the pool.
+///
+/// # Arguments
+///
+/// * `pool` - The pool object to update fees for
+/// * `_pool_cap` - Capability object proving authority to modify pool parameters
+/// * `redemption_fee_bps` - New redemption fee in basis points (1 bp = 0.01%)
+///
+/// # Panics
+///
+/// This function will panic if:
+/// - `redemption_fee_bps` is greater than or equal to `BPS_DENOMINATOR` (100%)
 public fun set_redemption_fees<A, B, Quoter: store, LpType: drop>(
     pool: &mut Pool<A, B, Quoter, LpType>,
     _pool_cap: &PoolCap<A, B, Quoter, LpType>,

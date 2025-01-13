@@ -1,7 +1,7 @@
 /// AMM Pool module. It contains the core logic of the of the AMM,
 /// such as the deposit and redeem logic, which is exposed and should be
 /// called directly. Is also exports an intializer and swap method to be
-/// called by the hook modules.
+/// called by the quoter modules.
 module steamm::pool_math;
 
 use std::u128::sqrt;

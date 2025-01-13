@@ -2,7 +2,7 @@
 module steamm::steamm_tests;
 
 use steamm::cpmm::{Self, offset};
-use steamm::dummy_hook::{swap as dummy_swap, quote_swap, DummyQuoter};
+use steamm::dummy_quoter::{swap as dummy_swap, quote_swap, DummyQuoter};
 use steamm::global_admin;
 use steamm::pool::{Self, Pool, minimum_liquidity};
 use steamm::pool_math;
