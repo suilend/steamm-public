@@ -1,16 +1,16 @@
 #[test_only]
 module steamm::cpmm_offset_tests;
 
+use steamm::b_test_sui::B_TEST_SUI;
+use steamm::b_test_usdc::B_TEST_USDC;
 use steamm::cpmm_tests::{setup, setup_pool};
-use steamm::pool::{Self};
-use steamm::test_utils::{reserve_args};
+use steamm::pool;
+use steamm::test_utils::reserve_args;
 use sui::coin;
 use sui::test_scenario::{Self, ctx};
 use sui::test_utils::{destroy, assert_eq};
 use suilend::decimal;
-use suilend::lending_market_tests::{setup as suilend_setup};
-use steamm::b_test_sui::{B_TEST_SUI};
-use steamm::b_test_usdc::{B_TEST_USDC};
+use suilend::lending_market_tests::setup as suilend_setup;
 
 const ADMIN: address = @0x10;
 const POOL_CREATOR: address = @0x11;

@@ -32,9 +32,9 @@ public struct CpQuoter has store {
 /// object is initialized at zero supply.
 ///
 /// # Arguments
-/// 
+///
 /// * `meta_a` - Coin metadata for coin type A
-/// * `meta_b` - Coin metadata for coin type B  
+/// * `meta_b` - Coin metadata for coin type B
 /// * `meta_lp` - Coin metadata for the LP token
 /// * `lp_treasury` - Treasury capability for minting LP tokens
 /// * `swap_fee_bps` - Swap fee in basis points
@@ -74,7 +74,6 @@ public fun new<A, B, LpType: drop>(
 
     (pool, pool_cap)
 }
-
 
 /// Executes a swap between coin A and coin B in the constant product AMM pool.
 /// The swap direction is determined by the `a2b` parameter, where true indicates
@@ -201,14 +200,20 @@ public fun offset<A, B, LpType: drop>(pool: &Pool<A, B, CpQuoter, LpType>): u64 
     pool.quoter().offset
 }
 
-public fun k<A, B, Quoter: store, LpType: drop>(pool: &Pool<A, B, Quoter, LpType>, offset: u64): u128 {
+public fun k<A, B, Quoter: store, LpType: drop>(
+    pool: &Pool<A, B, Quoter, LpType>,
+    offset: u64,
+): u128 {
     let (total_funds_a, total_funds_b) = pool.balance_amounts();
     ((total_funds_a as u128) * ((total_funds_b + offset) as u128))
 }
 
 // ===== Versioning =====
 
-entry fun migrate<A, B, LpType: drop>(pool: &mut Pool<A, B, CpQuoter, LpType>, _admin: &GlobalAdmin) {
+entry fun migrate<A, B, LpType: drop>(
+    pool: &mut Pool<A, B, CpQuoter, LpType>,
+    _admin: &GlobalAdmin,
+) {
     pool.quoter_mut().version.migrate_(CURRENT_VERSION);
 }
 

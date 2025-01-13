@@ -1,8 +1,11 @@
 #[test_only]
 module steamm::cpmm_tests;
 
-use steamm::cpmm::{CpQuoter};
+use steamm::b_test_sui::B_TEST_SUI;
+use steamm::b_test_usdc::B_TEST_USDC;
+use steamm::cpmm::CpQuoter;
 use steamm::global_admin;
+use steamm::lp_usdc_sui::LP_USDC_SUI;
 use steamm::pool::{Self, Pool, minimum_liquidity};
 use steamm::test_utils::{test_setup_cpmm, reserve_args, e9};
 use sui::clock::Clock;
@@ -11,9 +14,6 @@ use sui::test_scenario::{Self, Scenario, ctx};
 use sui::test_utils::{destroy, assert_eq};
 use suilend::lending_market::{LendingMarketOwnerCap, LendingMarket};
 use suilend::lending_market_tests::{LENDING_MARKET, setup as suilend_setup};
-use steamm::lp_usdc_sui::{LP_USDC_SUI};
-use steamm::b_test_sui::{B_TEST_SUI};
-use steamm::b_test_usdc::{B_TEST_USDC};
 
 const ADMIN: address = @0x10;
 const POOL_CREATOR: address = @0x11;
@@ -47,17 +47,13 @@ public fun setup(
 public fun setup_pool(
     fee: u64,
     offset: u64,
-): (
-    Pool<B_TEST_USDC, B_TEST_SUI, CpQuoter, LP_USDC_SUI>,
-) {
-
+): (Pool<B_TEST_USDC, B_TEST_SUI, CpQuoter, LP_USDC_SUI>) {
     let (pool, bank_a, bank_b) = test_setup_cpmm(fee, offset);
     destroy(bank_a);
     destroy(bank_b);
 
     pool
 }
-
 
 #[test]
 fun test_full_cpmm_cycle() {

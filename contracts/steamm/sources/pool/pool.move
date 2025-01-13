@@ -4,6 +4,9 @@
 /// called by the quoter modules.
 module steamm::pool;
 
+use std::ascii;
+use std::string;
+use std::type_name::{get, TypeName};
 use steamm::events::emit_event;
 use steamm::fees::{Self, Fees, FeeConfig};
 use steamm::global_admin::GlobalAdmin;
@@ -11,9 +14,6 @@ use steamm::math::safe_mul_div_up;
 use steamm::pool_math;
 use steamm::quote::{Self, SwapQuote, SwapFee, DepositQuote, RedeemQuote};
 use steamm::version::{Self, Version};
-use std::ascii;
-use std::type_name::{get, TypeName};
-use std::string::{Self};
 use sui::balance::{Self, Balance, Supply};
 use sui::coin::{Self, Coin, TreasuryCap, CoinMetadata};
 use sui::transfer::public_transfer;
@@ -138,7 +138,7 @@ public struct TradingData has store {
 ///
 /// * `pool` - The AMM pool to deposit liquidity into
 /// * `coin_a` - The first coin to deposit
-/// * `coin_b` - The second coin to deposit  
+/// * `coin_b` - The second coin to deposit
 /// * `max_a` - Maximum amount of coin A to deposit
 /// * `max_b` - Maximum amount of coin B to deposit
 ///
@@ -321,7 +321,6 @@ public fun redeem_liquidity<A, B, Quoter: store, LpType: drop>(
     (tokens_a, tokens_b, result)
 }
 
-
 /// Quotes the amount of LP tokens that will be minted for a given deposit of tokens A and B.
 /// This function calculates the optimal deposit amounts while respecting the maximum amounts specified.
 ///
@@ -446,7 +445,10 @@ public fun collect_redemption_fees<A, B, Quoter: store, LpType: drop>(
     (coin::from_balance(fees_a, ctx), coin::from_balance(fees_b, ctx))
 }
 
-entry fun migrate<A, B, Quoter: store, LpType: drop>(pool: &mut Pool<A, B, Quoter, LpType>, _admin: &GlobalAdmin) {
+entry fun migrate<A, B, Quoter: store, LpType: drop>(
+    pool: &mut Pool<A, B, Quoter, LpType>,
+    _admin: &GlobalAdmin,
+) {
     pool.version.migrate_(CURRENT_VERSION);
 }
 
@@ -461,9 +463,9 @@ entry fun migrate<A, B, Quoter: store, LpType: drop>(pool: &mut Pool<A, B, Quote
 /// it witness-protected.
 ///
 /// # Arguments
-/// 
+///
 /// * `meta_a` - Coin metadata for token A
-/// * `meta_b` - Coin metadata for token B  
+/// * `meta_b` - Coin metadata for token B
 /// * `meta_lp` - Mutable coin metadata for LP token
 /// * `lp_treasury` - Treasury capability for LP token
 /// * `swap_fee_bps` - Pool swap fee in basis points
@@ -555,7 +557,7 @@ public(package) fun new<A, B, Quoter: store, LpType: drop>(
 ///
 /// * `pool` - The pool object containing balances and trading data
 /// * `coin_a` - Coin A to be swapped
-/// * `coin_b` - Coin B to be swapped  
+/// * `coin_b` - Coin B to be swapped
 /// * `quote` - Quote object containing swap parameters and amounts
 /// * `min_amount_out` - Minimum output amount for slippage protection
 ///
@@ -680,37 +682,53 @@ public(package) fun compute_redemption_fees_<A, B, Quoter: store, LpType: drop>(
     (fees_a, fees_b)
 }
 
-public(package) fun quoter_mut<A, B, Quoter: store, LpType: drop>(pool: &mut Pool<A, B, Quoter, LpType>): &mut Quoter {
+public(package) fun quoter_mut<A, B, Quoter: store, LpType: drop>(
+    pool: &mut Pool<A, B, Quoter, LpType>,
+): &mut Quoter {
     &mut pool.quoter
 }
 
 // ===== View & Getters =====
 
-public fun balance_amounts<A, B, Quoter: store, LpType: drop>(pool: &Pool<A, B, Quoter, LpType>): (u64, u64) {
+public fun balance_amounts<A, B, Quoter: store, LpType: drop>(
+    pool: &Pool<A, B, Quoter, LpType>,
+): (u64, u64) {
     (pool.balance_amount_a(), pool.balance_amount_b())
 }
 
-public fun balance_amount_a<A, B, Quoter: store, LpType: drop>(pool: &Pool<A, B, Quoter, LpType>): u64 {
+public fun balance_amount_a<A, B, Quoter: store, LpType: drop>(
+    pool: &Pool<A, B, Quoter, LpType>,
+): u64 {
     pool.balance_a.value()
 }
 
-public fun balance_amount_b<A, B, Quoter: store, LpType: drop>(pool: &Pool<A, B, Quoter, LpType>): u64 {
+public fun balance_amount_b<A, B, Quoter: store, LpType: drop>(
+    pool: &Pool<A, B, Quoter, LpType>,
+): u64 {
     pool.balance_b.value()
 }
 
-public fun protocol_fees<A, B, Quoter: store, LpType: drop>(pool: &Pool<A, B, Quoter, LpType>): &Fees<A, B> {
+public fun protocol_fees<A, B, Quoter: store, LpType: drop>(
+    pool: &Pool<A, B, Quoter, LpType>,
+): &Fees<A, B> {
     &pool.protocol_fees
 }
 
-public fun pool_fee_config<A, B, Quoter: store, LpType: drop>(pool: &Pool<A, B, Quoter, LpType>): &FeeConfig {
+public fun pool_fee_config<A, B, Quoter: store, LpType: drop>(
+    pool: &Pool<A, B, Quoter, LpType>,
+): &FeeConfig {
     &pool.pool_fee_config
 }
 
-public fun lp_supply_val<A, B, Quoter: store, LpType: drop>(pool: &Pool<A, B, Quoter, LpType>): u64 {
+public fun lp_supply_val<A, B, Quoter: store, LpType: drop>(
+    pool: &Pool<A, B, Quoter, LpType>,
+): u64 {
     pool.lp_supply.supply_value()
 }
 
-public fun trading_data<A, B, Quoter: store, LpType: drop>(pool: &Pool<A, B, Quoter, LpType>): &TradingData {
+public fun trading_data<A, B, Quoter: store, LpType: drop>(
+    pool: &Pool<A, B, Quoter, LpType>,
+): &TradingData {
     &pool.trading_data
 }
 

@@ -1,14 +1,15 @@
 #[allow(lint(share_owned))]
 module steamm::bank;
 
-use std::string;
 use std::ascii;
-use std::option::{none};
+use std::option::none;
+use std::string;
+use std::type_name::{get, TypeName};
 use steamm::bank_math;
-use steamm::global_admin::GlobalAdmin;
-use steamm::version::{Self, Version};
-use steamm::utils::get_type_reflection;
 use steamm::events::emit_event;
+use steamm::global_admin::GlobalAdmin;
+use steamm::utils::get_type_reflection;
+use steamm::version::{Self, Version};
 use sui::balance::{Self, Supply, Balance};
 use sui::clock::Clock;
 use sui::coin::{Self, Coin, TreasuryCap, CoinMetadata};
@@ -16,7 +17,6 @@ use sui::transfer::share_object;
 use suilend::decimal::{Self, Decimal};
 use suilend::lending_market::{LendingMarket, ObligationOwnerCap};
 use suilend::reserve::CToken;
-use std::type_name::{get, TypeName};
 
 // ===== Constants =====
 
@@ -80,7 +80,7 @@ public entry fun create_bank_and_share<P, T, BToken: drop>(
     meta_t: &CoinMetadata<T>,
     meta_b: &mut CoinMetadata<BToken>,
     btoken_treasury: TreasuryCap<BToken>,
-    ctx: &mut TxContext
+    ctx: &mut TxContext,
 ): ID {
     let bank = create_bank<P, T, BToken>(
         meta_t,
@@ -348,7 +348,7 @@ public(package) fun create_bank<P, T, BToken: drop>(
     meta_t: &CoinMetadata<T>,
     meta_b: &mut CoinMetadata<BToken>,
     btoken_treasury: TreasuryCap<BToken>,
-    ctx: &mut TxContext
+    ctx: &mut TxContext,
 ): Bank<P, T, BToken> {
     assert!(btoken_treasury.total_supply() == 0, EBTokenSupplyMustBeZero);
 
@@ -631,7 +631,7 @@ fun update_btoken_metadata<T, BToken: drop>(
 
     // Set the description
     treasury_btoken.update_description(meta_btoken, string::utf8(b"Steamm bToken"));
-    
+
     // Set the icon URL
     treasury_btoken.update_icon_url(meta_btoken, ascii::string(BTOKEN_ICON_URL));
 }
@@ -697,7 +697,9 @@ public fun utilisation_buffer_bps<P, T, BToken>(bank: &Bank<P, T, BToken>): u64 
     } else { 0 }
 }
 
-public fun funds_available<P, T, BToken>(bank: &Bank<P, T, BToken>): &Balance<T> { &bank.funds_available }
+public fun funds_available<P, T, BToken>(bank: &Bank<P, T, BToken>): &Balance<T> {
+    &bank.funds_available
+}
 
 public fun target_utilisation_bps_unchecked<P, T, BToken>(bank: &Bank<P, T, BToken>): u64 {
     bank.lending.borrow().target_utilisation_bps as u64
@@ -725,7 +727,7 @@ public struct MintBTokenEvent has copy, drop, store {
     bank_id: ID,
     lending_market_id: ID,
     deposited_amount: u64,
-    minted_amount: u64
+    minted_amount: u64,
 }
 
 public struct BurnBTokenEvent has copy, drop, store {
@@ -733,7 +735,7 @@ public struct BurnBTokenEvent has copy, drop, store {
     bank_id: ID,
     lending_market_id: ID,
     withdrawn_amount: u64,
-    burned_amount: u64
+    burned_amount: u64,
 }
 
 public struct DeployEvent has copy, drop, store {
@@ -758,7 +760,10 @@ public struct NeedsRebalanceEvent has copy, drop, store {
 // ===== Test-Only Functions =====
 
 #[test_only]
-public(package) fun mock_min_token_block_size<P, T, BToken>(bank: &mut Bank<P, T, BToken>, amount: u64) {
+public(package) fun mock_min_token_block_size<P, T, BToken>(
+    bank: &mut Bank<P, T, BToken>,
+    amount: u64,
+) {
     bank.min_token_block_size = amount;
 }
 
@@ -772,7 +777,10 @@ public(package) fun deposit_for_testing<P, T, BToken>(bank: &mut Bank<P, T, BTok
 }
 
 #[test_only]
-public(package) fun withdraw_for_testing<P, T, BToken>(bank: &mut Bank<P, T, BToken>, amount: u64): Balance<T> {
+public(package) fun withdraw_for_testing<P, T, BToken>(
+    bank: &mut Bank<P, T, BToken>,
+    amount: u64,
+): Balance<T> {
     bank
         .funds_available
         .split(

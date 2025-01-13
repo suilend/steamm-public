@@ -1,9 +1,12 @@
 #[test_only]
 module steamm::steamm_tests;
 
+use steamm::b_test_sui::B_TEST_SUI;
+use steamm::b_test_usdc::B_TEST_USDC;
 use steamm::cpmm::{Self, offset};
 use steamm::dummy_quoter::{swap as dummy_swap, quote_swap, DummyQuoter};
 use steamm::global_admin;
+use steamm::lp_usdc_sui::LP_USDC_SUI;
 use steamm::pool::{Self, Pool, minimum_liquidity};
 use steamm::pool_math;
 use steamm::quote;
@@ -11,10 +14,7 @@ use steamm::test_utils::{test_setup_dummy, test_setup_cpmm, e9, reserve_args};
 use sui::coin;
 use sui::test_scenario::{Self, ctx};
 use sui::test_utils::{destroy, assert_eq};
-use suilend::lending_market_tests::{setup as suilend_setup};
-use steamm::lp_usdc_sui::{LP_USDC_SUI};
-use steamm::b_test_sui::{B_TEST_SUI};
-use steamm::b_test_usdc::{B_TEST_USDC};
+use suilend::lending_market_tests::setup as suilend_setup;
 
 const ADMIN: address = @0x10;
 const POOL_CREATOR: address = @0x11;
@@ -829,7 +829,6 @@ fun test_output_exceeds_liquidity() {
     ).destruct_state();
     // Create amm bank
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
-
 
     // Init Pool
     test_scenario::next_tx(&mut scenario, POOL_CREATOR);
