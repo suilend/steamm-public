@@ -991,6 +991,8 @@ fun test_deposit_with_lending_proptest() {
     let mut deposits = 1_000;
 
     while (deposits > 0) {
+        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+        let ctx = ctx(&mut scenario);
         let amount_in = rng.generate_u64_in_range(1_000, 100_000);
 
         let mut coin_a = coin::mint_for_testing<TEST_USDC>(amount_in, ctx);

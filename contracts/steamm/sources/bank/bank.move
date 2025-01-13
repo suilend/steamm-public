@@ -8,6 +8,7 @@ use steamm::bank_math;
 use steamm::global_admin::GlobalAdmin;
 use steamm::version::{Self, Version};
 use steamm::utils::get_type_reflection;
+use steamm::events::emit_event;
 use sui::balance::{Self, Supply, Balance};
 use sui::clock::Clock;
 use sui::coin::{Self, Coin, TreasuryCap, CoinMetadata};
@@ -15,6 +16,7 @@ use sui::transfer::share_object;
 use suilend::decimal::{Self, Decimal};
 use suilend::lending_market::{LendingMarket, ObligationOwnerCap};
 use suilend::reserve::CToken;
+use std::type_name::{get, TypeName};
 
 // ===== Constants =====
 
@@ -121,6 +123,14 @@ public fun mint_btokens<P, T, BToken>(
     let coin_input = coins.split(coin_amount, ctx);
     let new_btokens = bank.to_btokens(lending_market, coin_amount, clock).floor();
 
+    emit_event(MintBTokenEvent {
+        user: ctx.sender(),
+        bank_id: object::id(bank),
+        lending_market_id: object::id(lending_market),
+        deposited_amount: coin_amount,
+        minted_amount: new_btokens,
+    });
+
     bank.funds_available.join(coin_input.into_balance());
     coin::from_balance(bank.btoken_supply.increase_supply(new_btokens), ctx)
 }
@@ -159,7 +169,7 @@ public fun burn_btokens<P, T, BToken>(
     bank.compound_interest_if_any(lending_market, clock);
 
     let btoken_input = btokens.split(btoken_amount, ctx);
-    let tokens_to_withdraw = bank.from_btokens(lending_market, btoken_amount, clock).floor();
+    let mut tokens_to_withdraw = bank.from_btokens(lending_market, btoken_amount, clock).floor();
 
     bank.btoken_supply.decrease_supply(btoken_input.into_balance());
 
@@ -173,7 +183,18 @@ public fun burn_btokens<P, T, BToken>(
     // will be lower than the amount requested
     let max_available = bank.funds_available.value();
     assert!(max_available + 1 >= tokens_to_withdraw, EInsufficientBankFunds);
-    coin::from_balance(bank.funds_available.split(tokens_to_withdraw.min(max_available)), ctx)
+
+    tokens_to_withdraw = tokens_to_withdraw.min(max_available);
+
+    emit_event(BurnBTokenEvent {
+        user: ctx.sender(),
+        bank_id: object::id(bank),
+        lending_market_id: object::id(lending_market),
+        withdrawn_amount: tokens_to_withdraw,
+        burned_amount: btoken_amount,
+    });
+
+    coin::from_balance(bank.funds_available.split(tokens_to_withdraw), ctx)
 }
 
 public fun rebalance<P, T, BToken>(
@@ -275,6 +296,13 @@ public(package) fun create_bank<P, T, BToken: drop>(
         version: version::new(CURRENT_VERSION),
     };
 
+    emit_event(NewBankEvent {
+        bank_id: object::id(&bank),
+        coin_type: get<T>(),
+        btoken_type: get<BToken>(),
+        lending_market_type: get<P>(),
+    });
+
     bank
 }
 
@@ -348,6 +376,13 @@ fun deploy<P, T, BToken>(
 
     let lending = bank.lending.borrow_mut();
     lending.ctokens = lending.ctokens + ctoken_amount;
+
+    emit_event(DeployEvent {
+        bank_id: object::id(bank),
+        lending_market_id: object::id(lending_market),
+        deployed_amount: amount_to_deploy,
+        ctokens_minted: ctoken_amount,
+    });
 }
 
 fun recall<P, T, BToken>(
@@ -376,7 +411,7 @@ fun recall<P, T, BToken>(
 
     let ctoken_amount = ctokens.value();
 
-    let coin = lending_market.redeem_ctokens_and_withdraw_liquidity(
+    let coin_recalled = lending_market.redeem_ctokens_and_withdraw_liquidity(
         bank.lending.borrow().reserve_array_index,
         clock,
         ctokens,
@@ -384,15 +419,17 @@ fun recall<P, T, BToken>(
         ctx,
     );
 
+    let recalled_amount = coin_recalled.value();
+
     assert!(
-        ctoken_amount * bank.funds_deployed(lending_market, clock).floor() <= lending.ctokens * coin.value(),
+        ctoken_amount * bank.funds_deployed(lending_market, clock).floor() <= lending.ctokens * recalled_amount,
         EInvalidCTokenRatio,
     );
 
     let lending = bank.lending.borrow_mut();
     lending.ctokens = lending.ctokens - ctoken_amount;
 
-    bank.funds_available.join(coin.into_balance());
+    bank.funds_available.join(coin_recalled.into_balance());
 
     let reserves = lending_market.reserves();
     let reserve = reserves.borrow(lending.reserve_array_index);
@@ -403,6 +440,13 @@ fun recall<P, T, BToken>(
         decimal::from(lending.ctokens).mul(ctoken_ratio).floor() >= bank.funds_deployed(lending_market, clock).floor(),
         ECTokenRatioTooLow,
     );
+
+    emit_event(RecallEvent {
+        bank_id: object::id(bank),
+        lending_market_id: object::id(lending_market),
+        recalled_amount: recalled_amount,
+        ctokens_burned: ctoken_amount,
+    });
 }
 
 // Given how much tokens we want to withdraw from the lending market,
@@ -516,9 +560,15 @@ public fun needs_rebalance<P, T, BToken>(
     let target_utilisation_bps = bank.target_utilisation_bps_unchecked();
     let buffer_bps = bank.utilisation_buffer_bps_unchecked();
 
-    if (
+    let needs_rebalance = if (
         effective_utilisation_bps <= target_utilisation_bps + buffer_bps && effective_utilisation_bps >= target_utilisation_bps - buffer_bps
-    ) { false } else { true }
+    ) { false } else { true };
+
+    emit_event(NeedsRebalanceEvent {
+        needs_rebalance,
+    });
+
+    needs_rebalance
 }
 
 fun compound_interest_if_any<P, T, BToken>(
@@ -570,6 +620,50 @@ public fun utilisation_buffer_bps_unchecked<P, T, BToken>(bank: &Bank<P, T, BTok
 
 public fun reserve_array_index<P, T, BToken>(bank: &Bank<P, T, BToken>): u64 {
     bank.lending.borrow().reserve_array_index
+}
+
+// ===== Results/Events =====
+
+public struct NewBankEvent has copy, drop, store {
+    bank_id: ID,
+    coin_type: TypeName,
+    btoken_type: TypeName,
+    lending_market_type: TypeName,
+}
+
+public struct MintBTokenEvent has copy, drop, store {
+    user: address,
+    bank_id: ID,
+    lending_market_id: ID,
+    deposited_amount: u64,
+    minted_amount: u64
+}
+
+public struct BurnBTokenEvent has copy, drop, store {
+    user: address,
+    bank_id: ID,
+    lending_market_id: ID,
+    withdrawn_amount: u64,
+    burned_amount: u64
+}
+
+public struct DeployEvent has copy, drop, store {
+    bank_id: ID,
+    lending_market_id: ID,
+    deployed_amount: u64,
+    ctokens_minted: u64,
+}
+
+public struct RecallEvent has copy, drop, store {
+    bank_id: ID,
+    lending_market_id: ID,
+    recalled_amount: u64,
+    ctokens_burned: u64,
+}
+
+// Only used for easily inspecting dry run results
+public struct NeedsRebalanceEvent has copy, drop, store {
+    needs_rebalance: bool,
 }
 
 // ===== Test-Only Functions =====

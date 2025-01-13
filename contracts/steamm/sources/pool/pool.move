@@ -12,6 +12,7 @@ use steamm::pool_math;
 use steamm::quote::{Self, SwapQuote, SwapFee, DepositQuote, RedeemQuote};
 use steamm::version::{Self, Version};
 use std::ascii;
+use std::type_name::{get, TypeName};
 use std::string::{Self};
 use sui::balance::{Self, Balance, Supply};
 use sui::coin::{Self, Coin, TreasuryCap, CoinMetadata};
@@ -198,6 +199,11 @@ public(package) fun new<A, B, Quoter: store, LpType: drop>(
     emit_event(NewPoolResult {
         creator: sender(ctx),
         pool_id: object::id(&pool),
+        pool_cap_id: object::id(&pool_cap),
+        coin_type_a: get<A>(),
+        coin_type_b: get<B>(),
+        lp_token_type: get<LpType>(),
+        quoter_type: get<Quoter>(),
     });
 
     (pool, pool_cap)
@@ -811,6 +817,11 @@ fun update_lp_metadata<A, B, LpType: drop>(
 public struct NewPoolResult has copy, drop, store {
     creator: address,
     pool_id: ID,
+    pool_cap_id: ID,
+    coin_type_a: TypeName,
+    coin_type_b: TypeName,
+    quoter_type: TypeName,
+    lp_token_type: TypeName,
 }
 
 public struct SwapResult has copy, drop, store {
