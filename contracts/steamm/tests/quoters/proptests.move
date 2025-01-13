@@ -1,14 +1,14 @@
 #[test_only]
 module steamm::proptests;
 
-use steamm::cpmm_tests::{setup};
-use steamm::test_utils::{e9};
+use steamm::b_test_sui::B_TEST_SUI;
+use steamm::b_test_usdc::B_TEST_USDC;
+use steamm::cpmm_tests::setup;
+use steamm::test_utils::e9;
 use sui::coin;
 use sui::random;
 use sui::test_scenario::{Self, ctx};
 use sui::test_utils::destroy;
-use steamm::b_test_sui::{B_TEST_SUI};
-use steamm::b_test_usdc::{B_TEST_USDC};
 
 const ADMIN: address = @0x10;
 const POOL_CREATOR: address = @0x11;

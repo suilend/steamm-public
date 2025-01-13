@@ -1,4 +1,4 @@
-/// Constant-Product AMM Hook implementation
+/// Constant-Product AMM Quoter implementation
 module steamm::cpmm;
 
 use std::option::none;
@@ -26,17 +26,26 @@ public struct CpQuoter has store {
 }
 
 // ===== Public Methods =====
-
 /// Initializes and returns a new AMM Pool along with its associated PoolCap.
 /// The pool is initialized with zero balances for both coin types `A` and `B`,
 /// specified protocol fees, and the provided swap fee. The pool's LP supply
 /// object is initialized at zero supply.
 ///
+/// # Arguments
+///
+/// * `meta_a` - Coin metadata for coin type A
+/// * `meta_b` - Coin metadata for coin type B
+/// * `meta_lp` - Coin metadata for the LP token
+/// * `lp_treasury` - Treasury capability for minting LP tokens
+/// * `swap_fee_bps` - Swap fee in basis points
+/// * `offset` - Offset value for the constant product formula
+/// * `ctx` - Transaction context
+///
 /// # Returns
 ///
 /// A tuple containing:
-/// - `Pool<A, B, CpQuoter`: The created AMM pool object.
-/// - `PoolCap<A, B, CpQuoter`: The associated pool capability object.
+/// - `Pool<A, B, CpQuoter, LpType>`: The created AMM pool object.
+/// - `PoolCap<A, B, CpQuoter, LpType>`: The associated pool capability object.
 ///
 /// # Panics
 ///
@@ -66,6 +75,31 @@ public fun new<A, B, LpType: drop>(
     (pool, pool_cap)
 }
 
+/// Executes a swap between coin A and coin B in the constant product AMM pool.
+/// The swap direction is determined by the `a2b` parameter, where true indicates
+/// swapping from coin A to coin B, and false indicates swapping from coin B to coin A.
+///
+/// # Arguments
+///
+/// * `pool` - The AMM pool to execute the swap in
+/// * `coin_a` - Coin A to be swapped
+/// * `coin_b` - Coin B to be swapped
+/// * `a2b` - Direction of the swap (true = A->B, false = B->A)
+/// * `amount_in` - Amount of input coin to swap
+/// * `min_amount_out` - Minimum output amount for slippage protection
+/// * `ctx` - Transaction context
+///
+/// # Returns
+///
+/// `SwapResult`: An object containing details of the executed swap,
+/// including input and output amounts, fees, and the direction of the swap.
+///
+/// # Panics
+///
+/// This function will panic if:
+/// - The pool version is not current
+/// - The swap violates the constant product invariant
+/// - The output amount is less than min_amount_out
 public fun swap<A, B, LpType: drop>(
     pool: &mut Pool<A, B, CpQuoter, LpType>,
     coin_a: &mut Coin<A>,
@@ -94,8 +128,22 @@ public fun swap<A, B, LpType: drop>(
     response
 }
 
-// cpmm return price, take price that's best for LPs, on top we add dynamic fee
-// fees should always be computed on the output amount;
+/// Quotes a swap in a constant product AMM pool. The quote is computed using the
+/// constant product formula (x + dx)(y - dy) = k, where x and y are the reserves
+/// plus an offset, dx is the input amount, and dy is the output amount.
+/// The offset is used to prevent price manipulation when reserves are low.
+/// After computing the output amount, fees are added on top.
+///
+/// # Arguments
+///
+/// * `pool` - The AMM pool to quote the swap for
+/// * `amount_in` - Amount of input coin to swap
+/// * `a2b` - Direction of the swap (true = A->B, false = B->A)
+///
+/// # Returns
+///
+/// `SwapQuote`: A quote object containing the input amount, output amount,
+/// swap direction and fees to be charged.
 public fun quote_swap<A, B, LpType: drop>(
     pool: &Pool<A, B, CpQuoter, LpType>,
     amount_in: u64,
@@ -152,14 +200,20 @@ public fun offset<A, B, LpType: drop>(pool: &Pool<A, B, CpQuoter, LpType>): u64 
     pool.quoter().offset
 }
 
-public fun k<A, B, Quoter: store, LpType: drop>(pool: &Pool<A, B, Quoter, LpType>, offset: u64): u128 {
+public fun k<A, B, Quoter: store, LpType: drop>(
+    pool: &Pool<A, B, Quoter, LpType>,
+    offset: u64,
+): u128 {
     let (total_funds_a, total_funds_b) = pool.balance_amounts();
     ((total_funds_a as u128) * ((total_funds_b + offset) as u128))
 }
 
 // ===== Versioning =====
 
-entry fun migrate<A, B, LpType: drop>(pool: &mut Pool<A, B, CpQuoter, LpType>, _admin: &GlobalAdmin) {
+entry fun migrate<A, B, LpType: drop>(
+    pool: &mut Pool<A, B, CpQuoter, LpType>,
+    _admin: &GlobalAdmin,
+) {
     pool.quoter_mut().version.migrate_(CURRENT_VERSION);
 }
 
