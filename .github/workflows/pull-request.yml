@@ -1,0 +1,30 @@
+name: Pull Request
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop, add_ci]
+
+jobs:
+  move-test:
+    runs-on: ubuntu-latest
+    container: 
+      image: mysten/sui-tools:mainnet 
+      ports:
+        - 80
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      # bugfix: install git
+      - name: install git
+        run: apt-get install -y git
+
+      - name: Install Just
+        uses: taiki-e/install-action@just
+
+      - name: Build contract
+        run: just sui build
+
+      - name: Test contract
+        run: just sui test
