@@ -2,14 +2,39 @@
 module steamm::deposit_redeem;
 
 use std::u128::sqrt;
+use steamm::b_test_sui::B_TEST_SUI;
+use steamm::b_test_usdc::B_TEST_USDC;
+use steamm::cpmm::CpQuoter;
+use steamm::lp_usdc_sui::LP_USDC_SUI;
 use steamm::math as steamm_math;
+use steamm::pool::Pool;
 use steamm::pool_math::{Self, quote_deposit_test, quote_redeem_test};
 use steamm::test_utils;
 use sui::test_utils::{destroy, assert_eq};
 
+#[test_only]
+fun setup_pool(
+    reserve_a: u64,
+    reserve_b: u64,
+    lp_supply: u64,
+    swap_fee_bps: u64,
+): (Pool<B_TEST_USDC, B_TEST_SUI, CpQuoter, LP_USDC_SUI>) {
+    let (mut pool, bank_a, bank_b) = test_utils::test_setup_cpmm(swap_fee_bps, 0);
+
+    pool.mut_reserve_a(reserve_a, true);
+    pool.mut_reserve_b(reserve_b, true);
+    let lp = pool.lp_supply_mut_for_testing().increase_supply(lp_supply);
+
+    destroy(lp);
+    destroy(bank_a);
+    destroy(bank_b);
+
+    pool
+}
+
 #[test]
 fun test_initial_deposit() {
-    let (pool, bank_a, bank_b) = test_utils::new_for_testing(
+    let pool = setup_pool(
         0,
         0,
         0,
@@ -27,13 +52,11 @@ fun test_initial_deposit() {
     assert_eq(quote.mint_lp(), 5);
 
     destroy(pool);
-    destroy(bank_a);
-    destroy(bank_b);
 }
 
 #[test]
 fun test_simple_deposit() {
-    let (pool, bank_a, bank_b) = test_utils::new_for_testing(
+    let pool = setup_pool(
         5,
         1,
         sqrt(5 as u128) as u64,
@@ -51,13 +74,11 @@ fun test_simple_deposit() {
     assert_eq(quote.mint_lp(), 2);
 
     destroy(pool);
-    destroy(bank_a);
-    destroy(bank_b);
 }
 
 #[test]
 fun test_simple_redeem() {
-    let (pool, bank_a, bank_b) = test_utils::new_for_testing(
+    let pool = setup_pool(
         6,
         6,
         6,
@@ -74,14 +95,12 @@ fun test_simple_redeem() {
     assert_eq(quote.withdraw_b(), 2);
 
     destroy(pool);
-    destroy(bank_a);
-    destroy(bank_b);
 }
 
 #[test]
 #[expected_failure(abort_code = pool_math::ERedeemSlippageAExceeded)]
 fun test_fail_min_a_too_high() {
-    let (pool, bank_a, bank_b) = test_utils::new_for_testing(
+    let pool = setup_pool(
         6,
         6,
         6,
@@ -98,14 +117,12 @@ fun test_fail_min_a_too_high() {
     assert_eq(quote.withdraw_b(), 2);
 
     destroy(pool);
-    destroy(bank_a);
-    destroy(bank_b);
 }
 
 #[test]
 #[expected_failure(abort_code = pool_math::ERedeemSlippageBExceeded)]
 fun test_fail_min_b_too_high() {
-    let (pool, bank_a, bank_b) = test_utils::new_for_testing(
+    let pool = setup_pool(
         6,
         6,
         6,
@@ -122,13 +139,11 @@ fun test_fail_min_b_too_high() {
     assert_eq(quote.withdraw_b(), 2);
 
     destroy(pool);
-    destroy(bank_a);
-    destroy(bank_b);
 }
 
 #[test]
 fun test_last_redeem() {
-    let (pool, bank_a, bank_b) = test_utils::new_for_testing(
+    let pool = setup_pool(
         6,
         6,
         6,
@@ -145,8 +160,6 @@ fun test_last_redeem() {
     assert_eq(quote.withdraw_b(), 6);
 
     destroy(pool);
-    destroy(bank_a);
-    destroy(bank_b);
 }
 
 #[test]
@@ -275,7 +288,7 @@ fun test_deposit_liquidity_inner() {
 #[test]
 #[expected_failure(abort_code = pool_math::EDepositMaxAParamCantBeZero)]
 fun test_fail_max_params_as_zero() {
-    let (pool, bank_a, bank_b) = test_utils::new_for_testing(
+    let pool = setup_pool(
         5,
         5,
         sqrt(5 as u128) as u64,
@@ -288,14 +301,12 @@ fun test_fail_max_params_as_zero() {
     );
 
     destroy(pool);
-    destroy(bank_a);
-    destroy(bank_b);
 }
 
 #[test]
 #[expected_failure(abort_code = steamm_math::EMathOverflow)]
 fun test_fail_deposit_maximally_imbalanced_pool() {
-    let (pool, bank_a, bank_b) = test_utils::new_for_testing(
+    let pool = setup_pool(
         1,
         5_000_000_000_000_000,
         sqrt(5_000_000_000_000_00 as u128) as u64,
@@ -308,8 +319,6 @@ fun test_fail_deposit_maximally_imbalanced_pool() {
     );
 
     destroy(pool);
-    destroy(bank_a);
-    destroy(bank_b);
 }
 
 #[test]

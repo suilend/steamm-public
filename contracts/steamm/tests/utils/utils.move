@@ -6,27 +6,29 @@ use pyth::price;
 use pyth::price_feed;
 use pyth::price_identifier;
 use pyth::price_info::{Self, PriceInfoObject};
+use std::ascii;
+use std::string::utf8;
 use std::type_name;
-use steamm::bank::{Self, Bank, BToken};
+use steamm::b_test_sui::B_TEST_SUI;
+use steamm::b_test_usdc::B_TEST_USDC;
+use steamm::bank::{Self, Bank};
 use steamm::cpmm::{Self, CpQuoter};
+use steamm::dummy_quoter::{Self, DummyQuoter};
+use steamm::lp_usdc_sui::LP_USDC_SUI;
 use steamm::pool::Pool;
-use steamm::registry;
 use sui::bag::{Self, Bag};
 use sui::clock::Clock;
-use sui::sui::SUI;
+use sui::coin::{CoinMetadata, TreasuryCap};
 use sui::test_scenario::{Self, ctx, Scenario};
 use sui::test_utils::destroy;
 use suilend::lending_market_tests::{Self, LENDING_MARKET};
 use suilend::reserve_config;
-use suilend::test_sui::TEST_SUI;
-use suilend::test_usdc::TEST_USDC;
+use suilend::test_sui::{Self, TEST_SUI};
+use suilend::test_usdc::{Self, TEST_USDC};
 
 public fun e9(amt: u64): u64 {
     1_000_000_000 * amt
 }
-
-public struct PoolWit has drop {}
-public struct COIN has drop {}
 
 #[test_only]
 public macro fun assert_eq_approx($a: u64, $b: u64, $tolerance_bps: u64) {
@@ -120,44 +122,129 @@ public fun reserve_args_2(scenario: &mut Scenario): Bag {
 }
 
 #[test_only]
-public fun new_for_testing(
-    reserve_a: u64,
-    reserve_b: u64,
-    lp_supply: u64,
+public fun test_setup_cpmm(
     swap_fee_bps: u64,
+    offset: u64,
 ): (
-    Pool<BToken<LENDING_MARKET, SUI>, BToken<LENDING_MARKET, COIN>, CpQuoter<PoolWit>>,
-    Bank<LENDING_MARKET, SUI>,
-    Bank<LENDING_MARKET, COIN>,
+    Pool<B_TEST_USDC, B_TEST_SUI, CpQuoter, LP_USDC_SUI>,
+    Bank<LENDING_MARKET, TEST_USDC, B_TEST_USDC>,
+    Bank<LENDING_MARKET, TEST_SUI, B_TEST_SUI>,
 ) {
     let mut scenario = test_scenario::begin(@0x0);
+
+    let (treasury_cap_sui, meta_sui, treasury_cap_usdc, meta_usdc) = init_currencies(&mut scenario);
+
     let ctx = ctx(&mut scenario);
+    let (treasury_cap_lp, mut meta_lp_usdc_sui) = steamm::lp_usdc_sui::create_currency(ctx);
+    let (treasury_cap_b_usdc, mut meta_b_usdc) = steamm::b_test_usdc::create_currency(ctx);
+    let (treasury_cap_b_sui, mut meta_b_sui) = steamm::b_test_sui::create_currency(ctx);
 
-    let mut registry = registry::init_for_testing(ctx);
+    // Create banks
+    let bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC, B_TEST_USDC>(
+        &meta_usdc,
+        &mut meta_b_usdc,
+        treasury_cap_b_usdc,
+        ctx,
+    );
+    let bank_b = bank::create_bank<LENDING_MARKET, TEST_SUI, B_TEST_SUI>(
+        &meta_sui,
+        &mut meta_b_sui,
+        treasury_cap_b_sui,
+        ctx,
+    );
 
-    let (mut pool, pool_cap) = cpmm::new<
-        BToken<LENDING_MARKET, SUI>,
-        BToken<LENDING_MARKET, COIN>,
-        PoolWit,
-    >(
-        PoolWit {},
-        &mut registry,
+    // Create pool
+
+    let (pool, pool_cap) = cpmm::new<B_TEST_USDC, B_TEST_SUI, LP_USDC_SUI>(
+        &meta_b_usdc,
+        &meta_b_sui,
+        &mut meta_lp_usdc_sui,
+        treasury_cap_lp,
+        swap_fee_bps,
+        offset,
+        ctx,
+    );
+
+    destroy(treasury_cap_sui);
+    destroy(treasury_cap_usdc);
+    destroy(meta_lp_usdc_sui);
+    destroy(meta_b_sui);
+    destroy(meta_b_usdc);
+    destroy(meta_sui);
+    destroy(meta_usdc);
+    destroy(pool_cap);
+
+    test_scenario::end(scenario);
+
+    (pool, bank_a, bank_b)
+}
+
+#[test_only]
+public fun test_setup_dummy(
+    swap_fee_bps: u64,
+): (
+    Pool<B_TEST_USDC, B_TEST_SUI, DummyQuoter, LP_USDC_SUI>,
+    Bank<LENDING_MARKET, TEST_USDC, B_TEST_USDC>,
+    Bank<LENDING_MARKET, TEST_SUI, B_TEST_SUI>,
+) {
+    let mut scenario = test_scenario::begin(@0x0);
+
+    let (treasury_cap_sui, meta_sui, treasury_cap_usdc, meta_usdc) = init_currencies(&mut scenario);
+
+    let ctx = ctx(&mut scenario);
+    let (treasury_cap_lp, mut meta_lp_usdc_sui) = steamm::lp_usdc_sui::create_currency(ctx);
+    let (treasury_cap_b_usdc, mut meta_b_usdc) = steamm::b_test_usdc::create_currency(ctx);
+    let (treasury_cap_b_sui, mut meta_b_sui) = steamm::b_test_sui::create_currency(ctx);
+
+    // Create banks
+    let bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC, B_TEST_USDC>(
+        &meta_usdc,
+        &mut meta_b_usdc,
+        treasury_cap_b_usdc,
+        ctx,
+    );
+    let bank_b = bank::create_bank<LENDING_MARKET, TEST_SUI, B_TEST_SUI>(
+        &meta_sui,
+        &mut meta_b_sui,
+        treasury_cap_b_sui,
+        ctx,
+    );
+
+    // Create pool
+
+    let (pool, pool_cap) = dummy_quoter::new<B_TEST_USDC, B_TEST_SUI, LP_USDC_SUI>(
+        &meta_b_usdc,
+        &meta_b_sui,
+        &mut meta_lp_usdc_sui,
+        treasury_cap_lp,
         swap_fee_bps,
         ctx,
     );
 
-    let bank_a = bank::create_bank<LENDING_MARKET, SUI>(&mut registry, ctx);
-    let bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx);
-
-    pool.mut_reserve_a(reserve_a, true);
-    pool.mut_reserve_b(reserve_b, true);
-    let lp = pool.lp_supply_mut_for_testing().increase_supply(lp_supply);
-
-    destroy(registry);
+    destroy(treasury_cap_sui);
+    destroy(treasury_cap_usdc);
+    destroy(meta_lp_usdc_sui);
+    destroy(meta_b_sui);
+    destroy(meta_b_usdc);
+    destroy(meta_sui);
+    destroy(meta_usdc);
     destroy(pool_cap);
-    destroy(lp);
 
     test_scenario::end(scenario);
+
+    (pool, bank_a, bank_b)
+}
+
+#[test_only]
+public fun test_setup_dummy_no_fees(): (
+    Pool<B_TEST_USDC, B_TEST_SUI, DummyQuoter, LP_USDC_SUI>,
+    Bank<LENDING_MARKET, TEST_USDC, B_TEST_USDC>,
+    Bank<LENDING_MARKET, TEST_SUI, B_TEST_SUI>,
+) {
+    let (mut pool, bank_a, bank_b) = test_setup_dummy(0);
+
+    pool.no_protocol_fees_for_testing();
+    pool.no_redemption_fees_for_testing();
 
     (pool, bank_a, bank_b)
 }
@@ -279,4 +366,25 @@ public fun update_pyth_price(
 public fun bump_clock(clock: &mut Clock, seconds: u64) {
     let new_ts = clock.timestamp_ms() + (1000 * seconds); // 1 second * X
     clock.set_for_testing(new_ts);
+}
+
+public fun init_currencies(
+    scenario: &mut Scenario,
+): (
+    TreasuryCap<TEST_SUI>,
+    CoinMetadata<TEST_SUI>,
+    TreasuryCap<TEST_USDC>,
+    CoinMetadata<TEST_USDC>,
+) {
+    // Setup base currencies
+    let (sui_cap, mut sui_meta) = test_sui::create_currency(ctx(scenario));
+    let (usdc_cap, mut usdc_meta) = test_usdc::create_currency(ctx(scenario));
+
+    sui_cap.update_name(&mut sui_meta, utf8(b"Test SUI"));
+    usdc_cap.update_name(&mut usdc_meta, utf8(b"Test USDC"));
+
+    sui_cap.update_symbol(&mut sui_meta, ascii::string(b"TEST_SUI"));
+    usdc_cap.update_symbol(&mut usdc_meta, ascii::string(b"TEST_USDC"));
+
+    (sui_cap, sui_meta, usdc_cap, usdc_meta)
 }

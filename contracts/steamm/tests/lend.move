@@ -2,13 +2,16 @@
 module steamm::lend_tests;
 
 use std::type_name;
-use steamm::bank::{Self, BToken};
-use steamm::cpmm;
-use steamm::dummy_hook::{Self, swap as dummy_swap};
+use steamm::dummy_quoter::swap as dummy_swap;
 use steamm::global_admin;
 use steamm::pool::minimum_liquidity;
-use steamm::registry;
-use steamm::test_utils::{COIN, reserve_args, reserve_args_2, assert_eq_approx};
+use steamm::test_utils::{
+    reserve_args,
+    reserve_args_2,
+    assert_eq_approx,
+    test_setup_cpmm,
+    test_setup_dummy_no_fees
+};
 use sui::coin;
 use sui::random;
 use sui::test_scenario::{Self, ctx};
@@ -22,9 +25,6 @@ use suilend::test_usdc::TEST_USDC;
 const ADMIN: address = @0x10;
 const POOL_CREATOR: address = @0x11;
 
-public struct Wit has drop {}
-public struct Wit2 has drop {}
-
 // - Deposits liquidity with lending on coin A
 // - Checks btoken reserves and funds in bank before rebalancing
 // - Checks btoken reserves and funds in bank after rebalancing
@@ -32,24 +32,19 @@ public struct Wit2 has drop {}
 fun test_simple_deposit_with_lending_a() {
     let mut scenario = test_scenario::begin(ADMIN);
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
-
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend::lending_market_tests::setup(
         reserve_args(&mut scenario),
         &mut scenario,
     ).destruct_state();
+
     // Create amm bank
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
+    let (mut pool, mut bank_a, mut bank_b) = test_setup_cpmm(100, 0);
 
-    let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(
-        &mut registry,
-        ctx(&mut scenario),
-    );
-    let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
     bank_a.mock_min_token_block_size(10);
     bank_b.mock_min_token_block_size(10);
 
-    bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
+    bank_a.init_lending(
         &global_admin,
         &mut lending_market,
         8_000, // utilisation_bps
@@ -61,20 +56,9 @@ fun test_simple_deposit_with_lending_a() {
     test_scenario::next_tx(&mut scenario, POOL_CREATOR);
     let ctx = ctx(&mut scenario);
 
-    let (mut pool, pool_cap) = cpmm::new<
-        BToken<LENDING_MARKET, TEST_USDC>,
-        BToken<LENDING_MARKET, COIN>,
-        Wit,
-    >(
-        Wit {},
-        &mut registry,
-        100, // admin fees BPS
-        ctx,
-    );
-
     // Deposit funds in AMM Pool
     let mut coin_a = coin::mint_for_testing<TEST_USDC>(500_000, ctx);
-    let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
+    let mut coin_b = coin::mint_for_testing<TEST_SUI>(500_000, ctx);
 
     let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 500_000, &clock, ctx);
     let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 500_000, &clock, ctx);
@@ -132,9 +116,7 @@ fun test_simple_deposit_with_lending_a() {
     destroy(bank_a);
     destroy(bank_b);
     destroy(lp_coins);
-    destroy(registry);
     destroy(pool);
-    destroy(pool_cap);
     destroy(global_admin);
     destroy(lending_market);
     destroy(lend_cap);
@@ -156,16 +138,11 @@ fun test_swap_with_lending_without_touching_lending_market() {
     // Create amm bank
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
-    let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(
-        &mut registry,
-        ctx(&mut scenario),
-    );
-    let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
+    let (mut pool, mut bank_a, mut bank_b) = test_setup_cpmm(100, 0);
     bank_a.mock_min_token_block_size(10);
     bank_b.mock_min_token_block_size(10);
 
-    bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
+    bank_a.init_lending(
         &global_admin,
         &mut lending_market,
         8_000, // utilisation_bps
@@ -177,20 +154,9 @@ fun test_swap_with_lending_without_touching_lending_market() {
     test_scenario::next_tx(&mut scenario, POOL_CREATOR);
     let ctx = ctx(&mut scenario);
 
-    let (mut pool, pool_cap) = cpmm::new<
-        BToken<LENDING_MARKET, TEST_USDC>,
-        BToken<LENDING_MARKET, COIN>,
-        Wit,
-    >(
-        Wit {},
-        &mut registry,
-        100, // admin fees BPS
-        ctx,
-    );
-
     // Deposit funds in AMM Pool
     let mut coin_a = coin::mint_for_testing<TEST_USDC>(500_000, ctx);
-    let mut coin_b = coin::mint_for_testing<COIN>(500_000, ctx);
+    let mut coin_b = coin::mint_for_testing<TEST_SUI>(500_000, ctx);
 
     let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 500_000, &clock, ctx);
     let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 500_000, &clock, ctx);
@@ -262,9 +228,7 @@ fun test_swap_with_lending_without_touching_lending_market() {
     destroy(btoken_a);
     destroy(btoken_b);
     destroy(lp_coins);
-    destroy(registry);
     destroy(pool);
-    destroy(pool_cap);
     destroy(global_admin);
     destroy(lending_market);
     destroy(lend_cap);
@@ -290,16 +254,11 @@ fun test_simple_deposit_with_lending_ab() {
     // Create amm bank
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
-    let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(
-        &mut registry,
-        ctx(&mut scenario),
-    );
-    let mut bank_b = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
+    let (mut pool, mut bank_a, mut bank_b) = test_setup_cpmm(100, 0);
     bank_a.mock_min_token_block_size(10);
     bank_b.mock_min_token_block_size(10);
 
-    bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
+    bank_a.init_lending(
         &global_admin,
         &mut lending_market,
         8_000, // utilisation_bps
@@ -307,7 +266,7 @@ fun test_simple_deposit_with_lending_ab() {
         ctx(&mut scenario),
     );
 
-    bank_b.init_lending<LENDING_MARKET, TEST_SUI>(
+    bank_b.init_lending(
         &global_admin,
         &mut lending_market,
         8_000, // utilisation_bps
@@ -318,17 +277,6 @@ fun test_simple_deposit_with_lending_ab() {
     // Init Pool
     test_scenario::next_tx(&mut scenario, POOL_CREATOR);
     let ctx = ctx(&mut scenario);
-
-    let (mut pool, pool_cap) = cpmm::new<
-        BToken<LENDING_MARKET, TEST_USDC>,
-        BToken<LENDING_MARKET, TEST_SUI>,
-        Wit,
-    >(
-        Wit {},
-        &mut registry,
-        100, // admin fees BPS
-        ctx,
-    );
 
     // Deposit funds in AMM Pool
     let mut coin_a = coin::mint_for_testing<TEST_USDC>(500_000, ctx);
@@ -390,9 +338,7 @@ fun test_simple_deposit_with_lending_ab() {
     destroy(btoken_a);
     destroy(btoken_b);
     destroy(lp_coins);
-    destroy(registry);
     destroy(pool);
-    destroy(pool_cap);
     destroy(global_admin);
     destroy(lending_market);
     destroy(lend_cap);
@@ -415,16 +361,11 @@ fun test_swap_with_lending_within_utilization_range() {
     // Create amm bank
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
-    let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(
-        &mut registry,
-        ctx(&mut scenario),
-    );
-    let mut bank_b = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
+    let (mut pool, mut bank_a, mut bank_b) = test_setup_cpmm(100, 0);
     bank_a.mock_min_token_block_size(10);
     bank_b.mock_min_token_block_size(10);
 
-    bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
+    bank_a.init_lending(
         &global_admin,
         &mut lending_market,
         8_000, // utilisation_bps
@@ -432,7 +373,7 @@ fun test_swap_with_lending_within_utilization_range() {
         ctx(&mut scenario),
     );
 
-    bank_b.init_lending<LENDING_MARKET, TEST_SUI>(
+    bank_b.init_lending(
         &global_admin,
         &mut lending_market,
         8_000, // utilisation_bps
@@ -443,17 +384,6 @@ fun test_swap_with_lending_within_utilization_range() {
     // Init Pool
     test_scenario::next_tx(&mut scenario, POOL_CREATOR);
     let ctx = ctx(&mut scenario);
-
-    let (mut pool, pool_cap) = cpmm::new<
-        BToken<LENDING_MARKET, TEST_USDC>,
-        BToken<LENDING_MARKET, TEST_SUI>,
-        Wit,
-    >(
-        Wit {},
-        &mut registry,
-        100, // admin fees BPS
-        ctx,
-    );
 
     // Deposit funds in AMM Pool
     let mut coin_a = coin::mint_for_testing<TEST_USDC>(500_000, ctx);
@@ -597,9 +527,7 @@ fun test_swap_with_lending_within_utilization_range() {
     destroy(btoken_a);
     destroy(coin_b);
     destroy(lp_coins);
-    destroy(registry);
     destroy(pool);
-    destroy(pool_cap);
     destroy(global_admin);
     destroy(lending_market);
     destroy(lend_cap);
@@ -622,16 +550,11 @@ fun test_swap_with_lending_beyond_utilization_range() {
     // Create amm bank
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
-    let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(
-        &mut registry,
-        ctx(&mut scenario),
-    );
-    let mut bank_b = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
+    let (mut pool, mut bank_a, mut bank_b) = test_setup_cpmm(100, 0);
     bank_a.mock_min_token_block_size(10);
     bank_b.mock_min_token_block_size(10);
 
-    bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
+    bank_a.init_lending(
         &global_admin,
         &mut lending_market,
         8_000, // utilisation_bps
@@ -639,7 +562,7 @@ fun test_swap_with_lending_beyond_utilization_range() {
         ctx(&mut scenario),
     );
 
-    bank_b.init_lending<LENDING_MARKET, TEST_SUI>(
+    bank_b.init_lending(
         &global_admin,
         &mut lending_market,
         8_000, // utilisation_bps
@@ -650,17 +573,6 @@ fun test_swap_with_lending_beyond_utilization_range() {
     // Init Pool
     test_scenario::next_tx(&mut scenario, POOL_CREATOR);
     let ctx = ctx(&mut scenario);
-
-    let (mut pool, pool_cap) = cpmm::new<
-        BToken<LENDING_MARKET, TEST_USDC>,
-        BToken<LENDING_MARKET, TEST_SUI>,
-        Wit,
-    >(
-        Wit {},
-        &mut registry,
-        100, // admin fees BPS
-        ctx,
-    );
 
     // Deposit funds in AMM Pool
     let mut coin_a = coin::mint_for_testing<TEST_USDC>(500_000, ctx);
@@ -801,9 +713,7 @@ fun test_swap_with_lending_beyond_utilization_range() {
     destroy(btoken_a);
     destroy(coin_b);
     destroy(lp_coins);
-    destroy(registry);
     destroy(pool);
-    destroy(pool_cap);
     destroy(global_admin);
     destroy(lending_market);
     destroy(lend_cap);
@@ -819,8 +729,6 @@ fun test_swap_with_lending_beyond_utilization_range() {
 fun test_deposit_with_lending_all_scenarios() {
     let mut scenario = test_scenario::begin(ADMIN);
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
-
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
         &mut scenario,
@@ -828,15 +736,11 @@ fun test_deposit_with_lending_all_scenarios() {
     // Create amm bank
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-    let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(
-        &mut registry,
-        ctx(&mut scenario),
-    );
-    let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
+    let (mut pool, mut bank_a, mut bank_b) = test_setup_dummy_no_fees();
     bank_a.mock_min_token_block_size(10);
     bank_b.mock_min_token_block_size(10);
 
-    bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
+    bank_a.init_lending(
         &global_admin,
         &mut lending_market,
         8_000, // utilisation_bps
@@ -848,20 +752,9 @@ fun test_deposit_with_lending_all_scenarios() {
     test_scenario::next_tx(&mut scenario, POOL_CREATOR);
     let ctx = ctx(&mut scenario);
 
-    let (mut pool, pool_cap) = dummy_hook::new_no_fees<
-        BToken<LENDING_MARKET, TEST_USDC>,
-        BToken<LENDING_MARKET, COIN>,
-        Wit,
-    >(
-        Wit {},
-        &mut registry,
-        0, // admin fees BPS
-        ctx,
-    );
-
     // Deposit funds in AMM Pool
     let mut coin_a = coin::mint_for_testing<TEST_USDC>(100_000, ctx);
-    let mut coin_b = coin::mint_for_testing<COIN>(100_000, ctx);
+    let mut coin_b = coin::mint_for_testing<TEST_SUI>(100_000, ctx);
 
     let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 100_000, &clock, ctx);
     let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 100_000, &clock, ctx);
@@ -914,7 +807,7 @@ fun test_deposit_with_lending_all_scenarios() {
 
     // Deposit funds in AMM Pool - below buffer - does not lend
     let mut coin_a = coin::mint_for_testing<TEST_USDC>(5_000, ctx);
-    let mut coin_b = coin::mint_for_testing<COIN>(5_000, ctx);
+    let mut coin_b = coin::mint_for_testing<TEST_SUI>(5_000, ctx);
 
     let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 5_000, &clock, ctx);
     let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 5_000, &clock, ctx);
@@ -959,7 +852,7 @@ fun test_deposit_with_lending_all_scenarios() {
 
     // Deposit funds in AMM Pool - above buffer - lend
     let mut coin_a = coin::mint_for_testing<TEST_USDC>(5_000_000, ctx);
-    let mut coin_b = coin::mint_for_testing<COIN>(5_000_000, ctx);
+    let mut coin_b = coin::mint_for_testing<TEST_SUI>(5_000_000, ctx);
 
     let mut btoken_a = bank_a.mint_btokens(
         &mut lending_market,
@@ -1014,9 +907,7 @@ fun test_deposit_with_lending_all_scenarios() {
 
     destroy(bank_a);
     destroy(bank_b);
-    destroy(registry);
     destroy(pool);
-    destroy(pool_cap);
     destroy(global_admin);
     destroy(lending_market);
     destroy(lend_cap);
@@ -1030,8 +921,6 @@ fun test_deposit_with_lending_all_scenarios() {
 fun test_deposit_with_lending_proptest() {
     let mut scenario = test_scenario::begin(ADMIN);
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
-
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
         &mut scenario,
@@ -1039,15 +928,11 @@ fun test_deposit_with_lending_proptest() {
     // Create amm bank
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-    let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(
-        &mut registry,
-        ctx(&mut scenario),
-    );
-    let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
+    let (mut pool, mut bank_a, mut bank_b) = test_setup_dummy_no_fees();
     bank_a.mock_min_token_block_size(10);
     bank_b.mock_min_token_block_size(10);
 
-    bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
+    bank_a.init_lending(
         &global_admin,
         &mut lending_market,
         8_000, // utilisation_bps
@@ -1059,20 +944,9 @@ fun test_deposit_with_lending_proptest() {
     test_scenario::next_tx(&mut scenario, POOL_CREATOR);
     let ctx = ctx(&mut scenario);
 
-    let (mut pool, pool_cap) = dummy_hook::new_no_fees<
-        BToken<LENDING_MARKET, TEST_USDC>,
-        BToken<LENDING_MARKET, COIN>,
-        Wit,
-    >(
-        Wit {},
-        &mut registry,
-        0, // admin fees BPS
-        ctx,
-    );
-
     // Deposit funds in AMM Pool
     let mut coin_a = coin::mint_for_testing<TEST_USDC>(100_000_000_00_000, ctx);
-    let mut coin_b = coin::mint_for_testing<COIN>(100_000_000_00_000, ctx);
+    let mut coin_b = coin::mint_for_testing<TEST_SUI>(100_000_000_00_000, ctx);
 
     let mut btoken_a = bank_a.mint_btokens(
         &mut lending_market,
@@ -1121,10 +995,12 @@ fun test_deposit_with_lending_proptest() {
     let mut deposits = 1_000;
 
     while (deposits > 0) {
+        test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+        let ctx = ctx(&mut scenario);
         let amount_in = rng.generate_u64_in_range(1_000, 100_000);
 
         let mut coin_a = coin::mint_for_testing<TEST_USDC>(amount_in, ctx);
-        let mut coin_b = coin::mint_for_testing<COIN>(amount_in, ctx);
+        let mut coin_b = coin::mint_for_testing<TEST_SUI>(amount_in, ctx);
 
         let mut btoken_a = bank_a.mint_btokens(
             &mut lending_market,
@@ -1177,9 +1053,7 @@ fun test_deposit_with_lending_proptest() {
 
     destroy(bank_a);
     destroy(bank_b);
-    destroy(registry);
     destroy(pool);
-    destroy(pool_cap);
     destroy(global_admin);
     destroy(lending_market);
     destroy(lend_cap);
@@ -1193,8 +1067,6 @@ fun test_deposit_with_lending_proptest() {
 fun test_lend_redeem_with_lending_within_utilization() {
     let mut scenario = test_scenario::begin(ADMIN);
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
-
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
         &mut scenario,
@@ -1202,15 +1074,11 @@ fun test_lend_redeem_with_lending_within_utilization() {
     // Create amm bank
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-    let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(
-        &mut registry,
-        ctx(&mut scenario),
-    );
-    let mut bank_b = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
+    let (mut pool, mut bank_a, mut bank_b) = test_setup_dummy_no_fees();
     bank_a.mock_min_token_block_size(10);
     bank_b.mock_min_token_block_size(10);
 
-    bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
+    bank_a.init_lending(
         &global_admin,
         &mut lending_market,
         8_000, // utilisation_bps
@@ -1222,20 +1090,9 @@ fun test_lend_redeem_with_lending_within_utilization() {
     test_scenario::next_tx(&mut scenario, POOL_CREATOR);
     let ctx = ctx(&mut scenario);
 
-    let (mut pool, pool_cap) = dummy_hook::new_no_fees<
-        BToken<LENDING_MARKET, TEST_USDC>,
-        BToken<LENDING_MARKET, COIN>,
-        Wit,
-    >(
-        Wit {},
-        &mut registry,
-        0, // admin fees BPS
-        ctx,
-    );
-
     // Deposit funds in AMM Pool
     let mut coin_a = coin::mint_for_testing<TEST_USDC>(100_000, ctx);
-    let mut coin_b = coin::mint_for_testing<COIN>(100_000, ctx);
+    let mut coin_b = coin::mint_for_testing<TEST_SUI>(100_000, ctx);
 
     let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 100_000, &clock, ctx);
     let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 100_000, &clock, ctx);
@@ -1337,9 +1194,7 @@ fun test_lend_redeem_with_lending_within_utilization() {
     destroy(lp_coins);
     destroy(bank_a);
     destroy(bank_b);
-    destroy(registry);
     destroy(pool);
-    destroy(pool_cap);
     destroy(global_admin);
     destroy(lending_market);
     destroy(lend_cap);
@@ -1353,8 +1208,6 @@ fun test_lend_redeem_with_lending_within_utilization() {
 fun test_lend_amm_swap_small_swap_scenario_no_rebalance() {
     let mut scenario = test_scenario::begin(ADMIN);
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
-
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
         &mut scenario,
@@ -1362,22 +1215,18 @@ fun test_lend_amm_swap_small_swap_scenario_no_rebalance() {
     // Create amm bank
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-    let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(
-        &mut registry,
-        ctx(&mut scenario),
-    );
-    let mut bank_b = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
+    let (mut pool, mut bank_a, mut bank_b) = test_setup_dummy_no_fees();
     bank_a.mock_min_token_block_size(10);
     bank_b.mock_min_token_block_size(10);
 
-    bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
+    bank_a.init_lending(
         &global_admin,
         &mut lending_market,
         8_000, // utilisation_bps
         500, // utilisation_bps
         ctx(&mut scenario),
     );
-    bank_b.init_lending<LENDING_MARKET, TEST_SUI>(
+    bank_b.init_lending(
         &global_admin,
         &mut lending_market,
         8_000, // utilisation_bps
@@ -1388,17 +1237,6 @@ fun test_lend_amm_swap_small_swap_scenario_no_rebalance() {
     // Init Pool
     test_scenario::next_tx(&mut scenario, POOL_CREATOR);
     let ctx = ctx(&mut scenario);
-
-    let (mut pool, pool_cap) = dummy_hook::new_no_fees<
-        BToken<LENDING_MARKET, TEST_USDC>,
-        BToken<LENDING_MARKET, TEST_SUI>,
-        Wit,
-    >(
-        Wit {},
-        &mut registry,
-        0, // admin fees BPS
-        ctx,
-    );
 
     // Deposit funds in AMM Pool
     let mut coin_a = coin::mint_for_testing<TEST_USDC>(100_000, ctx);
@@ -1520,9 +1358,7 @@ fun test_lend_amm_swap_small_swap_scenario_no_rebalance() {
     destroy(lp_coins);
     destroy(bank_a);
     destroy(bank_b);
-    destroy(registry);
     destroy(pool);
-    destroy(pool_cap);
     destroy(global_admin);
     destroy(lending_market);
     destroy(lend_cap);
@@ -1536,8 +1372,6 @@ fun test_lend_amm_swap_small_swap_scenario_no_rebalance() {
 fun test_lend_amm_swap_medium_swap_scenario() {
     let mut scenario = test_scenario::begin(ADMIN);
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
-
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
         &mut scenario,
@@ -1545,22 +1379,18 @@ fun test_lend_amm_swap_medium_swap_scenario() {
     // Create amm bank
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-    let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(
-        &mut registry,
-        ctx(&mut scenario),
-    );
-    let mut bank_b = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
+    let (mut pool, mut bank_a, mut bank_b) = test_setup_dummy_no_fees();
     bank_a.mock_min_token_block_size(10);
     bank_b.mock_min_token_block_size(10);
 
-    bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
+    bank_a.init_lending(
         &global_admin,
         &mut lending_market,
         8_000, // utilisation_bps
         500, // utilisation_bps
         ctx(&mut scenario),
     );
-    bank_b.init_lending<LENDING_MARKET, TEST_SUI>(
+    bank_b.init_lending(
         &global_admin,
         &mut lending_market,
         8_000, // utilisation_bps
@@ -1571,17 +1401,6 @@ fun test_lend_amm_swap_medium_swap_scenario() {
     // Init Pool
     test_scenario::next_tx(&mut scenario, POOL_CREATOR);
     let ctx = ctx(&mut scenario);
-
-    let (mut pool, pool_cap) = dummy_hook::new_no_fees<
-        BToken<LENDING_MARKET, TEST_USDC>,
-        BToken<LENDING_MARKET, TEST_SUI>,
-        Wit,
-    >(
-        Wit {},
-        &mut registry,
-        0, // admin fees BPS
-        ctx,
-    );
 
     // Deposit funds in AMM Pool
     let mut coin_a = coin::mint_for_testing<TEST_USDC>(100_000, ctx);
@@ -1702,9 +1521,7 @@ fun test_lend_amm_swap_medium_swap_scenario() {
     destroy(lp_coins);
     destroy(bank_a);
     destroy(bank_b);
-    destroy(registry);
     destroy(pool);
-    destroy(pool_cap);
     destroy(global_admin);
     destroy(lending_market);
     destroy(lend_cap);
@@ -1718,8 +1535,6 @@ fun test_lend_amm_swap_medium_swap_scenario() {
 fun test_lend_amm_swap_large_swap_scenario() {
     let mut scenario = test_scenario::begin(ADMIN);
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
-
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
         &mut scenario,
@@ -1727,22 +1542,18 @@ fun test_lend_amm_swap_large_swap_scenario() {
     // Create amm bank
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-    let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(
-        &mut registry,
-        ctx(&mut scenario),
-    );
-    let mut bank_b = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
+    let (mut pool, mut bank_a, mut bank_b) = test_setup_dummy_no_fees();
     bank_a.mock_min_token_block_size(10);
     bank_b.mock_min_token_block_size(10);
 
-    bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
+    bank_a.init_lending(
         &global_admin,
         &mut lending_market,
         8_000, // utilisation_bps
         500, // utilisation_bps
         ctx(&mut scenario),
     );
-    bank_b.init_lending<LENDING_MARKET, TEST_SUI>(
+    bank_b.init_lending(
         &global_admin,
         &mut lending_market,
         8_000, // utilisation_bps
@@ -1753,17 +1564,6 @@ fun test_lend_amm_swap_large_swap_scenario() {
     // Init Pool
     test_scenario::next_tx(&mut scenario, POOL_CREATOR);
     let ctx = ctx(&mut scenario);
-
-    let (mut pool, pool_cap) = dummy_hook::new_no_fees<
-        BToken<LENDING_MARKET, TEST_USDC>,
-        BToken<LENDING_MARKET, TEST_SUI>,
-        Wit,
-    >(
-        Wit {},
-        &mut registry,
-        0, // admin fees BPS
-        ctx,
-    );
 
     // Deposit funds in AMM Pool
     let mut coin_a = coin::mint_for_testing<TEST_USDC>(100_000, ctx);
@@ -1885,9 +1685,7 @@ fun test_lend_amm_swap_large_swap_scenario() {
     destroy(lp_coins);
     destroy(bank_a);
     destroy(bank_b);
-    destroy(registry);
     destroy(pool);
-    destroy(pool_cap);
     destroy(global_admin);
     destroy(lending_market);
     destroy(lend_cap);
@@ -1896,237 +1694,6 @@ fun test_lend_amm_swap_large_swap_scenario() {
     destroy(clock);
     test_scenario::end(scenario);
 }
-
-// #[test]
-// #[expected_failure(abort_code = bank::EInvalidCTokenRatio)]
-// public fun test_fail_invalid_ctoken_ratio_1() {
-//     let owner = @0x26;
-//     let mut scenario = test_scenario::begin(owner);
-//     let (mut clock, owner_cap, mut lending_market, mut prices, type_to_index) = suilend_setup(reserve_args_2(&mut scenario), &mut scenario).destruct_state();
-
-//     let mut registry = registry::init_for_testing(ctx(&mut scenario));
-//     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
-//     let mut bank_sui = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
-//     bank_sui.mock_min_token_block_size(10);
-
-//     bank_sui.deposit_for_testing(1_000_000);
-
-//     bank_sui.init_lending<LENDING_MARKET, TEST_SUI>(
-//         &global_admin,
-//         &mut lending_market,
-//         8_000, // utilisation_bps
-//         1_000, // utilisation_bps
-//         ctx(&mut scenario),
-//     );
-
-//     bank_sui.rebalance(
-//         &mut lending_market,
-//         &clock,
-//         ctx(&mut scenario),
-//     );
-
-//     clock::set_for_testing(&mut clock, 1 * 1000);
-
-//     // set reserve parameters and prices
-//     mock_pyth::update_price<TEST_USDC>(&mut prices, 1, 0, &clock); // $1
-//     mock_pyth::update_price<TEST_SUI>(&mut prices, 1, 1, &clock); // $10
-
-//     // create obligation
-//     let obligation_owner_cap = lending_market::create_obligation(
-//         &mut lending_market,
-//         test_scenario::ctx(&mut scenario)
-//     );
-
-//     let coins = coin::mint_for_testing<TEST_USDC>(100 * 1_000_000, test_scenario::ctx(&mut scenario));
-//     let ctokens = lending_market::deposit_liquidity_and_mint_ctokens<LENDING_MARKET, TEST_USDC>(
-//         &mut lending_market,
-//         *bag::borrow(&type_to_index, type_name::get<TEST_USDC>()),
-//         &clock,
-//         coins,
-//         test_scenario::ctx(&mut scenario)
-//     );
-//     lending_market::deposit_ctokens_into_obligation<LENDING_MARKET, TEST_USDC>(
-//         &mut lending_market,
-//         *bag::borrow(&type_to_index, type_name::get<TEST_USDC>()),
-//         &obligation_owner_cap,
-//         &clock,
-//         ctokens,
-//         test_scenario::ctx(&mut scenario)
-//     );
-
-//     lending_market::refresh_reserve_price<LENDING_MARKET>(
-//         &mut lending_market,
-//         *bag::borrow(&type_to_index, type_name::get<TEST_USDC>()),
-//         &clock,
-//         mock_pyth::get_price_obj<TEST_USDC>(&prices)
-//     );
-//     lending_market::refresh_reserve_price<LENDING_MARKET>(
-//         &mut lending_market,
-//         *bag::borrow(&type_to_index, type_name::get<TEST_SUI>()),
-//         &clock,
-//         mock_pyth::get_price_obj<TEST_SUI>(&prices)
-//     );
-
-//     let sui = lending_market::borrow<LENDING_MARKET, TEST_SUI>(
-//         &mut lending_market,
-//         *bag::borrow(&type_to_index, type_name::get<TEST_SUI>()),
-//         &obligation_owner_cap,
-//         &clock,
-//         5 * 1_000_000_000,
-//         test_scenario::ctx(&mut scenario)
-//     );
-//     test_utils::destroy(sui);
-
-//     mock_pyth::update_price<TEST_SUI>(&mut prices, 1, 2, &clock); // $10
-//     lending_market::refresh_reserve_price<LENDING_MARKET>(
-//         &mut lending_market,
-//         *bag::borrow(&type_to_index, type_name::get<TEST_SUI>()),
-//         &clock,
-//         mock_pyth::get_price_obj<TEST_SUI>(&prices)
-//     );
-
-//     // liquidate the obligation
-//     let mut sui = coin::mint_for_testing<TEST_SUI>(1 * 1_000_000_000, test_scenario::ctx(&mut scenario));
-//     let (usdc, _exemption) = lending_market::liquidate<LENDING_MARKET, TEST_SUI, TEST_USDC>(
-//         &mut lending_market,
-//         lending_market::obligation_id(&obligation_owner_cap),
-//         *bag::borrow(&type_to_index, type_name::get<TEST_SUI>()),
-//         *bag::borrow(&type_to_index, type_name::get<TEST_USDC>()),
-//         &clock,
-//         &mut sui,
-//         test_scenario::ctx(&mut scenario)
-//     );
-
-//     lending_market::forgive<LENDING_MARKET, TEST_SUI>(
-//         &owner_cap,
-//         &mut lending_market,
-//         *bag::borrow(&type_to_index, type_name::get<TEST_SUI>()),
-//         lending_market::obligation_id(&obligation_owner_cap),
-//         &clock,
-//         1_000_000_000 + 10_000,
-//     );
-
-//     balance::destroy_for_testing(
-//         bank_sui.withdraw_for_testing(150000)
-//     );
-
-//     bank_sui.rebalance(
-//         &mut lending_market,
-//         &clock,
-//         ctx(&mut scenario),
-//     );
-
-//     test_utils::destroy(usdc);
-//     test_utils::destroy(sui);
-//     test_utils::destroy(obligation_owner_cap);
-//     test_utils::destroy(owner_cap);
-//     test_utils::destroy(lending_market);
-//     test_utils::destroy(clock);
-//     test_utils::destroy(prices);
-//     test_utils::destroy(type_to_index);
-//     test_utils::destroy(bank_sui);
-//     test_utils::destroy(global_admin);
-//     test_utils::destroy(registry);
-//     test_scenario::end(scenario);
-// }
-
-// #[test]
-// #[expected_failure(abort_code = bank::EInvalidCTokenRatio)]
-// public fun test_fail_invalid_ctoken_ratio_2() {
-//     let owner = @0x26;
-//     let mut scenario = test_scenario::begin(owner);
-//     let (mut clock, owner_cap, mut lending_market, mut prices, type_to_index) = suilend_setup(reserve_args_2(&mut scenario), &mut scenario).destruct_state();
-
-//     let mut registry = registry::init_for_testing(ctx(&mut scenario));
-//     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
-//     let mut bank_sui = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
-//     bank_sui.mock_min_token_block_size(10);
-
-//     clock::set_for_testing(&mut clock, 1 * 1000);
-
-//     // set reserve parameters and prices
-//     mock_pyth::update_price<TEST_USDC>(&mut prices, 1, 0, &clock); // $1
-//     mock_pyth::update_price<TEST_SUI>(&mut prices, 1, 1, &clock); // $10
-
-//     // create obligation
-//     let obligation_owner_cap = lending_market::create_obligation(
-//         &mut lending_market,
-//         test_scenario::ctx(&mut scenario)
-//     );
-
-//     let coins = coin::mint_for_testing<TEST_SUI>(100 * 1_000_000, test_scenario::ctx(&mut scenario));
-//     let ctokens = lending_market::deposit_liquidity_and_mint_ctokens<LENDING_MARKET, TEST_SUI>(
-//         &mut lending_market,
-//         *bag::borrow(&type_to_index, type_name::get<TEST_SUI>()),
-//         &clock,
-//         coins,
-//         test_scenario::ctx(&mut scenario)
-//     );
-
-//     lending_market::refresh_reserve_price<LENDING_MARKET>(
-//         &mut lending_market,
-//         *bag::borrow(&type_to_index, type_name::get<TEST_USDC>()),
-//         &clock,
-//         mock_pyth::get_price_obj<TEST_USDC>(&prices)
-//     );
-//     lending_market::refresh_reserve_price<LENDING_MARKET>(
-//         &mut lending_market,
-//         *bag::borrow(&type_to_index, type_name::get<TEST_SUI>()),
-//         &clock,
-//         mock_pyth::get_price_obj<TEST_SUI>(&prices)
-//     );
-
-//     let idx = lending_market.reserve_array_index<LENDING_MARKET, TEST_SUI>();
-//     let reserves = lending_market.reserves_mut_for_testing();
-//     let reserve = &mut reserves[idx];
-//     // This is to change the underlying token ratio
-//     reserve.burn_ctokens_for_testing(
-//         balance::create_for_testing<CToken<LENDING_MARKET, TEST_SUI>>(52_000_000_000)
-//     );
-
-//     // Init bank lending
-//     bank_sui.init_lending<LENDING_MARKET, TEST_SUI>(
-//         &global_admin,
-//         &mut lending_market,
-//         10_000, // utilisation_bps
-//         0, // utilisation_bps
-//         ctx(&mut scenario),
-//     );
-
-//     // Deposit
-//     bank_sui.deposit_for_testing(30);
-
-//     bank_sui.rebalance(
-//         &mut lending_market,
-//         &clock,
-//         ctx(&mut scenario),
-//     );
-
-//     bank_sui.set_utilisation_bps(
-//         &global_admin,
-//         0, // utilisation_bps
-//         0, // utilisation_bps
-//     );
-
-//     // Withdraw
-//     bank_sui.rebalance(
-//         &mut lending_market,
-//         &clock,
-//         ctx(&mut scenario),
-//     );
-
-//     test_utils::destroy(obligation_owner_cap);
-//     test_utils::destroy(owner_cap);
-//     test_utils::destroy(lending_market);
-//     test_utils::destroy(clock);
-//     test_utils::destroy(prices);
-//     test_utils::destroy(type_to_index);
-//     test_utils::destroy(bank_sui);
-//     test_utils::destroy(global_admin);
-//     test_utils::destroy(registry);
-//     test_utils::destroy(ctokens);
-//     test_scenario::end(scenario);
-// }
 
 #[test]
 public fun test_no_op_below_min_deploy_amount() {
@@ -2137,16 +1704,12 @@ public fun test_no_op_below_min_deploy_amount() {
         &mut scenario,
     ).destruct_state();
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
-    let mut bank_sui = bank::create_bank<LENDING_MARKET, TEST_SUI>(
-        &mut registry,
-        ctx(&mut scenario),
-    );
+    let (pool, bank_usdc, mut bank_sui) = test_setup_dummy_no_fees();
     bank_sui.mock_min_token_block_size(10);
 
     bank_sui.deposit_for_testing(1);
-    bank_sui.init_lending<LENDING_MARKET, TEST_SUI>(
+    bank_sui.init_lending(
         &global_admin,
         &mut lending_market,
         10_000, // utilisation_bps
@@ -2172,14 +1735,15 @@ public fun test_no_op_below_min_deploy_amount() {
 
     assert!(effective_utilisation_bps_before == effective_utilisation_bps_after, 0);
 
+    test_utils::destroy(pool);
     test_utils::destroy(owner_cap);
     test_utils::destroy(lending_market);
     test_utils::destroy(clock);
     test_utils::destroy(prices);
     test_utils::destroy(type_to_index);
     test_utils::destroy(bank_sui);
+    test_utils::destroy(bank_usdc);
     test_utils::destroy(global_admin);
-    test_utils::destroy(registry);
     test_scenario::end(scenario);
 }
 
@@ -2187,7 +1751,6 @@ public fun test_no_op_below_min_deploy_amount() {
 public fun test_interest_distribution_one_lp() {
     let mut scenario = test_scenario::begin(ADMIN);
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
     let (
         mut clock,
         lend_cap,
@@ -2201,15 +1764,11 @@ public fun test_interest_distribution_one_lp() {
     clock.set_for_testing(1733093342000);
 
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
-    let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
-    let mut bank_b = bank::create_bank<LENDING_MARKET, TEST_USDC>(
-        &mut registry,
-        ctx(&mut scenario),
-    );
+    let (mut pool, mut bank_a, mut bank_b) = test_setup_dummy_no_fees();
 
     let ctx = ctx(&mut scenario);
 
-    bank_a.init_lending<LENDING_MARKET, TEST_SUI>(
+    bank_b.init_lending(
         &global_admin,
         &mut lending_market,
         10_000, // utilisation_bps
@@ -2217,25 +1776,14 @@ public fun test_interest_distribution_one_lp() {
         ctx,
     );
 
-    let (mut pool, pool_cap) = dummy_hook::new_no_fees<
-        BToken<LENDING_MARKET, TEST_SUI>,
-        BToken<LENDING_MARKET, TEST_USDC>,
-        Wit,
-    >(
-        Wit {},
-        &mut registry,
-        0, // admin fees BPS
-        ctx,
-    );
-
     pool.no_protocol_fees_for_testing();
     pool.no_redemption_fees_for_testing();
-    bank_a.mock_min_token_block_size(10);
+    bank_b.mock_min_token_block_size(10);
 
     // Deposit funds in AMM Pool
     let liquidity_amount = 3_000_010; // we add the +10 which is locked forever
-    let mut coin_a = coin::mint_for_testing<TEST_SUI>(liquidity_amount, ctx);
-    let mut coin_b = coin::mint_for_testing<TEST_USDC>(liquidity_amount, ctx);
+    let mut coin_a = coin::mint_for_testing<TEST_USDC>(liquidity_amount, ctx);
+    let mut coin_b = coin::mint_for_testing<TEST_SUI>(liquidity_amount, ctx);
 
     let mut btoken_a = bank_a.mint_btokens(
         &mut lending_market,
@@ -2255,7 +1803,7 @@ public fun test_interest_distribution_one_lp() {
     destroy(coin_a);
     destroy(coin_b);
 
-    let (lp_coins, _) = pool.deposit_liquidity(
+    let (lp_coins, deposit_result) = pool.deposit_liquidity(
         &mut btoken_a,
         &mut btoken_b,
         liquidity_amount,
@@ -2263,11 +1811,14 @@ public fun test_interest_distribution_one_lp() {
         ctx,
     );
 
-    bank_a.rebalance(
+    bank_b.rebalance(
         &mut lending_market,
         &clock,
         ctx,
     );
+
+    assert!(deposit_result.deposit_a() == 3000010, 0);
+    assert!(deposit_result.deposit_b() == 3000010, 0);
 
     test_utils::destroy(btoken_a);
     test_utils::destroy(btoken_b);
@@ -2392,11 +1943,11 @@ public fun test_interest_distribution_one_lp() {
     destroy(btoken_a);
     destroy(btoken_b);
 
-    assert_eq(coin_b.value(), 3_000_000); // No lending on so it stays the same
+    assert_eq(coin_a.value(), 3_000_000); // No lending on so it stays the same
 
     // Initial funds deposited on the lending market: 1000000
     let estimated_interest_to_lp = interest_paid * 3_000_000 / 4_000_000;
-    let actual_interest_to_lp = coin_a.value() - 3_000_000;
+    let actual_interest_to_lp = coin_b.value() - 3_000_000;
 
     assert_eq_approx!(estimated_interest_to_lp, actual_interest_to_lp, 1);
 
@@ -2409,11 +1960,9 @@ public fun test_interest_distribution_one_lp() {
     test_utils::destroy(type_to_index);
     test_utils::destroy(prices);
     test_utils::destroy(pool);
-    test_utils::destroy(pool_cap);
     test_utils::destroy(bank_a);
     test_utils::destroy(bank_b);
     test_utils::destroy(global_admin);
-    test_utils::destroy(registry);
     test_scenario::end(scenario);
 }
 
@@ -2421,7 +1970,6 @@ public fun test_interest_distribution_one_lp() {
 public fun test_interest_distribution_multiple_lps() {
     let mut scenario = test_scenario::begin(ADMIN);
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
     let (
         mut clock,
         lend_cap,
@@ -2435,15 +1983,10 @@ public fun test_interest_distribution_multiple_lps() {
     clock.set_for_testing(1733093342000);
 
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
-    let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_SUI>(&mut registry, ctx(&mut scenario));
-    let mut bank_b = bank::create_bank<LENDING_MARKET, TEST_USDC>(
-        &mut registry,
-        ctx(&mut scenario),
-    );
-
+    let (mut pool, mut bank_a, mut bank_b) = test_setup_dummy_no_fees();
     let ctx = ctx(&mut scenario);
 
-    bank_a.init_lending<LENDING_MARKET, TEST_SUI>(
+    bank_b.init_lending(
         &global_admin,
         &mut lending_market,
         10_000, // utilisation_bps
@@ -2451,25 +1994,14 @@ public fun test_interest_distribution_multiple_lps() {
         ctx,
     );
 
-    let (mut pool, pool_cap) = dummy_hook::new_no_fees<
-        BToken<LENDING_MARKET, TEST_SUI>,
-        BToken<LENDING_MARKET, TEST_USDC>,
-        Wit,
-    >(
-        Wit {},
-        &mut registry,
-        0, // admin fees BPS
-        ctx,
-    );
-
     pool.no_protocol_fees_for_testing();
     pool.no_redemption_fees_for_testing();
-    bank_a.mock_min_token_block_size(10);
+    bank_b.mock_min_token_block_size(10);
 
     // Deposit funds in AMM Pool
     let liquidity_amount = 1_500_010; // we add the +10 which is locked forever
-    let mut coin_a = coin::mint_for_testing<TEST_SUI>(liquidity_amount, ctx);
-    let mut coin_b = coin::mint_for_testing<TEST_USDC>(liquidity_amount, ctx);
+    let mut coin_a = coin::mint_for_testing<TEST_USDC>(liquidity_amount, ctx);
+    let mut coin_b = coin::mint_for_testing<TEST_SUI>(liquidity_amount, ctx);
 
     let mut btoken_a = bank_a.mint_btokens(
         &mut lending_market,
@@ -2501,8 +2033,8 @@ public fun test_interest_distribution_multiple_lps() {
     test_utils::destroy(btoken_b);
 
     let liquidity_amount = 1_500_000;
-    let mut coin_a = coin::mint_for_testing<TEST_SUI>(liquidity_amount, ctx);
-    let mut coin_b = coin::mint_for_testing<TEST_USDC>(liquidity_amount, ctx);
+    let mut coin_a = coin::mint_for_testing<TEST_USDC>(liquidity_amount, ctx);
+    let mut coin_b = coin::mint_for_testing<TEST_SUI>(liquidity_amount, ctx);
 
     let mut btoken_a = bank_a.mint_btokens(
         &mut lending_market,
@@ -2530,7 +2062,7 @@ public fun test_interest_distribution_multiple_lps() {
         ctx,
     );
 
-    bank_a.rebalance(
+    bank_b.rebalance(
         &mut lending_market,
         &clock,
         ctx,
@@ -2687,12 +2219,12 @@ public fun test_interest_distribution_multiple_lps() {
     destroy(btoken_a2);
     destroy(btoken_b2);
 
-    assert_eq(coin_b1.value(), 1_500_000); // No lending on so it stays the same
-    assert_eq(coin_b2.value(), 1_500_000); // No lending on so it stays the same
+    assert_eq(coin_a1.value(), 1_500_000); // No lending on so it stays the same
+    assert_eq(coin_a2.value(), 1_500_000); // No lending on so it stays the same
 
     // Initial funds deposited on the lending market: 1000000
     let estimated_interest_to_lp = interest_paid * 3_000_000 / 4_000_000;
-    let actual_interest_to_lp = coin_a1.value() + coin_a2.value() - 3_000_000;
+    let actual_interest_to_lp = coin_b1.value() + coin_b2.value() - 3_000_000;
 
     assert_eq_approx!(estimated_interest_to_lp, actual_interest_to_lp, 1);
 
@@ -2707,10 +2239,8 @@ public fun test_interest_distribution_multiple_lps() {
     test_utils::destroy(type_to_index);
     test_utils::destroy(prices);
     test_utils::destroy(pool);
-    test_utils::destroy(pool_cap);
     test_utils::destroy(bank_a);
     test_utils::destroy(bank_b);
     test_utils::destroy(global_admin);
-    test_utils::destroy(registry);
     test_scenario::end(scenario);
 }
