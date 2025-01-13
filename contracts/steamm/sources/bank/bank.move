@@ -38,6 +38,8 @@ const ELendingNotActive: u64 = 8;
 const ECompoundedInterestNotUpdated: u64 = 9;
 const EInsufficientBankFunds: u64 = 10;
 
+// ===== Structs =====
+
 public struct Bank<phantom P, phantom T, phantom BToken> has key {
     id: UID,
     funds_available: Balance<T>,
@@ -58,7 +60,7 @@ public struct Lending<phantom P> has store {
     obligation_cap: ObligationOwnerCap<P>,
 }
 
-// ====== Entry Functions =====
+// ====== Public Functions =====
 
 /// Creates a new bank and shares it as a shared object on-chain.
 /// The bank is initialized with zero balances and a new BToken supply.
@@ -186,28 +188,6 @@ public fun mint_btokens<P, T, BToken>(
 
     bank.funds_available.join(coin_input.into_balance());
     coin::from_balance(bank.btoken_supply.increase_supply(new_btokens), ctx)
-}
-
-fun to_btokens<P, T, BToken>(
-    bank: &Bank<P, T, BToken>,
-    lending_market: &LendingMarket<P>,
-    amount: u64,
-    clock: &Clock,
-): Decimal {
-    let (total_funds, btoken_supply) = bank.btoken_ratio(lending_market, clock);
-    // Divides by btoken ratio
-    decimal::from(amount).mul(btoken_supply).div(total_funds)
-}
-
-fun from_btokens<P, T, BToken>(
-    bank: &Bank<P, T, BToken>,
-    lending_market: &LendingMarket<P>,
-    btoken_amount: u64,
-    clock: &Clock,
-): Decimal {
-    let (total_funds, btoken_supply) = bank.btoken_ratio(lending_market, clock);
-    // Multiplies by btoken ratio
-    decimal::from(btoken_amount).mul(total_funds).div(btoken_supply)
 }
 
 /// Burns bank tokens (BTokens) to withdraw the underlying tokens from the bank.
@@ -427,7 +407,72 @@ public(package) fun prepare_for_pending_withdraw<P, T, BToken>(
     )
 }
 
+public(package) fun assert_btoken_type<T, BToken>() {
+    let type_reflection_t = get_type_reflection<T>();
+    let type_reflection_btoken = get_type_reflection<BToken>();
+
+    let mut expected_btoken_type = string::utf8(b"B_");
+    string::append(&mut expected_btoken_type, type_reflection_t);
+    assert!(type_reflection_btoken == expected_btoken_type, EBTokenTypeInvalid);
+}
+
+public(package) fun total_funds<P, T, BToken>(
+    bank: &Bank<P, T, BToken>,
+    lending_market: &LendingMarket<P>,
+    clock: &Clock,
+): Decimal {
+    let funds_deployed = bank.funds_deployed(lending_market, clock);
+    let total_funds = funds_deployed.add(decimal::from(bank.funds_available.value()));
+
+    total_funds
+}
+
+public(package) fun funds_deployed<P, T, BToken>(
+    bank: &Bank<P, T, BToken>,
+    lending_market: &LendingMarket<P>,
+    clock: &Clock,
+): Decimal {
+    // FundsDeployed =  cTokens * Total Supply of Funds / cToken Supply
+    if (bank.lending.is_some()) {
+        let reserve = vector::borrow(lending_market.reserves(), bank.reserve_array_index());
+        let interest_last_update_timestamp_s = reserve.interest_last_update_timestamp_s();
+
+        assert!(
+            interest_last_update_timestamp_s == clock.timestamp_ms() / 1000,
+            ECompoundedInterestNotUpdated,
+        );
+
+        let ctoken_ratio = reserve.ctoken_ratio();
+
+        decimal::from(bank.lending.borrow().ctokens).mul(ctoken_ratio)
+    } else {
+        decimal::from(0)
+    }
+}
+
 // ====== Private Functions =====
+
+fun to_btokens<P, T, BToken>(
+    bank: &Bank<P, T, BToken>,
+    lending_market: &LendingMarket<P>,
+    amount: u64,
+    clock: &Clock,
+): Decimal {
+    let (total_funds, btoken_supply) = bank.btoken_ratio(lending_market, clock);
+    // Divides by btoken ratio
+    decimal::from(amount).mul(btoken_supply).div(total_funds)
+}
+
+fun from_btokens<P, T, BToken>(
+    bank: &Bank<P, T, BToken>,
+    lending_market: &LendingMarket<P>,
+    btoken_amount: u64,
+    clock: &Clock,
+): Decimal {
+    let (total_funds, btoken_supply) = bank.btoken_ratio(lending_market, clock);
+    // Multiplies by btoken ratio
+    decimal::from(btoken_amount).mul(total_funds).div(btoken_supply)
+}
 
 fun deploy<P, T, BToken>(
     bank: &mut Bank<P, T, BToken>,
@@ -591,48 +636,17 @@ fun update_btoken_metadata<T, BToken: drop>(
     treasury_btoken.update_icon_url(meta_btoken, ascii::string(BTOKEN_ICON_URL));
 }
 
-public(package) fun assert_btoken_type<T, BToken>() {
-    let type_reflection_t = get_type_reflection<T>();
-    let type_reflection_btoken = get_type_reflection<BToken>();
-
-    let mut expected_btoken_type = string::utf8(b"B_");
-    string::append(&mut expected_btoken_type, type_reflection_t);
-    assert!(type_reflection_btoken == expected_btoken_type, EBTokenTypeInvalid);
-}
-
-public(package) fun total_funds<P, T, BToken>(
+fun compound_interest_if_any<P, T, BToken>(
     bank: &Bank<P, T, BToken>,
-    lending_market: &LendingMarket<P>,
+    lending_market: &mut LendingMarket<P>,
     clock: &Clock,
-): Decimal {
-    let funds_deployed = bank.funds_deployed(lending_market, clock);
-    let total_funds = funds_deployed.add(decimal::from(bank.funds_available.value()));
-
-    total_funds
-}
-
-public(package) fun funds_deployed<P, T, BToken>(
-    bank: &Bank<P, T, BToken>,
-    lending_market: &LendingMarket<P>,
-    clock: &Clock,
-): Decimal {
-    // FundsDeployed =  cTokens * Total Supply of Funds / cToken Supply
+) {
     if (bank.lending.is_some()) {
-        let reserve = vector::borrow(lending_market.reserves(), bank.reserve_array_index());
-        let interest_last_update_timestamp_s = reserve.interest_last_update_timestamp_s();
-
-        assert!(
-            interest_last_update_timestamp_s == clock.timestamp_ms() / 1000,
-            ECompoundedInterestNotUpdated,
-        );
-
-        let ctoken_ratio = reserve.ctoken_ratio();
-
-        decimal::from(bank.lending.borrow().ctokens).mul(ctoken_ratio)
-    } else {
-        decimal::from(0)
+        lending_market.compound_interest<P, T>(bank.reserve_array_index(), clock);
     }
 }
+
+// ====== View Functions =====
 
 public fun needs_rebalance<P, T, BToken>(
     bank: &Bank<P, T, BToken>,
@@ -657,18 +671,6 @@ public fun needs_rebalance<P, T, BToken>(
 
     needs_rebalance
 }
-
-fun compound_interest_if_any<P, T, BToken>(
-    bank: &Bank<P, T, BToken>,
-    lending_market: &mut LendingMarket<P>,
-    clock: &Clock,
-) {
-    if (bank.lending.is_some()) {
-        lending_market.compound_interest<P, T>(bank.reserve_array_index(), clock);
-    }
-}
-
-// ====== Getters Functions =====
 
 public fun lending<P, T, BToken>(bank: &Bank<P, T, BToken>): &Option<Lending<P>> { &bank.lending }
 
@@ -709,7 +711,7 @@ public fun reserve_array_index<P, T, BToken>(bank: &Bank<P, T, BToken>): u64 {
     bank.lending.borrow().reserve_array_index
 }
 
-// ===== Results/Events =====
+// ===== Events =====
 
 public struct NewBankEvent has copy, drop, store {
     bank_id: ID,

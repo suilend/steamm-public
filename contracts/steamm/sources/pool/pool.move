@@ -63,6 +63,8 @@ const ESwapOutputAmountIsZero: u64 = 6;
 // When the user coin object does not have enough balance to fulfil the swap
 const EInsufficientFunds: u64 = 7;
 
+// ===== Structs =====
+
 /// Capability object given to the pool creator
 public struct PoolCap<phantom A, phantom B, phantom Quoter: store, phantom LpType: drop> has key {
     id: UID,
@@ -124,188 +126,7 @@ public struct TradingData has store {
     pool_fees_b: u64,
 }
 
-// ===== Quoter-Exposed Methods =====
-
-/// Initializes and returns a new AMM Pool along with its associated PoolCap.
-/// The pool is initialized with zero balances for both coin types `A` and `B`,
-/// specified protocol fees, and the provided swap fee. The pool's LP supply
-/// object is initialized at zero supply.
-///
-/// This function is meant to be called by the quoter module and therefore it
-/// it witness-protected.
-///
-/// # Arguments
-/// 
-/// * `meta_a` - Coin metadata for token A
-/// * `meta_b` - Coin metadata for token B  
-/// * `meta_lp` - Mutable coin metadata for LP token
-/// * `lp_treasury` - Treasury capability for LP token
-/// * `swap_fee_bps` - Pool swap fee in basis points
-/// * `quoter` - Quoter implementation for pool
-///
-/// # Returns
-///
-/// A tuple containing:
-/// - `Pool<A, B, Quoter, LpType>`: The created AMM pool object.
-/// - `PoolCap<A, B, Quoter, LpType>`: The associated pool capability object.
-///
-/// # Panics
-///
-/// This function will panic if:
-/// - `swap_fee_bps` is greater than or equal to `BPS_DENOMINATOR`
-/// - `lp_treasury` has non-zero total supply
-public(package) fun new<A, B, Quoter: store, LpType: drop>(
-    meta_a: &CoinMetadata<A>,
-    meta_b: &CoinMetadata<B>,
-    meta_lp: &mut CoinMetadata<LpType>,
-    lp_treasury: TreasuryCap<LpType>,
-    swap_fee_bps: u64,
-    quoter: Quoter,
-    ctx: &mut TxContext,
-): (Pool<A, B, Quoter, LpType>, PoolCap<A, B, Quoter, LpType>) {
-    assert!(lp_treasury.total_supply() == 0, ELpSupplyMustBeZero);
-    assert!(swap_fee_bps < BPS_DENOMINATOR, EFeeAbove100Percent);
-
-    update_lp_metadata(meta_a, meta_b, meta_lp, &lp_treasury);
-
-    let lp_supply = lp_treasury.treasury_into_supply();
-
-    let pool = Pool {
-        id: object::new(ctx),
-        quoter,
-        balance_a: balance::zero(),
-        balance_b: balance::zero(),
-        protocol_fees: fees::new(SWAP_FEE_NUMERATOR, BPS_DENOMINATOR, 0),
-        pool_fee_config: fees::new_config(swap_fee_bps, BPS_DENOMINATOR, 0),
-        redemption_fees: fees::new(
-            REDEMPTION_FEE_NUMERATOR,
-            BPS_DENOMINATOR,
-            MINIMUM_REDEMPTION_FEE,
-        ),
-        lp_supply,
-        trading_data: TradingData {
-            swap_a_in_amount: 0,
-            swap_b_out_amount: 0,
-            swap_a_out_amount: 0,
-            swap_b_in_amount: 0,
-            protocol_fees_a: 0,
-            protocol_fees_b: 0,
-            redemption_fees_a: 0,
-            redemption_fees_b: 0,
-            pool_fees_a: 0,
-            pool_fees_b: 0,
-        },
-        version: version::new(CURRENT_VERSION),
-    };
-
-    // Create pool cap
-    let pool_cap = PoolCap {
-        id: object::new(ctx),
-        pool_id: pool.id.uid_to_inner(),
-    };
-
-    // Emit event
-    emit_event(NewPoolResult {
-        creator: sender(ctx),
-        pool_id: object::id(&pool),
-        pool_cap_id: object::id(&pool_cap),
-        coin_type_a: get<A>(),
-        coin_type_b: get<B>(),
-        lp_token_type: get<LpType>(),
-        quoter_type: get<Quoter>(),
-    });
-
-    (pool, pool_cap)
-}
-
-/// Executes inner swap logic that is generalised accross all quoters. It takes
-/// care of fee handling, management of fund inputs and outputs as well
-/// as slippage protections.
-///
-/// This function is meant to be called by the quoter module and therefore it
-/// it witness-protected.
-///
-/// # Arguments
-///
-/// * `pool` - The pool object containing balances and trading data
-/// * `coin_a` - Coin A to be swapped
-/// * `coin_b` - Coin B to be swapped  
-/// * `quote` - Quote object containing swap parameters and amounts
-/// * `min_amount_out` - Minimum output amount for slippage protection
-///
-/// # Returns
-///
-/// `SwapResult`: An object containing details of the executed swap,
-/// including input and output amounts, fees, and the direction of the swap.
-///
-/// # Panics
-///
-/// This function will panic if:
-/// - `quote.amount_out()` is zero
-/// - `quote.amount_out()` is less than `min_amount_out`
-/// - if the `quote.amount_out()` exceeds the funds in the assocatied bank
-#[allow(unused_mut_parameter)]
-public(package) fun swap<A, B, Quoter: store, LpType: drop>(
-    pool: &mut Pool<A, B, Quoter, LpType>,
-    coin_a: &mut Coin<A>,
-    coin_b: &mut Coin<B>,
-    quote: SwapQuote,
-    min_amount_out: u64,
-    ctx: &mut TxContext,
-): SwapResult {
-    pool.version.assert_version_and_upgrade(CURRENT_VERSION);
-
-    assert!(quote.amount_out() > 0, ESwapOutputAmountIsZero);
-    assert!(quote.amount_out() >= min_amount_out, ESwapExceedsSlippage);
-
-    let (protocol_fee_a, protocol_fee_b) = pool.protocol_fees.balances_mut();
-
-    if (quote.a2b()) {
-        quote.swap_inner(
-            // Inputs
-            &mut pool.balance_a, // total_funds_in
-            coin_a, // coin_in
-            &mut pool.trading_data.swap_a_in_amount, // swap_in_amount
-            // Outputs
-            protocol_fee_b, // protocol_fees
-            &mut pool.balance_b, // total_funds_out
-            coin_b, // coin_out
-            &mut pool.trading_data.swap_b_out_amount, // swap_out_amount
-            &mut pool.trading_data.protocol_fees_b, // protocol_fees
-            &mut pool.trading_data.pool_fees_b, // pool_fees
-        );
-    } else {
-        quote.swap_inner(
-            // Inputs
-            &mut pool.balance_b, // total_funds_in
-            coin_b, // coin_in
-            &mut pool.trading_data.swap_b_in_amount, // swap_in_amount
-            // Outputs
-            protocol_fee_a, // protocol_fees
-            &mut pool.balance_a, // total_funds_out
-            coin_a, // coin_out
-            &mut pool.trading_data.swap_a_out_amount, // swap_out_amount
-            &mut pool.trading_data.protocol_fees_a, // protocol_fees
-            &mut pool.trading_data.pool_fees_a, // pool_fees
-        );
-    };
-
-    // Emit event
-    let result = SwapResult {
-        user: sender(ctx),
-        pool_id: object::id(pool),
-        amount_in: quote.amount_in(),
-        amount_out: quote.amount_out(),
-        output_fees: *quote.output_fees(),
-        a2b: quote.a2b(),
-    };
-
-    emit_event(result);
-
-    result
-}
-
-// ===== Public Methods =====
+// ===== Public Functions =====
 
 /// Adds liquidity to the AMM Pool and mints LP tokens for the depositor.
 /// In respect to the initial deposit, the first supply value `minimum_liquidity`
@@ -548,7 +369,7 @@ public fun quote_redeem<A, B, Quoter: store, LpType: drop>(
     )
 }
 
-// ===== Pool Cap Adming Endpoints =====
+// ===== Admin Functions =====
 
 /// Updates the pool's swap fee configuration. The swap fee is charged on each trade and is split
 /// between the protocol and the pool's liquidity providers.
@@ -599,6 +420,268 @@ public fun set_redemption_fees<A, B, Quoter: store, LpType: drop>(
             BPS_DENOMINATOR,
             MINIMUM_REDEMPTION_FEE,
         );
+}
+
+public fun collect_protocol_fees<A, B, Quoter: store, LpType: drop>(
+    pool: &mut Pool<A, B, Quoter, LpType>,
+    _global_admin: &GlobalAdmin,
+    ctx: &mut TxContext,
+): (Coin<A>, Coin<B>) {
+    pool.version.assert_version_and_upgrade(CURRENT_VERSION);
+
+    let (fees_a, fees_b) = pool.protocol_fees.withdraw();
+
+    (coin::from_balance(fees_a, ctx), coin::from_balance(fees_b, ctx))
+}
+
+public fun collect_redemption_fees<A, B, Quoter: store, LpType: drop>(
+    pool: &mut Pool<A, B, Quoter, LpType>,
+    _cap: &PoolCap<A, B, Quoter, LpType>,
+    ctx: &mut TxContext,
+): (Coin<A>, Coin<B>) {
+    pool.version.assert_version_and_upgrade(CURRENT_VERSION);
+
+    let (fees_a, fees_b) = pool.redemption_fees.withdraw();
+
+    (coin::from_balance(fees_a, ctx), coin::from_balance(fees_b, ctx))
+}
+
+entry fun migrate<A, B, Quoter: store, LpType: drop>(pool: &mut Pool<A, B, Quoter, LpType>, _admin: &GlobalAdmin) {
+    pool.version.migrate_(CURRENT_VERSION);
+}
+
+// ===== Package Functions =====
+
+/// Initializes and returns a new AMM Pool along with its associated PoolCap.
+/// The pool is initialized with zero balances for both coin types `A` and `B`,
+/// specified protocol fees, and the provided swap fee. The pool's LP supply
+/// object is initialized at zero supply.
+///
+/// This function is meant to be called by the quoter module and therefore it
+/// it witness-protected.
+///
+/// # Arguments
+/// 
+/// * `meta_a` - Coin metadata for token A
+/// * `meta_b` - Coin metadata for token B  
+/// * `meta_lp` - Mutable coin metadata for LP token
+/// * `lp_treasury` - Treasury capability for LP token
+/// * `swap_fee_bps` - Pool swap fee in basis points
+/// * `quoter` - Quoter implementation for pool
+///
+/// # Returns
+///
+/// A tuple containing:
+/// - `Pool<A, B, Quoter, LpType>`: The created AMM pool object.
+/// - `PoolCap<A, B, Quoter, LpType>`: The associated pool capability object.
+///
+/// # Panics
+///
+/// This function will panic if:
+/// - `swap_fee_bps` is greater than or equal to `BPS_DENOMINATOR`
+/// - `lp_treasury` has non-zero total supply
+public(package) fun new<A, B, Quoter: store, LpType: drop>(
+    meta_a: &CoinMetadata<A>,
+    meta_b: &CoinMetadata<B>,
+    meta_lp: &mut CoinMetadata<LpType>,
+    lp_treasury: TreasuryCap<LpType>,
+    swap_fee_bps: u64,
+    quoter: Quoter,
+    ctx: &mut TxContext,
+): (Pool<A, B, Quoter, LpType>, PoolCap<A, B, Quoter, LpType>) {
+    assert!(lp_treasury.total_supply() == 0, ELpSupplyMustBeZero);
+    assert!(swap_fee_bps < BPS_DENOMINATOR, EFeeAbove100Percent);
+
+    update_lp_metadata(meta_a, meta_b, meta_lp, &lp_treasury);
+
+    let lp_supply = lp_treasury.treasury_into_supply();
+
+    let pool = Pool {
+        id: object::new(ctx),
+        quoter,
+        balance_a: balance::zero(),
+        balance_b: balance::zero(),
+        protocol_fees: fees::new(SWAP_FEE_NUMERATOR, BPS_DENOMINATOR, 0),
+        pool_fee_config: fees::new_config(swap_fee_bps, BPS_DENOMINATOR, 0),
+        redemption_fees: fees::new(
+            REDEMPTION_FEE_NUMERATOR,
+            BPS_DENOMINATOR,
+            MINIMUM_REDEMPTION_FEE,
+        ),
+        lp_supply,
+        trading_data: TradingData {
+            swap_a_in_amount: 0,
+            swap_b_out_amount: 0,
+            swap_a_out_amount: 0,
+            swap_b_in_amount: 0,
+            protocol_fees_a: 0,
+            protocol_fees_b: 0,
+            redemption_fees_a: 0,
+            redemption_fees_b: 0,
+            pool_fees_a: 0,
+            pool_fees_b: 0,
+        },
+        version: version::new(CURRENT_VERSION),
+    };
+
+    // Create pool cap
+    let pool_cap = PoolCap {
+        id: object::new(ctx),
+        pool_id: pool.id.uid_to_inner(),
+    };
+
+    // Emit event
+    emit_event(NewPoolResult {
+        creator: sender(ctx),
+        pool_id: object::id(&pool),
+        pool_cap_id: object::id(&pool_cap),
+        coin_type_a: get<A>(),
+        coin_type_b: get<B>(),
+        lp_token_type: get<LpType>(),
+        quoter_type: get<Quoter>(),
+    });
+
+    (pool, pool_cap)
+}
+
+/// Executes inner swap logic that is generalised accross all quoters. It takes
+/// care of fee handling, management of fund inputs and outputs as well
+/// as slippage protections.
+///
+/// This function is meant to be called by the quoter module and therefore it
+/// it witness-protected.
+///
+/// # Arguments
+///
+/// * `pool` - The pool object containing balances and trading data
+/// * `coin_a` - Coin A to be swapped
+/// * `coin_b` - Coin B to be swapped  
+/// * `quote` - Quote object containing swap parameters and amounts
+/// * `min_amount_out` - Minimum output amount for slippage protection
+///
+/// # Returns
+///
+/// `SwapResult`: An object containing details of the executed swap,
+/// including input and output amounts, fees, and the direction of the swap.
+///
+/// # Panics
+///
+/// This function will panic if:
+/// - `quote.amount_out()` is zero
+/// - `quote.amount_out()` is less than `min_amount_out`
+/// - if the `quote.amount_out()` exceeds the funds in the assocatied bank
+#[allow(unused_mut_parameter)]
+public(package) fun swap<A, B, Quoter: store, LpType: drop>(
+    pool: &mut Pool<A, B, Quoter, LpType>,
+    coin_a: &mut Coin<A>,
+    coin_b: &mut Coin<B>,
+    quote: SwapQuote,
+    min_amount_out: u64,
+    ctx: &mut TxContext,
+): SwapResult {
+    pool.version.assert_version_and_upgrade(CURRENT_VERSION);
+
+    assert!(quote.amount_out() > 0, ESwapOutputAmountIsZero);
+    assert!(quote.amount_out() >= min_amount_out, ESwapExceedsSlippage);
+
+    let (protocol_fee_a, protocol_fee_b) = pool.protocol_fees.balances_mut();
+
+    if (quote.a2b()) {
+        quote.swap_inner(
+            // Inputs
+            &mut pool.balance_a, // total_funds_in
+            coin_a, // coin_in
+            &mut pool.trading_data.swap_a_in_amount, // swap_in_amount
+            // Outputs
+            protocol_fee_b, // protocol_fees
+            &mut pool.balance_b, // total_funds_out
+            coin_b, // coin_out
+            &mut pool.trading_data.swap_b_out_amount, // swap_out_amount
+            &mut pool.trading_data.protocol_fees_b, // protocol_fees
+            &mut pool.trading_data.pool_fees_b, // pool_fees
+        );
+    } else {
+        quote.swap_inner(
+            // Inputs
+            &mut pool.balance_b, // total_funds_in
+            coin_b, // coin_in
+            &mut pool.trading_data.swap_b_in_amount, // swap_in_amount
+            // Outputs
+            protocol_fee_a, // protocol_fees
+            &mut pool.balance_a, // total_funds_out
+            coin_a, // coin_out
+            &mut pool.trading_data.swap_a_out_amount, // swap_out_amount
+            &mut pool.trading_data.protocol_fees_a, // protocol_fees
+            &mut pool.trading_data.pool_fees_a, // pool_fees
+        );
+    };
+
+    // Emit event
+    let result = SwapResult {
+        user: sender(ctx),
+        pool_id: object::id(pool),
+        amount_in: quote.amount_in(),
+        amount_out: quote.amount_out(),
+        output_fees: *quote.output_fees(),
+        a2b: quote.a2b(),
+    };
+
+    emit_event(result);
+
+    result
+}
+
+public(package) fun assert_liquidity(reserve_out: u64, amount_out: u64) {
+    assert!(amount_out <= reserve_out, EOutputExceedsLiquidity);
+}
+
+public(package) fun get_quote<A, B, Quoter: store, LpType: drop>(
+    pool: &Pool<A, B, Quoter, LpType>,
+    amount_in: u64,
+    amount_out: u64,
+    a2b: bool,
+): SwapQuote {
+    let (protocol_fees, pool_fees) = pool.compute_swap_fees_(amount_out);
+
+    quote::quote(
+        amount_in,
+        amount_out,
+        protocol_fees,
+        pool_fees,
+        a2b,
+    )
+}
+
+public(package) fun compute_swap_fees_<A, B, Quoter: store, LpType: drop>(
+    pool: &Pool<A, B, Quoter, LpType>,
+    amount: u64,
+): (u64, u64) {
+    let (protocol_fee_num, protocol_fee_denom) = pool.protocol_fees.fee_ratio();
+    let (pool_fee_num, pool_fee_denom) = pool.pool_fee_config.fee_ratio();
+
+    let total_fees = safe_mul_div_up(amount, pool_fee_num, pool_fee_denom);
+    let protocol_fees = safe_mul_div_up(total_fees, protocol_fee_num, protocol_fee_denom);
+    let pool_fees = total_fees - protocol_fees;
+
+    (protocol_fees, pool_fees)
+}
+
+public(package) fun compute_redemption_fees_<A, B, Quoter: store, LpType: drop>(
+    pool: &Pool<A, B, Quoter, LpType>,
+    amount_a: u64,
+    amount_b: u64,
+): (u64, u64) {
+    let (fee_num, fee_denom) = pool.redemption_fees.fee_ratio();
+    let min_fee = pool.redemption_fees.config().min_fee();
+
+    let fees_a = safe_mul_div_up(amount_a, fee_num, fee_denom).max(min_fee);
+    let fees_b = safe_mul_div_up(amount_b, fee_num, fee_denom).max(min_fee);
+
+    (fees_a, fees_b)
+}
+
+public(package) fun quoter_mut<A, B, Quoter: store, LpType: drop>(pool: &mut Pool<A, B, Quoter, LpType>): &mut Quoter {
+    &mut pool.quoter
 }
 
 // ===== View & Getters =====
@@ -660,91 +743,6 @@ public fun pool_fees_a(trading_data: &TradingData): u64 { trading_data.pool_fees
 public fun pool_fees_b(trading_data: &TradingData): u64 { trading_data.pool_fees_b }
 
 public fun minimum_liquidity(): u64 { MINIMUM_LIQUIDITY }
-
-// ===== Package functions =====
-
-public(package) fun assert_liquidity(reserve_out: u64, amount_out: u64) {
-    assert!(amount_out <= reserve_out, EOutputExceedsLiquidity);
-}
-
-public(package) fun get_quote<A, B, Quoter: store, LpType: drop>(
-    pool: &Pool<A, B, Quoter, LpType>,
-    amount_in: u64,
-    amount_out: u64,
-    a2b: bool,
-): SwapQuote {
-    let (protocol_fees, pool_fees) = pool.compute_swap_fees_(amount_out);
-
-    quote::quote(
-        amount_in,
-        amount_out,
-        protocol_fees,
-        pool_fees,
-        a2b,
-    )
-}
-
-public(package) fun compute_swap_fees_<A, B, Quoter: store, LpType: drop>(
-    pool: &Pool<A, B, Quoter, LpType>,
-    amount: u64,
-): (u64, u64) {
-    let (protocol_fee_num, protocol_fee_denom) = pool.protocol_fees.fee_ratio();
-    let (pool_fee_num, pool_fee_denom) = pool.pool_fee_config.fee_ratio();
-
-    let total_fees = safe_mul_div_up(amount, pool_fee_num, pool_fee_denom);
-    let protocol_fees = safe_mul_div_up(total_fees, protocol_fee_num, protocol_fee_denom);
-    let pool_fees = total_fees - protocol_fees;
-
-    (protocol_fees, pool_fees)
-}
-
-public(package) fun compute_redemption_fees_<A, B, Quoter: store, LpType: drop>(
-    pool: &Pool<A, B, Quoter, LpType>,
-    amount_a: u64,
-    amount_b: u64,
-): (u64, u64) {
-    let (fee_num, fee_denom) = pool.redemption_fees.fee_ratio();
-    let min_fee = pool.redemption_fees.config().min_fee();
-
-    let fees_a = safe_mul_div_up(amount_a, fee_num, fee_denom).max(min_fee);
-    let fees_b = safe_mul_div_up(amount_b, fee_num, fee_denom).max(min_fee);
-
-    (fees_a, fees_b)
-}
-
-public(package) fun quoter_mut<A, B, Quoter: store, LpType: drop>(pool: &mut Pool<A, B, Quoter, LpType>): &mut Quoter {
-    &mut pool.quoter
-}
-
-// ===== Admin endpoints =====
-
-public fun collect_protocol_fees<A, B, Quoter: store, LpType: drop>(
-    pool: &mut Pool<A, B, Quoter, LpType>,
-    _global_admin: &GlobalAdmin,
-    ctx: &mut TxContext,
-): (Coin<A>, Coin<B>) {
-    pool.version.assert_version_and_upgrade(CURRENT_VERSION);
-
-    let (fees_a, fees_b) = pool.protocol_fees.withdraw();
-
-    (coin::from_balance(fees_a, ctx), coin::from_balance(fees_b, ctx))
-}
-
-public fun collect_redemption_fees<A, B, Quoter: store, LpType: drop>(
-    pool: &mut Pool<A, B, Quoter, LpType>,
-    _cap: &PoolCap<A, B, Quoter, LpType>,
-    ctx: &mut TxContext,
-): (Coin<A>, Coin<B>) {
-    pool.version.assert_version_and_upgrade(CURRENT_VERSION);
-
-    let (fees_a, fees_b) = pool.redemption_fees.withdraw();
-
-    (coin::from_balance(fees_a, ctx), coin::from_balance(fees_b, ctx))
-}
-
-entry fun migrate<A, B, Quoter: store, LpType: drop>(pool: &mut Pool<A, B, Quoter, LpType>, _admin: &GlobalAdmin) {
-    pool.version.migrate_(CURRENT_VERSION);
-}
 
 // ===== Private functions =====
 
@@ -893,7 +891,7 @@ fun update_lp_metadata<A, B, LpType: drop>(
     treasury_lp.update_icon_url(meta_lp, ascii::string(LP_ICON_URL));
 }
 
-// ===== Results/Events =====
+// ===== Events =====
 
 public struct NewPoolResult has copy, drop, store {
     creator: address,
