@@ -3,17 +3,15 @@ module steamm::bank;
 
 use std::string;
 use std::ascii;
-use std::option::{none, some};
+use std::option::{none};
 use steamm::bank_math;
 use steamm::global_admin::GlobalAdmin;
-use steamm::registry::Registry;
 use steamm::version::{Self, Version};
 use steamm::utils::get_type_reflection;
 use sui::balance::{Self, Supply, Balance};
 use sui::clock::Clock;
 use sui::coin::{Self, Coin, TreasuryCap, CoinMetadata};
 use sui::transfer::share_object;
-use sui::url;
 use suilend::decimal::{Self, Decimal};
 use suilend::lending_market::{LendingMarket, ObligationOwnerCap};
 use suilend::reserve::CToken;
@@ -28,19 +26,15 @@ const BTOKEN_ICON_URL: vector<u8> = b"TODO";
 
 const EBTokenTypeInvalid: u64 = 0;
 const EInvalidBTokenDecimals: u64 = 1;
-const EInvalidBTokenName: u64 = 2;
-const EInvalidBTokenSymbol: u64 = 3;
-const EInvalidBTokenDescription: u64 = 4;
-const EInvalidBTokenUrl: u64 = 5;
-const EBTokenSupplyMustBeZero: u64 = 6;
-const EUtilisationRangeAboveHundredPercent: u64 = 7;
-const EUtilisationRangeBelowHundredPercent: u64 = 8;
-const ELendingAlreadyActive: u64 = 9;
-const EInvalidCTokenRatio: u64 = 10;
-const ECTokenRatioTooLow: u64 = 11;
-const ELendingNotActive: u64 = 12;
-const ECompoundedInterestNotUpdated: u64 = 13;
-const EInsufficientBankFunds: u64 = 14;
+const EBTokenSupplyMustBeZero: u64 = 2;
+const EUtilisationRangeAboveHundredPercent: u64 = 3;
+const EUtilisationRangeBelowHundredPercent: u64 = 4;
+const ELendingAlreadyActive: u64 = 5;
+const EInvalidCTokenRatio: u64 = 6;
+const ECTokenRatioTooLow: u64 = 7;
+const ELendingNotActive: u64 = 8;
+const ECompoundedInterestNotUpdated: u64 = 9;
+const EInsufficientBankFunds: u64 = 10;
 
 public struct Bank<phantom P, phantom T, phantom BToken> has key {
     id: UID,
@@ -66,17 +60,15 @@ public struct Lending<phantom P> has store {
 
 #[allow(lint(share_owned))]
 public entry fun create_bank_and_share<P, T, BToken: drop>(
-    btoken_treasury: TreasuryCap<BToken>,
-    meta_b: &CoinMetadata<BToken>,
     meta_t: &CoinMetadata<T>,
-    registry: &mut Registry,
+    meta_b: &mut CoinMetadata<BToken>,
+    btoken_treasury: TreasuryCap<BToken>,
     ctx: &mut TxContext
 ): ID {
     let bank = create_bank<P, T, BToken>(
-        btoken_treasury,
-        meta_b,
         meta_t,
-        registry,
+        meta_b,
+        btoken_treasury,
         ctx,
     );
 
@@ -265,15 +257,14 @@ entry fun migrate<P, T, BToken>(bank: &mut Bank<P, T, BToken>, _admin: &GlobalAd
 // ====== Package Functions =====
 
 public(package) fun create_bank<P, T, BToken: drop>(
-    btoken_treasury: TreasuryCap<BToken>,
-    meta_b: &CoinMetadata<BToken>,
     meta_t: &CoinMetadata<T>,
-    registry: &mut Registry,
+    meta_b: &mut CoinMetadata<BToken>,
+    btoken_treasury: TreasuryCap<BToken>,
     ctx: &mut TxContext
 ): Bank<P, T, BToken> {
     assert!(btoken_treasury.total_supply() == 0, EBTokenSupplyMustBeZero);
 
-    validate_btoken_metadata(meta_t, meta_b);
+    update_btoken_metadata(meta_t, meta_b, &btoken_treasury);
 
     let bank = Bank<P, T, BToken> {
         id: object::new(ctx),
@@ -283,8 +274,6 @@ public(package) fun create_bank<P, T, BToken: drop>(
         btoken_supply: btoken_treasury.treasury_into_supply(),
         version: version::new(CURRENT_VERSION),
     };
-
-    registry.add_bank(&bank);
 
     bank
 }
@@ -446,24 +435,29 @@ fun btoken_ratio<P, T, BToken>(
     }
 }
 
-fun validate_btoken_metadata<T, BToken: drop>(
+fun update_btoken_metadata<T, BToken: drop>(
     meta_a: &CoinMetadata<T>,
-    meta_lp: &CoinMetadata<BToken>,
+    meta_btoken: &mut CoinMetadata<BToken>,
+    treasury_btoken: &TreasuryCap<BToken>,
 ) {
     assert_btoken_type<T, BToken>();
-    assert!(meta_a.get_decimals() != 9, EInvalidBTokenDecimals);
+    assert!(meta_btoken.get_decimals() == 9, EInvalidBTokenDecimals);
 
+    // Construct and set the LP token name
     let mut btoken_name = string::utf8(b"bToken ");
     btoken_name.append(meta_a.get_symbol().to_string());
+    treasury_btoken.update_name(meta_btoken, btoken_name);
 
-    assert!(meta_lp.get_name() == btoken_name, EInvalidBTokenName);
-
+    // Construct and set the LP token symbol
     let mut btoken_symbol = ascii::string(b"b");
     btoken_symbol.append(meta_a.get_symbol());
+    treasury_btoken.update_symbol(meta_btoken, btoken_symbol);
 
-    assert!(meta_lp.get_symbol() == btoken_symbol, EInvalidBTokenSymbol);
-    assert!(meta_lp.get_description() == string::utf8(b"Steamm LP Token"), EInvalidBTokenDescription);
-    assert!(meta_lp.get_icon_url() == some(url::new_unsafe(ascii::string(BTOKEN_ICON_URL))), EInvalidBTokenUrl);
+    // Set the description
+    treasury_btoken.update_description(meta_btoken, string::utf8(b"Steamm bToken"));
+    
+    // Set the icon URL
+    treasury_btoken.update_icon_url(meta_btoken, ascii::string(BTOKEN_ICON_URL));
 }
 
 public(package) fun assert_btoken_type<T, BToken>() {

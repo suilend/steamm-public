@@ -6,7 +6,6 @@ use steamm::global_admin::GlobalAdmin;
 use steamm::math::{safe_mul_div, checked_mul_div};
 use steamm::pool::{Self, Pool, PoolCap, SwapResult, assert_liquidity};
 use steamm::quote::SwapQuote;
-use steamm::registry::Registry;
 use steamm::version::{Self, Version};
 use sui::coin::{Coin, TreasuryCap, CoinMetadata};
 
@@ -31,7 +30,7 @@ public struct CpQuoter has store {
 /// Initializes and returns a new AMM Pool along with its associated PoolCap.
 /// The pool is initialized with zero balances for both coin types `A` and `B`,
 /// specified protocol fees, and the provided swap fee. The pool's LP supply
-/// object is initialized at zero supply and the pool is added to the `registry`.
+/// object is initialized at zero supply.
 ///
 /// # Returns
 ///
@@ -44,11 +43,10 @@ public struct CpQuoter has store {
 /// This function will panic if `swap_fee_bps` is greater than or equal to
 /// `SWAP_FEE_DENOMINATOR`
 public fun new<A, B, LpType: drop>(
-    lp_treasury: TreasuryCap<LpType>,
     meta_a: &CoinMetadata<A>,
     meta_b: &CoinMetadata<B>,
-    meta_lp: &CoinMetadata<LpType>,
-    registry: &mut Registry,
+    meta_lp: &mut CoinMetadata<LpType>,
+    lp_treasury: TreasuryCap<LpType>,
     swap_fee_bps: u64,
     offset: u64,
     ctx: &mut TxContext,
@@ -56,11 +54,10 @@ public fun new<A, B, LpType: drop>(
     let quoter = CpQuoter { version: version::new(CURRENT_VERSION), offset };
 
     let (pool, pool_cap) = pool::new<A, B, CpQuoter, LpType>(
-        lp_treasury,
         meta_a,
         meta_b,
         meta_lp,
-        registry,
+        lp_treasury,
         swap_fee_bps,
         quoter,
         ctx,

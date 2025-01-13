@@ -1,63 +1,47 @@
 module steamm::bank_tests;
 
-use steamm::bank;
+use steamm::bank::{Self, Bank};
 use steamm::bank_math;
 use steamm::global_admin;
-use steamm::registry;
-use steamm::test_utils::{COIN, reserve_args};
+use steamm::test_utils::{Self, reserve_args};
 use sui::test_scenario::{Self, ctx};
 use sui::test_utils::{destroy, assert_eq};
 use suilend::lending_market_tests::{LENDING_MARKET, setup as suilend_setup};
 use suilend::test_usdc::TEST_USDC;
+use steamm::b_test_usdc::{B_TEST_USDC};
 
-public struct FAKE_LENDING has drop {}
+#[test_only]
+fun setup_bank(): Bank<LENDING_MARKET, TEST_USDC, B_TEST_USDC> {
+    let (pool, bank_a, bank_b) = test_utils::test_setup_dummy(0);
 
-#[test]
-fun test_create_bank() {
-    let mut scenario = test_scenario::begin(@0x0);
+    destroy(pool);
+    destroy(bank_b);
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
-
-    // Create amm bank
-    let bank = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
-
-    destroy(bank);
-    destroy(registry);
-    destroy(scenario);
+    bank_a
 }
 
 #[test]
-#[expected_failure(abort_code = registry::EDuplicatedBankType)]
-fun test_fail_create_duplicate_bank() {
-    let mut scenario = test_scenario::begin(@0x0);
+fun test_create_bank() {
+    // Create amm bank
+    let bank = setup_bank();
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
-
-    // Create bank
-    let bank_1 = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
-    let bank_2 = bank::create_bank<LENDING_MARKET, COIN>(&mut registry, ctx(&mut scenario));
-
-    destroy(bank_1);
-    destroy(bank_2);
-    destroy(registry);
-    destroy(scenario);
+    destroy(bank);
 }
 
 #[test]
 fun test_init_lending() {
     let mut scenario = test_scenario::begin(@0x0);
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
         &mut scenario,
     ).destruct_state();
 
     // Create bank
-    let mut bank = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+    let mut bank = setup_bank();
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-    bank.init_lending<LENDING_MARKET, TEST_USDC>(
+    bank.init_lending(
         &global_admin,
         &mut lending_market,
         8_000, // utilisation_bps
@@ -70,7 +54,6 @@ fun test_init_lending() {
     destroy(prices);
     destroy(bag);
     destroy(lend_cap);
-    destroy(registry);
     destroy(global_admin);
     destroy(lending_market);
     destroy(scenario);
@@ -81,17 +64,16 @@ fun test_init_lending() {
 fun test_fail_init_lending_twice() {
     let mut scenario = test_scenario::begin(@0x0);
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
         &mut scenario,
     ).destruct_state();
 
     // Create bank
-    let mut bank = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+    let mut bank = setup_bank();
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-    bank.init_lending<LENDING_MARKET, TEST_USDC>(
+    bank.init_lending(
         &global_admin,
         &mut lending_market,
         8_000, // utilisation_bps
@@ -99,7 +81,7 @@ fun test_fail_init_lending_twice() {
         ctx(&mut scenario),
     );
 
-    bank.init_lending<LENDING_MARKET, TEST_USDC>(
+    bank.init_lending(
         &global_admin,
         &mut lending_market,
         8_000, // utilisation_bps
@@ -112,7 +94,6 @@ fun test_fail_init_lending_twice() {
     destroy(prices);
     destroy(bag);
     destroy(lend_cap);
-    destroy(registry);
     destroy(global_admin);
     destroy(lending_market);
     destroy(scenario);
@@ -123,7 +104,6 @@ fun test_fail_init_lending_twice() {
 fun test_invalid_utilisation_liquidity_above_100() {
     let mut scenario = test_scenario::begin(@0x0);
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
 
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
@@ -132,12 +112,9 @@ fun test_invalid_utilisation_liquidity_above_100() {
     // Create amm bank
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-    let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(
-        &mut registry,
-        ctx(&mut scenario),
-    );
+    let mut bank = setup_bank();
 
-    bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
+    bank.init_lending(
         &global_admin,
         &mut lending_market,
         10_001, // utilisation_bps
@@ -145,8 +122,7 @@ fun test_invalid_utilisation_liquidity_above_100() {
         ctx(&mut scenario),
     );
 
-    destroy(bank_a);
-    destroy(registry);
+    destroy(bank);
     destroy(global_admin);
     destroy(lending_market);
     destroy(lend_cap);
@@ -161,7 +137,6 @@ fun test_invalid_utilisation_liquidity_above_100() {
 fun test_invalid_target_liquidity_below_100() {
     let mut scenario = test_scenario::begin(@0x0);
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
 
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
@@ -170,12 +145,9 @@ fun test_invalid_target_liquidity_below_100() {
     // Create amm bank
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-    let mut bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC>(
-        &mut registry,
-        ctx(&mut scenario),
-    );
+    let mut bank = setup_bank();
 
-    bank_a.init_lending<LENDING_MARKET, TEST_USDC>(
+    bank.init_lending(
         &global_admin,
         &mut lending_market,
         1_000, // utilisation_bps
@@ -183,8 +155,7 @@ fun test_invalid_target_liquidity_below_100() {
         ctx(&mut scenario),
     );
 
-    destroy(bank_a);
-    destroy(registry);
+    destroy(bank);
     destroy(global_admin);
     destroy(lending_market);
     destroy(lend_cap);
@@ -199,7 +170,6 @@ fun test_invalid_target_liquidity_below_100() {
 fun test_fail_assert_empty_bank() {
     let mut scenario = test_scenario::begin(@0x0);
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
 
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
@@ -208,9 +178,9 @@ fun test_fail_assert_empty_bank() {
     // Create amm bank
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-    let mut bank = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+    let mut bank = setup_bank();
 
-    bank.init_lending<LENDING_MARKET, TEST_USDC>(
+    bank.init_lending(
         &global_admin,
         &mut lending_market,
         8_000, // utilisation_rate
@@ -225,7 +195,6 @@ fun test_fail_assert_empty_bank() {
     );
 
     destroy(bank);
-    destroy(registry);
     destroy(global_admin);
     destroy(lending_market);
     destroy(lend_cap);
@@ -239,18 +208,17 @@ fun test_fail_assert_empty_bank() {
 fun test_bank_rebalance_deploy() {
     let mut scenario = test_scenario::begin(@0x0);
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
         &mut scenario,
     ).destruct_state();
 
     // Create bank
-    let mut bank = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+    let mut bank = setup_bank();
     bank.mock_min_token_block_size(10);
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-    bank.init_lending<LENDING_MARKET, TEST_USDC>(
+    bank.init_lending(
         &global_admin,
         &mut lending_market,
         5_000,
@@ -281,7 +249,6 @@ fun test_bank_rebalance_deploy() {
     destroy(prices);
     destroy(bag);
     destroy(lend_cap);
-    destroy(registry);
     destroy(global_admin);
     destroy(lending_market);
     destroy(scenario);
@@ -291,18 +258,17 @@ fun test_bank_rebalance_deploy() {
 fun test_bank_rebalance_recall() {
     let mut scenario = test_scenario::begin(@0x0);
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
         &mut scenario,
     ).destruct_state();
 
     // Create bank
-    let mut bank = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+    let mut bank = setup_bank();
     bank.mock_min_token_block_size(10);
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-    bank.init_lending<LENDING_MARKET, TEST_USDC>(
+    bank.init_lending(
         &global_admin,
         &mut lending_market,
         5_000,
@@ -339,7 +305,6 @@ fun test_bank_rebalance_recall() {
     destroy(prices);
     destroy(bag);
     destroy(lend_cap);
-    destroy(registry);
     destroy(global_admin);
     destroy(lending_market);
     destroy(scenario);
@@ -349,18 +314,17 @@ fun test_bank_rebalance_recall() {
 fun test_bank_prepare_bank_for_pending_withdraw() {
     let mut scenario = test_scenario::begin(@0x0);
 
-    let mut registry = registry::init_for_testing(ctx(&mut scenario));
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
         &mut scenario,
     ).destruct_state();
 
     // Create bank
-    let mut bank = bank::create_bank<LENDING_MARKET, TEST_USDC>(&mut registry, ctx(&mut scenario));
+    let mut bank = setup_bank();
     bank.mock_min_token_block_size(10);
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-    bank.init_lending<LENDING_MARKET, TEST_USDC>(
+    bank.init_lending(
         &global_admin,
         &mut lending_market,
         5_000,
@@ -397,7 +361,6 @@ fun test_bank_prepare_bank_for_pending_withdraw() {
     destroy(prices);
     destroy(bag);
     destroy(lend_cap);
-    destroy(registry);
     destroy(global_admin);
     destroy(lending_market);
     destroy(usdc);

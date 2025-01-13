@@ -10,12 +10,9 @@ use steamm::global_admin::GlobalAdmin;
 use steamm::math::safe_mul_div_up;
 use steamm::pool_math;
 use steamm::quote::{Self, SwapQuote, SwapFee, DepositQuote, RedeemQuote};
-use steamm::registry::Registry;
 use steamm::version::{Self, Version};
-use std::option::some;
 use std::ascii;
 use std::string::{Self};
-use sui::url;
 use sui::balance::{Self, Balance, Supply};
 use sui::coin::{Self, Coin, TreasuryCap, CoinMetadata};
 use sui::transfer::public_transfer;
@@ -46,32 +43,24 @@ const LP_ICON_URL: vector<u8> = b"TODO";
 
 /// Error when LP token decimals are not 9
 const EInvalidLpDecimals: u64 = 0;
-/// Error when LP token name does not match expected format "Steamm LP Token {TokenA}-{TokenB}"
-const EInvalidLpName: u64 = 1;
-/// Error when LP token symbol does not match expected format "steammLP {TokenA}-{TokenB}"
-const EInvalidLpSymbol: u64 = 2;
-/// Error when LP token description is not "Steamm LP Token"
-const EInvalidLpDescription: u64 = 3;
-/// Error when LP token icon URL does not match expected URL
-const EInvalidLpUrl: u64 = 4;
 /// Error when trying to initialize a pool with non-zero LP supply
-const ELpSupplyMustBeZero: u64 = 5;
+const ELpSupplyMustBeZero: u64 = 1;
 // The pool swap fee is a percentage and therefore
 // can't surpass 100%
-const EFeeAbove100Percent: u64 = 6;
+const EFeeAbove100Percent: u64 = 2;
 // Occurs when the swap amount_out is below the
 // minimum amount out declared
-const ESwapExceedsSlippage: u64 = 7;
+const ESwapExceedsSlippage: u64 = 3;
 // When the coin output exceeds the amount of reserves
 // available
-const EOutputExceedsLiquidity: u64 = 8;
+const EOutputExceedsLiquidity: u64 = 4;
 // Assert that the reserve to lp supply ratio updates
 // in favor of of the pool. This error should not occur
-const ELpSupplyToReserveRatioViolation: u64 = 9;
+const ELpSupplyToReserveRatioViolation: u64 = 5;
 // The swap leads to zero output amount
-const ESwapOutputAmountIsZero: u64 = 10;
+const ESwapOutputAmountIsZero: u64 = 6;
 // When the user coin object does not have enough balance to fulfil the swap
-const EInsufficientFunds: u64 = 11;
+const EInsufficientFunds: u64 = 7;
 
 /// Capability object given to the pool creator
 public struct PoolCap<phantom A, phantom B, phantom Quoter: store, phantom LpType: drop> has key {
@@ -140,7 +129,7 @@ public struct TradingData has store {
 /// Initializes and returns a new AMM Pool along with its associated PoolCap.
 /// The pool is initialized with zero balances for both coin types `A` and `B`,
 /// specified protocol fees, and the provided swap fee. The pool's LP supply
-/// object is initialized at zero supply and the pool is added to the `registry`.
+/// object is initialized at zero supply.
 ///
 /// This function is meant to be called by the hook module and therefore it
 /// it witness-protected.
@@ -156,11 +145,10 @@ public struct TradingData has store {
 /// This function will panic if `swap_fee_bps` is greater than or equal to
 /// `SWAP_FEE_DENOMINATOR`
 public(package) fun new<A, B, Quoter: store, LpType: drop>(
-    lp_treasury: TreasuryCap<LpType>,
     meta_a: &CoinMetadata<A>,
     meta_b: &CoinMetadata<B>,
-    meta_lp: &CoinMetadata<LpType>,
-    registry: &mut Registry,
+    meta_lp: &mut CoinMetadata<LpType>,
+    lp_treasury: TreasuryCap<LpType>,
     swap_fee_bps: u64,
     quoter: Quoter,
     ctx: &mut TxContext,
@@ -168,7 +156,7 @@ public(package) fun new<A, B, Quoter: store, LpType: drop>(
     assert!(lp_treasury.total_supply() == 0, ELpSupplyMustBeZero);
     assert!(swap_fee_bps < BPS_DENOMINATOR, EFeeAbove100Percent);
 
-    validate_lp_metadata(meta_a, meta_b, meta_lp);
+    update_lp_metadata(meta_a, meta_b, meta_lp, &lp_treasury);
 
     let lp_supply = lp_treasury.treasury_into_supply();
 
@@ -199,8 +187,6 @@ public(package) fun new<A, B, Quoter: store, LpType: drop>(
         },
         version: version::new(CURRENT_VERSION),
     };
-
-    registry.add_amm(&pool);
 
     // Create pool cap
     let pool_cap = PoolCap {
@@ -791,29 +777,33 @@ fun assert_lp_supply_reserve_ratio(
     );
 }
 
-fun validate_lp_metadata<A, B, LpType: drop>(
+fun update_lp_metadata<A, B, LpType: drop>(
     meta_a: &CoinMetadata<A>,
     meta_b: &CoinMetadata<B>,
-    meta_lp: &CoinMetadata<LpType>,
+    meta_lp: &mut CoinMetadata<LpType>,
+    treasury_lp: &TreasuryCap<LpType>,
 ) {
-    assert!(meta_a.get_decimals() != 9, EInvalidLpDecimals);
+    assert!(meta_lp.get_decimals() == 9, EInvalidLpDecimals);
 
+    // Construct and set the LP token name
     let mut lp_name = string::utf8(b"Steamm LP Token ");
     lp_name.append(meta_a.get_symbol().to_string());
     lp_name.append(string::utf8(b"-"));
     lp_name.append(meta_b.get_symbol().to_string());
+    treasury_lp.update_name(meta_lp, lp_name);
 
-    assert!(meta_lp.get_name() == lp_name, EInvalidLpName);
-
+    // Construct and set the LP token symbol
     let mut lp_symbol = ascii::string(b"steammLP ");
     lp_symbol.append(meta_a.get_symbol());
     lp_symbol.append(ascii::string(b"-"));
     lp_symbol.append(meta_b.get_symbol());
+    treasury_lp.update_symbol(meta_lp, lp_symbol);
 
-    assert!(meta_lp.get_symbol() == lp_symbol, EInvalidLpSymbol);
-    assert!(meta_lp.get_description() == string::utf8(b"Steamm LP Token"), EInvalidLpDescription);
-    assert!(meta_lp.get_icon_url() == some(url::new_unsafe(ascii::string(LP_ICON_URL))), EInvalidLpUrl);
+    // Set the description
+    treasury_lp.update_description(meta_lp, string::utf8(b"Steamm LP Token"));
 
+    // Set the icon URL
+    treasury_lp.update_icon_url(meta_lp, ascii::string(LP_ICON_URL));
 }
 
 // ===== Results/Events =====
