@@ -1,15 +1,15 @@
 #[test_only]
 module steamm::proptests_offset;
 
+use steamm::b_test_sui::B_TEST_SUI;
+use steamm::b_test_usdc::B_TEST_USDC;
 use steamm::cpmm;
-use steamm::cpmm_tests::{setup};
-use steamm::test_utils::{e9};
+use steamm::cpmm_tests::setup;
+use steamm::test_utils::e9;
 use sui::coin;
 use sui::random;
 use sui::test_scenario::{Self, ctx};
 use sui::test_utils::destroy;
-use steamm::b_test_sui::{B_TEST_SUI};
-use steamm::b_test_usdc::{B_TEST_USDC};
 
 const ADMIN: address = @0x10;
 const POOL_CREATOR: address = @0x11;
@@ -126,7 +126,7 @@ fun proptest_deposit_offset() {
     );
 
     let ctx = ctx(&mut scenario);
-    
+
     let mut coin_a = coin::mint_for_testing<B_TEST_USDC>(e9(100_000), ctx);
     let mut coin_b = coin::mint_for_testing<B_TEST_SUI>(e9(100_000), ctx);
 

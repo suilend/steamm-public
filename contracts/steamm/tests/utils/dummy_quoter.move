@@ -1,5 +1,5 @@
 #[test_only]
-module steamm::dummy_hook;
+module steamm::dummy_quoter;
 
 use steamm::pool::{Self, Pool, PoolCap, SwapResult};
 use steamm::quote::SwapQuote;

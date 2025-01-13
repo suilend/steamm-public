@@ -1,5 +1,6 @@
 module steamm::bank_tests;
 
+use steamm::b_test_usdc::B_TEST_USDC;
 use steamm::bank::{Self, Bank};
 use steamm::bank_math;
 use steamm::global_admin;
@@ -8,7 +9,6 @@ use sui::test_scenario::{Self, ctx};
 use sui::test_utils::{destroy, assert_eq};
 use suilend::lending_market_tests::{LENDING_MARKET, setup as suilend_setup};
 use suilend::test_usdc::TEST_USDC;
-use steamm::b_test_usdc::{B_TEST_USDC};
 
 #[test_only]
 fun setup_bank(): Bank<LENDING_MARKET, TEST_USDC, B_TEST_USDC> {
@@ -104,7 +104,6 @@ fun test_fail_init_lending_twice() {
 fun test_invalid_utilisation_liquidity_above_100() {
     let mut scenario = test_scenario::begin(@0x0);
 
-
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
         &mut scenario,
@@ -137,7 +136,6 @@ fun test_invalid_utilisation_liquidity_above_100() {
 fun test_invalid_target_liquidity_below_100() {
     let mut scenario = test_scenario::begin(@0x0);
 
-
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
         &mut scenario,
@@ -169,7 +167,6 @@ fun test_invalid_target_liquidity_below_100() {
 #[expected_failure(abort_code = bank_math::EEmptyBank)]
 fun test_fail_assert_empty_bank() {
     let mut scenario = test_scenario::begin(@0x0);
-
 
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),

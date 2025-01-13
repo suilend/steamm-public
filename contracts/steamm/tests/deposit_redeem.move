@@ -2,15 +2,15 @@
 module steamm::deposit_redeem;
 
 use std::u128::sqrt;
+use steamm::b_test_sui::B_TEST_SUI;
+use steamm::b_test_usdc::B_TEST_USDC;
+use steamm::cpmm::CpQuoter;
+use steamm::lp_usdc_sui::LP_USDC_SUI;
 use steamm::math as steamm_math;
 use steamm::pool::Pool;
 use steamm::pool_math::{Self, quote_deposit_test, quote_redeem_test};
 use steamm::test_utils;
 use sui::test_utils::{destroy, assert_eq};
-use steamm::lp_usdc_sui::{LP_USDC_SUI};
-use steamm::b_test_sui::{B_TEST_SUI};
-use steamm::b_test_usdc::{B_TEST_USDC};
-use steamm::cpmm::{CpQuoter};
 
 #[test_only]
 fun setup_pool(
@@ -18,9 +18,7 @@ fun setup_pool(
     reserve_b: u64,
     lp_supply: u64,
     swap_fee_bps: u64,
-): (
-    Pool<B_TEST_USDC, B_TEST_SUI, CpQuoter, LP_USDC_SUI>,
-) {
+): (Pool<B_TEST_USDC, B_TEST_SUI, CpQuoter, LP_USDC_SUI>) {
     let (mut pool, bank_a, bank_b) = test_utils::test_setup_cpmm(swap_fee_bps, 0);
 
     pool.mut_reserve_a(reserve_a, true);
