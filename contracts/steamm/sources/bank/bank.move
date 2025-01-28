@@ -22,6 +22,8 @@ use suilend::reserve::CToken;
 
 const CURRENT_VERSION: u16 = 1;
 const MIN_TOKEN_BLOCK_SIZE: u64 = 1_000_000_000;
+// Minimum liquidity of btokens that cannot be withdrawn
+const MINIMUM_LIQUIDITY: u64 = 10;
 const BTOKEN_ICON_URL: vector<u8> = b"TODO";
 
 // ===== Errors =====
@@ -39,6 +41,8 @@ const ECompoundedInterestNotUpdated: u64 = 9;
 const EInsufficientBankFunds: u64 = 10;
 const EEmptyCoin: u64 = 11;
 const EEmptyBToken: u64 = 12;
+const EInvalidBtokenBalance: u64 = 13;
+const ENoBTokensToBurn: u64 = 14;
 
 // ===== Structs =====
 
@@ -216,13 +220,21 @@ public fun burn_btokens<P, T, BToken>(
     bank: &mut Bank<P, T, BToken>,
     lending_market: &mut LendingMarket<P>,
     btokens: &mut Coin<BToken>,
-    btoken_amount: u64,
+    mut btoken_amount: u64,
     clock: &Clock,
     ctx: &mut TxContext,
 ): Coin<T> {
     bank.version.assert_version_and_upgrade(CURRENT_VERSION);
-    assert!(btokens.value() != 0, EEmptyBToken);
     bank.compound_interest_if_any(lending_market, clock);
+    
+    assert!(btokens.value() != 0, EEmptyBToken);
+    assert!(btokens.value() >= btoken_amount, EInvalidBtokenBalance);
+
+    if (btoken_amount == bank.btoken_supply.supply_value()) {
+        btoken_amount = btoken_amount - MINIMUM_LIQUIDITY
+    };
+
+    assert!(btoken_amount > 0, ENoBTokensToBurn);
 
     let btoken_input = btokens.split(btoken_amount, ctx);
     let mut tokens_to_withdraw = bank.from_btokens(lending_market, btoken_amount, clock).floor();
@@ -716,6 +728,8 @@ public fun utilisation_buffer_bps_unchecked<P, T, BToken>(bank: &Bank<P, T, BTok
 public fun reserve_array_index<P, T, BToken>(bank: &Bank<P, T, BToken>): u64 {
     bank.lending.borrow().reserve_array_index
 }
+
+public fun minimum_liquidity(): u64 { MINIMUM_LIQUIDITY }
 
 // ===== Events =====
 

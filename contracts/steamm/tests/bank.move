@@ -5,6 +5,7 @@ use steamm::bank::{Self, Bank};
 use steamm::bank_math;
 use steamm::global_admin;
 use steamm::test_utils::{Self, reserve_args};
+use sui::coin;
 use sui::test_scenario::{Self, ctx};
 use sui::test_utils::{destroy, assert_eq};
 use suilend::lending_market_tests::{LENDING_MARKET, setup as suilend_setup};
@@ -361,5 +362,53 @@ fun test_bank_prepare_bank_for_pending_withdraw() {
     destroy(global_admin);
     destroy(lending_market);
     destroy(usdc);
+    destroy(scenario);
+}
+
+#[test]
+fun test_bank_withdraw_except_minimum_liquidity() {
+    let mut scenario = test_scenario::begin(@0x0);
+
+    let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
+        reserve_args(&mut scenario),
+        &mut scenario,
+    ).destruct_state();
+
+    // Create bank
+    let mut bank = setup_bank();
+    let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
+
+    bank.init_lending(
+        &global_admin,
+        &mut lending_market,
+        5_000,
+        1_000,
+        ctx(&mut scenario),
+    );
+
+    let mut coin = coin::mint_for_testing<TEST_USDC>(500_000, ctx(&mut scenario));
+    let mut btoken = bank.mint_btokens(&mut lending_market, &mut coin, 500_000, &clock, ctx(&mut scenario));
+    destroy(coin);
+
+    let btoken_value = btoken.value();
+    let coin = bank.burn_btokens(
+        &mut lending_market,
+        &mut btoken,
+        btoken_value,
+        &clock,
+        ctx(&mut scenario),
+    );
+
+    assert_eq(coin.value(), 500_000 - bank::minimum_liquidity());
+
+    destroy(coin);
+    destroy(btoken);
+    destroy(clock);
+    destroy(bank);
+    destroy(prices);
+    destroy(bag);
+    destroy(lend_cap);
+    destroy(global_admin);
+    destroy(lending_market);
     destroy(scenario);
 }
