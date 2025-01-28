@@ -62,6 +62,8 @@ const ELpSupplyToReserveRatioViolation: u64 = 5;
 const ESwapOutputAmountIsZero: u64 = 6;
 // When the user coin object does not have enough balance to fulfil the swap
 const EInsufficientFunds: u64 = 7;
+// When creating a pool and the type `A` and `B` are duplicated
+const ETypeAandBDuplicated: u64 = 8;
 
 // ===== Structs =====
 
@@ -501,6 +503,7 @@ public(package) fun new<A, B, Quoter: store, LpType: drop>(
 ): (Pool<A, B, Quoter, LpType>, PoolCap<A, B, Quoter, LpType>) {
     assert!(lp_treasury.total_supply() == 0, ELpSupplyMustBeZero);
     assert!(swap_fee_bps < BPS_DENOMINATOR, EFeeAbove100Percent);
+    assert!(get<A>() != get<B>(), ETypeAandBDuplicated);
 
     update_lp_metadata(meta_a, meta_b, meta_lp, &lp_treasury);
 
