@@ -264,6 +264,7 @@ public fun redeem_liquidity<A, B, Quoter: store, LpType: drop>(
 
     let initial_lp_supply = pool.lp_supply.supply_value();
     let initial_reserve_a = pool.balance_amount_a();
+    let initial_reserve_b = pool.balance_amount_b();
     let lp_burn = lp_tokens.value();
 
     assert!(quote.burn_lp() == lp_burn, 0);
@@ -302,6 +303,13 @@ public fun redeem_liquidity<A, B, Quoter: store, LpType: drop>(
         initial_reserve_a,
         initial_lp_supply,
         pool.balance_amount_a(),
+        pool.lp_supply.supply_value(),
+    );
+
+    assert_lp_supply_reserve_ratio(
+        initial_reserve_b,
+        initial_lp_supply,
+        pool.balance_amount_b(),
         pool.lp_supply.supply_value(),
     );
 
