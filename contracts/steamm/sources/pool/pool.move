@@ -64,6 +64,10 @@ const ESwapOutputAmountIsZero: u64 = 6;
 const EInsufficientFunds: u64 = 7;
 // When creating a pool and the type `A` and `B` are duplicated
 const ETypeAandBDuplicated: u64 = 8;
+// Empty LP Token when redeeming liquidity
+const ELpTokenEmpty: u64 = 9;
+// Empty coin A and B when depositing or swapping
+const EEmptyCoins: u64 = 9;
 
 // ===== Structs =====
 
@@ -164,6 +168,7 @@ public fun deposit_liquidity<A, B, Quoter: store, LpType: drop>(
     ctx: &mut TxContext,
 ): (Coin<LpType>, DepositResult) {
     pool.version.assert_version_and_upgrade(CURRENT_VERSION);
+    assert!(!(coin_a.value() == 0 && coin_b.value() == 0), EEmptyCoins);
 
     // Compute token deposits and delta lp tokens
     let quote = quote_deposit_(
@@ -254,6 +259,7 @@ public fun redeem_liquidity<A, B, Quoter: store, LpType: drop>(
     min_b: u64,
     ctx: &mut TxContext,
 ): (Coin<A>, Coin<B>, RedeemResult) {
+    assert!(lp_tokens.value() > 0, ELpTokenEmpty);
     pool.version.assert_version_and_upgrade(CURRENT_VERSION);
 
     // Compute amounts to withdraw
@@ -593,6 +599,7 @@ public(package) fun swap<A, B, Quoter: store, LpType: drop>(
     ctx: &mut TxContext,
 ): SwapResult {
     pool.version.assert_version_and_upgrade(CURRENT_VERSION);
+    assert!(!(coin_a.value() == 0 && coin_b.value() == 0), EEmptyCoins);
 
     assert!(quote.amount_out() > 0, ESwapOutputAmountIsZero);
     assert!(quote.amount_out() >= min_amount_out, ESwapExceedsSlippage);

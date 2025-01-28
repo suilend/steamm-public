@@ -1310,15 +1310,7 @@ fun test_lend_amm_swap_small_swap_scenario_no_rebalance() {
     assert_eq(bank_b.funds_available().value(), 20_000 + 10);
 
     // Burn btoken
-    let btoken_b_value = btoken_b.value();
-    let coin_b = bank_b.burn_btokens(
-        &mut lending_market,
-        &mut btoken_b,
-        btoken_b_value,
-        &clock,
-        ctx,
-    );
-    assert_eq(coin_b.value(), 0);
+    assert_eq(btoken_b.value(), 0);
 
     let btoken_a_value = btoken_a.value();
     let coin_a = bank_a.burn_btokens(
@@ -1354,7 +1346,6 @@ fun test_lend_amm_swap_small_swap_scenario_no_rebalance() {
     assert_eq(bank_b.funds_available().value(), 20_000 + 10);
 
     destroy(coin_a);
-    destroy(coin_b);
     destroy(lp_coins);
     destroy(bank_a);
     destroy(bank_b);
@@ -1482,16 +1473,7 @@ fun test_lend_amm_swap_medium_swap_scenario() {
         ctx,
     );
     assert_eq(coin_a.value(), 20_000);
-
-    let btoken_b_value = btoken_b.value();
-    let coin_b = bank_b.burn_btokens(
-        &mut lending_market,
-        &mut btoken_b,
-        btoken_b_value,
-        &clock,
-        ctx,
-    );
-    assert_eq(coin_b.value(), 0);
+    assert_eq(btoken_b.value(), 0);
 
     destroy(btoken_a);
     destroy(btoken_b);
@@ -1517,7 +1499,6 @@ fun test_lend_amm_swap_medium_swap_scenario() {
     assert_eq(bank_b.funds_available().value(), 24_000);
 
     destroy(coin_a);
-    destroy(coin_b);
     destroy(lp_coins);
     destroy(bank_a);
     destroy(bank_b);
@@ -1646,16 +1627,7 @@ fun test_lend_amm_swap_large_swap_scenario() {
         ctx,
     );
     assert_eq(coin_a.value(), 30_000);
-
-    let btoken_b_value = btoken_b.value();
-    let coin_b = bank_b.burn_btokens(
-        &mut lending_market,
-        &mut btoken_b,
-        btoken_b_value,
-        &clock,
-        ctx,
-    );
-    assert_eq(coin_b.value(), 0);
+    assert_eq(btoken_b.value(), 0);
 
     destroy(btoken_a);
     destroy(btoken_b);
@@ -1681,7 +1653,6 @@ fun test_lend_amm_swap_large_swap_scenario() {
     assert_eq(bank_b.funds_available().value(), 26_000);
 
     destroy(coin_a);
-    destroy(coin_b);
     destroy(lp_coins);
     destroy(bank_a);
     destroy(bank_b);

@@ -37,6 +37,8 @@ const ECTokenRatioTooLow: u64 = 7;
 const ELendingNotActive: u64 = 8;
 const ECompoundedInterestNotUpdated: u64 = 9;
 const EInsufficientBankFunds: u64 = 10;
+const EEmptyCoin: u64 = 11;
+const EEmptyBToken: u64 = 12;
 
 // ===== Structs =====
 
@@ -173,6 +175,7 @@ public fun mint_btokens<P, T, BToken>(
     ctx: &mut TxContext,
 ): Coin<BToken> {
     bank.version.assert_version_and_upgrade(CURRENT_VERSION);
+    assert!(coins.value() != 0, EEmptyCoin);
     bank.compound_interest_if_any(lending_market, clock);
 
     let coin_input = coins.split(coin_amount, ctx);
@@ -218,6 +221,7 @@ public fun burn_btokens<P, T, BToken>(
     ctx: &mut TxContext,
 ): Coin<T> {
     bank.version.assert_version_and_upgrade(CURRENT_VERSION);
+    assert!(btokens.value() != 0, EEmptyBToken);
     bank.compound_interest_if_any(lending_market, clock);
 
     let btoken_input = btokens.split(btoken_amount, ctx);
