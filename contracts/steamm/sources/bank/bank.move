@@ -642,7 +642,7 @@ fun compound_interest_if_any<P, T, BToken>(
     clock: &Clock,
 ) {
     if (bank.lending.is_some()) {
-        lending_market.compound_interest<P, T>(bank.reserve_array_index(), clock);
+        lending_market.compound_interest<P>(bank.reserve_array_index(), clock);
     }
 }
 
