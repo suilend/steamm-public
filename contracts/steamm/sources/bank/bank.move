@@ -34,17 +34,16 @@ const EBTokenSupplyMustBeZero: u64 = 2;
 const EUtilisationRangeAboveHundredPercent: u64 = 3;
 const EUtilisationRangeBelowHundredPercent: u64 = 4;
 const ELendingAlreadyActive: u64 = 5;
-const EInvalidCTokenRatio: u64 = 6;
-const ECTokenRatioTooLow: u64 = 7;
-const ELendingNotActive: u64 = 8;
-const ECompoundedInterestNotUpdated: u64 = 9;
-const EInsufficientBankFunds: u64 = 10;
-const EInsufficientCoinBalance: u64 = 11;
-const EEmptyCoinAmount: u64 = 12;
-const EEmptyBToken: u64 = 13;
-const EInvalidBtokenBalance: u64 = 14;
-const ENoBTokensToBurn: u64 = 15;
-const ENoTokensToWithdraw: u64 = 16;
+const ECTokenRatioTooLow: u64 = 6;
+const ELendingNotActive: u64 = 7;
+const ECompoundedInterestNotUpdated: u64 = 8;
+const EInsufficientBankFunds: u64 = 9;
+const EInsufficientCoinBalance: u64 = 10;
+const EEmptyCoinAmount: u64 = 11;
+const EEmptyBToken: u64 = 12;
+const EInvalidBtokenBalance: u64 = 13;
+const ENoBTokensToBurn: u64 = 14;
+const ENoTokensToWithdraw: u64 = 15;
 
 // ===== Structs =====
 
@@ -572,11 +571,6 @@ fun recall<P, T, BToken>(
     );
 
     let recalled_amount = coin_recalled.value();
-
-    assert!(
-        ctoken_amount * bank.funds_deployed(lending_market, clock).floor() <= lending.ctokens * recalled_amount,
-        EInvalidCTokenRatio,
-    );
 
     let lending = bank.lending.borrow_mut();
     lending.ctokens = lending.ctokens - ctoken_amount;
