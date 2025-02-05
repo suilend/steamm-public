@@ -49,12 +49,6 @@ public(package) fun checked_mul_div_up(x: u64, y: u64, z: u64): Option<u64> {
     some(res as u64)
 }
 
-public(package) fun safe_compare_mul_u64(a1: u64, b1: u64, a2: u64, b2: u64): bool {
-    let left = (a1 as u128) * (b1 as u128);
-    let right = (a2 as u128) * (b2 as u128);
-    left >= right
-}
-
 public(package) fun min_non_zero(x: u64, y: u64): u64 {
     assert!(!(x == 0 && y == 0), EInvalidMinArgs);
 
