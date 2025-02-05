@@ -32,7 +32,7 @@ const EBTokenTypeInvalid: u64 = 0;
 const EInvalidBTokenDecimals: u64 = 1;
 const EBTokenSupplyMustBeZero: u64 = 2;
 const EUtilisationRangeAboveHundredPercent: u64 = 3;
-const EUtilisationRangeBelowHundredPercent: u64 = 4;
+const EUtilisationRangeBelowZeroPercent: u64 = 4;
 const ELendingAlreadyActive: u64 = 5;
 const ECTokenRatioTooLow: u64 = 6;
 const ELendingNotActive: u64 = 7;
@@ -133,7 +133,7 @@ public fun init_lending<P, T, BToken>(
         target_utilisation_bps + utilisation_buffer_bps <= 10_000,
         EUtilisationRangeAboveHundredPercent,
     );
-    assert!(target_utilisation_bps >= utilisation_buffer_bps, EUtilisationRangeBelowHundredPercent);
+    assert!(target_utilisation_bps >= utilisation_buffer_bps, EUtilisationRangeBelowZeroPercent);
 
     let obligation_cap = lending_market.create_obligation(ctx);
     let reserve_array_index = lending_market.reserve_array_index<P, T>();
@@ -351,7 +351,7 @@ public fun set_utilisation_bps<P, T, BToken>(
         target_utilisation_bps + utilisation_buffer_bps <= 10_000,
         EUtilisationRangeAboveHundredPercent,
     );
-    assert!(target_utilisation_bps >= utilisation_buffer_bps, EUtilisationRangeBelowHundredPercent);
+    assert!(target_utilisation_bps >= utilisation_buffer_bps, EUtilisationRangeBelowZeroPercent);
 
     let lending = bank.lending.borrow_mut();
 
