@@ -232,8 +232,10 @@ public fun burn_btokens<P, T, BToken>(
     assert!(btokens.value() != 0, EEmptyBToken);
     assert!(btokens.value() >= btoken_amount, EInvalidBtokenBalance);
 
-    if (btoken_amount == bank.btoken_supply.supply_value()) {
-        btoken_amount = btoken_amount - MINIMUM_LIQUIDITY
+    let remaining_tokens = bank.btoken_supply.supply_value() - btoken_amount;
+    if (remaining_tokens < MINIMUM_LIQUIDITY) {
+        let delta = MINIMUM_LIQUIDITY - remaining_tokens;
+        btoken_amount = btoken_amount - delta
     };
 
     assert!(btoken_amount > 0, ENoBTokensToBurn);
