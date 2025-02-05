@@ -68,6 +68,7 @@ const ETypeAandBDuplicated: u64 = 8;
 const ELpTokenEmpty: u64 = 9;
 // Empty coin A and B when depositing or swapping
 const EEmptyCoins: u64 = 9;
+const EEmptyLpCoin: u64 = 10;
 
 // ===== Structs =====
 
@@ -208,6 +209,8 @@ public fun deposit_liquidity<A, B, Quoter: store, LpType: drop>(
     if (quote.initial_deposit()) {
         public_transfer(lp_coins.split(MINIMUM_LIQUIDITY, ctx), @0x0);
     };
+
+    assert!(lp_coins.value() > 0, EEmptyLpCoin);
 
     assert_lp_supply_reserve_ratio(
         initial_total_funds_a,

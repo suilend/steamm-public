@@ -39,10 +39,12 @@ const ECTokenRatioTooLow: u64 = 7;
 const ELendingNotActive: u64 = 8;
 const ECompoundedInterestNotUpdated: u64 = 9;
 const EInsufficientBankFunds: u64 = 10;
-const EEmptyCoin: u64 = 11;
-const EEmptyBToken: u64 = 12;
-const EInvalidBtokenBalance: u64 = 13;
-const ENoBTokensToBurn: u64 = 14;
+const EInsufficientCoinBalance: u64 = 11;
+const EEmptyCoinAmount: u64 = 12;
+const EEmptyBToken: u64 = 13;
+const EInvalidBtokenBalance: u64 = 14;
+const ENoBTokensToBurn: u64 = 15;
+const ENoTokensToWithdraw: u64 = 16;
 
 // ===== Structs =====
 
@@ -173,16 +175,17 @@ public fun init_lending<P, T, BToken>(
 public fun mint_btokens<P, T, BToken>(
     bank: &mut Bank<P, T, BToken>,
     lending_market: &mut LendingMarket<P>,
-    coins: &mut Coin<T>,
+    coin_t: &mut Coin<T>,
     coin_amount: u64,
     clock: &Clock,
     ctx: &mut TxContext,
 ): Coin<BToken> {
     bank.version.assert_version_and_upgrade(CURRENT_VERSION);
-    assert!(coins.value() != 0, EEmptyCoin);
+    assert!(coin_amount > 0, EEmptyCoinAmount);
+    assert!(coin_t.value() >= coin_amount, EInsufficientCoinBalance);
     bank.compound_interest_if_any(lending_market, clock);
 
-    let coin_input = coins.split(coin_amount, ctx);
+    let coin_input = coin_t.split(coin_amount, ctx);
     let new_btokens = bank.to_btokens(lending_market, coin_amount, clock).floor();
 
     emit_event(MintBTokenEvent {
@@ -253,6 +256,7 @@ public fun burn_btokens<P, T, BToken>(
     assert!(max_available + 1 >= tokens_to_withdraw, EInsufficientBankFunds);
 
     tokens_to_withdraw = tokens_to_withdraw.min(max_available);
+    assert!(tokens_to_withdraw > 0, ENoTokensToWithdraw);
 
     emit_event(BurnBTokenEvent {
         user: ctx.sender(),
