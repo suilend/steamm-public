@@ -44,6 +44,7 @@ const EEmptyBToken: u64 = 12;
 const EInvalidBtokenBalance: u64 = 13;
 const ENoBTokensToBurn: u64 = 14;
 const ENoTokensToWithdraw: u64 = 15;
+const EInitialDepositBelowMinimumLiquidity: u64 = 16;
 
 // ===== Structs =====
 
@@ -180,7 +181,14 @@ public fun mint_btokens<P, T, BToken>(
     ctx: &mut TxContext,
 ): Coin<BToken> {
     bank.version.assert_version_and_upgrade(CURRENT_VERSION);
-    assert!(coin_amount > 0, EEmptyCoinAmount);
+    
+    if (bank.btoken_supply.supply_value() == 0) {
+        assert!(coin_amount > MINIMUM_LIQUIDITY, EInitialDepositBelowMinimumLiquidity);
+    } else {
+        assert!(coin_amount > 0, EEmptyCoinAmount);
+
+    };
+    
     assert!(coin_t.value() >= coin_amount, EInsufficientCoinBalance);
     bank.compound_interest_if_any(lending_market, clock);
 
