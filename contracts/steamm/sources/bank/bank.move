@@ -23,7 +23,7 @@ use suilend::reserve::CToken;
 const CURRENT_VERSION: u16 = 1;
 const MIN_TOKEN_BLOCK_SIZE: u64 = 1_000_000_000;
 // Minimum liquidity of btokens that cannot be withdrawn
-const MINIMUM_LIQUIDITY: u64 = 10;
+const MINIMUM_LIQUIDITY: u64 = 1_000;
 const BTOKEN_ICON_URL: vector<u8> = b"TODO";
 
 // ===== Errors =====

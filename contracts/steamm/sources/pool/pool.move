@@ -35,7 +35,7 @@ const MINIMUM_REDEMPTION_FEE: u64 = 1;
 const BPS_DENOMINATOR: u64 = 10_000;
 // Minimum liquidity burned during
 // the seed depositing phase
-const MINIMUM_LIQUIDITY: u64 = 10;
+const MINIMUM_LIQUIDITY: u64 = 1_000;
 
 const CURRENT_VERSION: u16 = 1;
 const LP_ICON_URL: vector<u8> = b"TODO";

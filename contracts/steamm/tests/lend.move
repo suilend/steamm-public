@@ -1174,7 +1174,7 @@ fun test_lend_redeem_with_lending_within_utilization() {
     assert_eq(pool.lp_supply_val(), 100_000 - 100);
     assert_eq(reserve_a, 100_000 - 100);
     assert_eq(reserve_b, 100_000 - 100);
-    assert_eq(lp_coins.value(), 100_000 - 100 - 10); // extra 10 is minimum_liquidity
+    assert_eq(lp_coins.value(), 100_000 - 100 - 1000); // extra 1000 is minimum_liquidity
 
     assert_eq(bank_a.funds_deployed(&lending_market, &clock).floor(), 80_000); // amount lent does not change
     assert_eq(bank_a.funds_available().value(), 19_900); // 100_000 * 20% - 100
@@ -1752,7 +1752,7 @@ public fun test_interest_distribution_one_lp() {
     bank_b.mock_min_token_block_size(10);
 
     // Deposit funds in AMM Pool
-    let liquidity_amount = 3_000_010; // we add the +10 which is locked forever
+    let liquidity_amount = 3_001_000; // we add the +10 which is locked forever
     let mut coin_a = coin::mint_for_testing<TEST_USDC>(liquidity_amount, ctx);
     let mut coin_b = coin::mint_for_testing<TEST_SUI>(liquidity_amount, ctx);
 
@@ -1788,8 +1788,8 @@ public fun test_interest_distribution_one_lp() {
         ctx,
     );
 
-    assert!(deposit_result.deposit_a() == 3000010, 0);
-    assert!(deposit_result.deposit_b() == 3000010, 0);
+    assert!(deposit_result.deposit_a() == 3001000, 0);
+    assert!(deposit_result.deposit_b() == 3001000, 0);
 
     test_utils::destroy(btoken_a);
     test_utils::destroy(btoken_b);
@@ -1917,7 +1917,7 @@ public fun test_interest_distribution_one_lp() {
     assert_eq(coin_a.value(), 3_000_000); // No lending on so it stays the same
 
     // Initial funds deposited on the lending market: 1000000
-    let estimated_interest_to_lp = interest_paid * 3_000_000 / 4_000_000;
+    let estimated_interest_to_lp = interest_paid * 3_000_000 / 4_001_000;
     let actual_interest_to_lp = coin_b.value() - 3_000_000;
 
     assert_eq_approx!(estimated_interest_to_lp, actual_interest_to_lp, 1);
@@ -1970,7 +1970,7 @@ public fun test_interest_distribution_multiple_lps() {
     bank_b.mock_min_token_block_size(10);
 
     // Deposit funds in AMM Pool
-    let liquidity_amount = 1_500_010; // we add the +10 which is locked forever
+    let liquidity_amount = 1_501_000; // we add the +1000 which is locked forever
     let mut coin_a = coin::mint_for_testing<TEST_USDC>(liquidity_amount, ctx);
     let mut coin_b = coin::mint_for_testing<TEST_SUI>(liquidity_amount, ctx);
 
@@ -2194,7 +2194,7 @@ public fun test_interest_distribution_multiple_lps() {
     assert_eq(coin_a2.value(), 1_500_000); // No lending on so it stays the same
 
     // Initial funds deposited on the lending market: 1000000
-    let estimated_interest_to_lp = interest_paid * 3_000_000 / 4_000_000;
+    let estimated_interest_to_lp = interest_paid * 3_000_000 / 4_001_000;
     let actual_interest_to_lp = coin_b1.value() + coin_b2.value() - 3_000_000;
 
     assert_eq_approx!(estimated_interest_to_lp, actual_interest_to_lp, 1);
