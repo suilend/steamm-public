@@ -23,7 +23,7 @@ use suilend::reserve::CToken;
 const CURRENT_VERSION: u16 = 1;
 const MIN_TOKEN_BLOCK_SIZE: u64 = 1_000_000_000;
 // Minimum liquidity of btokens that cannot be withdrawn
-const MINIMUM_LIQUIDITY: u64 = 10;
+const MINIMUM_LIQUIDITY: u64 = 1_000;
 const BTOKEN_ICON_URL: vector<u8> = b"TODO";
 
 // ===== Errors =====
@@ -32,17 +32,19 @@ const EBTokenTypeInvalid: u64 = 0;
 const EInvalidBTokenDecimals: u64 = 1;
 const EBTokenSupplyMustBeZero: u64 = 2;
 const EUtilisationRangeAboveHundredPercent: u64 = 3;
-const EUtilisationRangeBelowHundredPercent: u64 = 4;
+const EUtilisationRangeBelowZeroPercent: u64 = 4;
 const ELendingAlreadyActive: u64 = 5;
-const EInvalidCTokenRatio: u64 = 6;
-const ECTokenRatioTooLow: u64 = 7;
-const ELendingNotActive: u64 = 8;
-const ECompoundedInterestNotUpdated: u64 = 9;
-const EInsufficientBankFunds: u64 = 10;
-const EEmptyCoin: u64 = 11;
+const ECTokenRatioTooLow: u64 = 6;
+const ELendingNotActive: u64 = 7;
+const ECompoundedInterestNotUpdated: u64 = 8;
+const EInsufficientBankFunds: u64 = 9;
+const EInsufficientCoinBalance: u64 = 10;
+const EEmptyCoinAmount: u64 = 11;
 const EEmptyBToken: u64 = 12;
 const EInvalidBtokenBalance: u64 = 13;
 const ENoBTokensToBurn: u64 = 14;
+const ENoTokensToWithdraw: u64 = 15;
+const EInitialDepositBelowMinimumLiquidity: u64 = 16;
 
 // ===== Structs =====
 
@@ -132,7 +134,7 @@ public fun init_lending<P, T, BToken>(
         target_utilisation_bps + utilisation_buffer_bps <= 10_000,
         EUtilisationRangeAboveHundredPercent,
     );
-    assert!(target_utilisation_bps >= utilisation_buffer_bps, EUtilisationRangeBelowHundredPercent);
+    assert!(target_utilisation_bps >= utilisation_buffer_bps, EUtilisationRangeBelowZeroPercent);
 
     let obligation_cap = lending_market.create_obligation(ctx);
     let reserve_array_index = lending_market.reserve_array_index<P, T>();
@@ -173,16 +175,24 @@ public fun init_lending<P, T, BToken>(
 public fun mint_btokens<P, T, BToken>(
     bank: &mut Bank<P, T, BToken>,
     lending_market: &mut LendingMarket<P>,
-    coins: &mut Coin<T>,
+    coin_t: &mut Coin<T>,
     coin_amount: u64,
     clock: &Clock,
     ctx: &mut TxContext,
 ): Coin<BToken> {
     bank.version.assert_version_and_upgrade(CURRENT_VERSION);
-    assert!(coins.value() != 0, EEmptyCoin);
+    
+    if (bank.btoken_supply.supply_value() == 0) {
+        assert!(coin_amount > MINIMUM_LIQUIDITY, EInitialDepositBelowMinimumLiquidity);
+    } else {
+        assert!(coin_amount > 0, EEmptyCoinAmount);
+
+    };
+    
+    assert!(coin_t.value() >= coin_amount, EInsufficientCoinBalance);
     bank.compound_interest_if_any(lending_market, clock);
 
-    let coin_input = coins.split(coin_amount, ctx);
+    let coin_input = coin_t.split(coin_amount, ctx);
     let new_btokens = bank.to_btokens(lending_market, coin_amount, clock).floor();
 
     emit_event(MintBTokenEvent {
@@ -230,8 +240,10 @@ public fun burn_btokens<P, T, BToken>(
     assert!(btokens.value() != 0, EEmptyBToken);
     assert!(btokens.value() >= btoken_amount, EInvalidBtokenBalance);
 
-    if (btoken_amount == bank.btoken_supply.supply_value()) {
-        btoken_amount = btoken_amount - MINIMUM_LIQUIDITY
+    let remaining_tokens = bank.btoken_supply.supply_value() - btoken_amount;
+    if (remaining_tokens < MINIMUM_LIQUIDITY) {
+        let delta = MINIMUM_LIQUIDITY - remaining_tokens;
+        btoken_amount = btoken_amount - delta
     };
 
     assert!(btoken_amount > 0, ENoBTokensToBurn);
@@ -253,6 +265,7 @@ public fun burn_btokens<P, T, BToken>(
     assert!(max_available + 1 >= tokens_to_withdraw, EInsufficientBankFunds);
 
     tokens_to_withdraw = tokens_to_withdraw.min(max_available);
+    assert!(tokens_to_withdraw > 0, ENoTokensToWithdraw);
 
     emit_event(BurnBTokenEvent {
         user: ctx.sender(),
@@ -346,7 +359,7 @@ public fun set_utilisation_bps<P, T, BToken>(
         target_utilisation_bps + utilisation_buffer_bps <= 10_000,
         EUtilisationRangeAboveHundredPercent,
     );
-    assert!(target_utilisation_bps >= utilisation_buffer_bps, EUtilisationRangeBelowHundredPercent);
+    assert!(target_utilisation_bps >= utilisation_buffer_bps, EUtilisationRangeBelowZeroPercent);
 
     let lending = bank.lending.borrow_mut();
 
@@ -568,11 +581,6 @@ fun recall<P, T, BToken>(
     );
 
     let recalled_amount = coin_recalled.value();
-
-    assert!(
-        ctoken_amount * bank.funds_deployed(lending_market, clock).floor() <= lending.ctokens * recalled_amount,
-        EInvalidCTokenRatio,
-    );
 
     let lending = bank.lending.borrow_mut();
     lending.ctokens = lending.ctokens - ctoken_amount;

@@ -133,7 +133,7 @@ fun test_invalid_utilisation_liquidity_above_100() {
 }
 
 #[test]
-#[expected_failure(abort_code = bank::EUtilisationRangeBelowHundredPercent)]
+#[expected_failure(abort_code = bank::EUtilisationRangeBelowZeroPercent)]
 fun test_invalid_target_liquidity_below_100() {
     let mut scenario = test_scenario::begin(@0x0);
 

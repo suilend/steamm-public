@@ -179,10 +179,10 @@ fun test_full_cpmm_cycle() {
     let (reserve_a, reserve_b) = pool.balance_amounts();
 
     // Guarantees that roundings are in favour of the pool
-    assert_eq(coin_a.value(), 549_989);
-    assert_eq(coin_b.value(), 454_900);
-    assert_eq(reserve_a, 11);
-    assert_eq(reserve_b, 10);
+    assert_eq(coin_a.value(), 548_900);
+    assert_eq(coin_b.value(), 454_000);
+    assert_eq(reserve_a, 1_100);
+    assert_eq(reserve_b, 910);
     assert_eq(pool.lp_supply_val(), minimum_liquidity());
 
     destroy(coin_a);

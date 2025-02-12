@@ -47,8 +47,7 @@ public fun fee_ratio_(fee_config: &FeeConfig): (u64, u64) {
 }
 
 public(package) fun withdraw<A, B>(fees: &mut Fees<A, B>): (Balance<A>, Balance<B>) {
-    let (bal_a, bal_b) = (fees.fee_a.value(), fees.fee_b.value());
-    (fees.fee_a.split(bal_a), fees.fee_b.split(bal_b))
+    (fees.fee_a.withdraw_all(), fees.fee_b.withdraw_all())
 }
 
 public(package) fun balances_mut<A, B>(fees: &mut Fees<A, B>): (&mut Balance<A>, &mut Balance<B>) {

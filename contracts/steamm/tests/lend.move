@@ -4,6 +4,7 @@ module steamm::lend_tests;
 use std::type_name;
 use steamm::dummy_quoter::swap as dummy_swap;
 use steamm::global_admin;
+use steamm::bank;
 use steamm::pool::minimum_liquidity;
 use steamm::test_utils::{
     reserve_args,
@@ -1174,7 +1175,7 @@ fun test_lend_redeem_with_lending_within_utilization() {
     assert_eq(pool.lp_supply_val(), 100_000 - 100);
     assert_eq(reserve_a, 100_000 - 100);
     assert_eq(reserve_b, 100_000 - 100);
-    assert_eq(lp_coins.value(), 100_000 - 100 - 10); // extra 10 is minimum_liquidity
+    assert_eq(lp_coins.value(), 100_000 - 100 - 1000); // extra 1000 is minimum_liquidity
 
     assert_eq(bank_a.funds_deployed(&lending_market, &clock).floor(), 80_000); // amount lent does not change
     assert_eq(bank_a.funds_available().value(), 19_900); // 100_000 * 20% - 100
@@ -1752,7 +1753,7 @@ public fun test_interest_distribution_one_lp() {
     bank_b.mock_min_token_block_size(10);
 
     // Deposit funds in AMM Pool
-    let liquidity_amount = 3_000_010; // we add the +10 which is locked forever
+    let liquidity_amount = 3_001_000; // we add the +10 which is locked forever
     let mut coin_a = coin::mint_for_testing<TEST_USDC>(liquidity_amount, ctx);
     let mut coin_b = coin::mint_for_testing<TEST_SUI>(liquidity_amount, ctx);
 
@@ -1788,8 +1789,8 @@ public fun test_interest_distribution_one_lp() {
         ctx,
     );
 
-    assert!(deposit_result.deposit_a() == 3000010, 0);
-    assert!(deposit_result.deposit_b() == 3000010, 0);
+    assert!(deposit_result.deposit_a() == 3001000, 0);
+    assert!(deposit_result.deposit_b() == 3001000, 0);
 
     test_utils::destroy(btoken_a);
     test_utils::destroy(btoken_b);
@@ -1917,7 +1918,7 @@ public fun test_interest_distribution_one_lp() {
     assert_eq(coin_a.value(), 3_000_000); // No lending on so it stays the same
 
     // Initial funds deposited on the lending market: 1000000
-    let estimated_interest_to_lp = interest_paid * 3_000_000 / 4_000_000;
+    let estimated_interest_to_lp = interest_paid * 3_000_000 / 4_001_000;
     let actual_interest_to_lp = coin_b.value() - 3_000_000;
 
     assert_eq_approx!(estimated_interest_to_lp, actual_interest_to_lp, 1);
@@ -1970,7 +1971,7 @@ public fun test_interest_distribution_multiple_lps() {
     bank_b.mock_min_token_block_size(10);
 
     // Deposit funds in AMM Pool
-    let liquidity_amount = 1_500_010; // we add the +10 which is locked forever
+    let liquidity_amount = 1_501_000; // we add the +1000 which is locked forever
     let mut coin_a = coin::mint_for_testing<TEST_USDC>(liquidity_amount, ctx);
     let mut coin_b = coin::mint_for_testing<TEST_SUI>(liquidity_amount, ctx);
 
@@ -2194,7 +2195,7 @@ public fun test_interest_distribution_multiple_lps() {
     assert_eq(coin_a2.value(), 1_500_000); // No lending on so it stays the same
 
     // Initial funds deposited on the lending market: 1000000
-    let estimated_interest_to_lp = interest_paid * 3_000_000 / 4_000_000;
+    let estimated_interest_to_lp = interest_paid * 3_000_000 / 4_001_000;
     let actual_interest_to_lp = coin_b1.value() + coin_b2.value() - 3_000_000;
 
     assert_eq_approx!(estimated_interest_to_lp, actual_interest_to_lp, 1);
@@ -2213,5 +2214,99 @@ public fun test_interest_distribution_multiple_lps() {
     test_utils::destroy(bank_a);
     test_utils::destroy(bank_b);
     test_utils::destroy(global_admin);
+    test_scenario::end(scenario);
+}
+
+#[test]
+fun test_minimum_bank_tokens() {
+    let mut scenario = test_scenario::begin(ADMIN);
+
+    let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
+        reserve_args(&mut scenario),
+        &mut scenario,
+    ).destruct_state();
+    // Create amm bank
+    let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
+
+    let (pool, mut bank_a, mut bank_b) = test_setup_dummy_no_fees();
+    bank_a.mock_min_token_block_size(10);
+    bank_b.mock_min_token_block_size(10);
+
+    // Init Pool
+    test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+    let ctx = ctx(&mut scenario);
+
+    // Deposit funds in AMM Pool
+    let mut coin_a = coin::mint_for_testing<TEST_USDC>(100_000, ctx);
+    let mut coin_b = coin::mint_for_testing<TEST_SUI>(100_000, ctx);
+
+    let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 100_000, &clock, ctx);
+    let mut btoken_b = bank_b.mint_btokens(&mut lending_market, &mut coin_b, 100_000, &clock, ctx);
+
+    destroy(coin_a);
+    destroy(coin_b);
+
+    let coin_a = bank_a.burn_btokens(&mut lending_market, &mut btoken_a, 100_000, &clock, ctx);
+    let coin_b = bank_b.burn_btokens(&mut lending_market, &mut btoken_b, 99_999, &clock, ctx);
+
+    assert_eq(coin_a.value(), 99_000);
+    assert_eq(coin_b.value(), 99_000);
+
+    destroy(btoken_a);
+    destroy(btoken_b);
+    destroy(coin_a);
+    destroy(coin_b);
+    destroy(bank_a);
+    destroy(bank_b);
+    destroy(pool);
+    destroy(global_admin);
+    destroy(lending_market);
+    destroy(lend_cap);
+    destroy(prices);
+    destroy(bag);
+    destroy(clock);
+    test_scenario::end(scenario);
+}
+
+#[test]
+#[expected_failure(abort_code = bank::EInitialDepositBelowMinimumLiquidity)]
+fun test_supply_below_minimum_bank_tokens() {
+    let mut scenario = test_scenario::begin(ADMIN);
+
+    let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
+        reserve_args(&mut scenario),
+        &mut scenario,
+    ).destruct_state();
+    // Create amm bank
+    let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
+
+    let (pool, mut bank_a, mut bank_b) = test_setup_dummy_no_fees();
+    bank_a.mock_min_token_block_size(10);
+    bank_b.mock_min_token_block_size(10);
+
+    // Init Pool
+    test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+    let ctx = ctx(&mut scenario);
+
+    // Deposit funds in bank
+    let mut coin_a = coin::mint_for_testing<TEST_USDC>(100, ctx);
+
+    let mut btoken_a = bank_a.mint_btokens(&mut lending_market, &mut coin_a, 100, &clock, ctx);
+
+    destroy(coin_a);
+
+    let coin_a = bank_a.burn_btokens(&mut lending_market, &mut btoken_a, 1, &clock, ctx);
+
+    destroy(btoken_a);
+    destroy(coin_a);
+    destroy(bank_a);
+    destroy(bank_b);
+    destroy(pool);
+    destroy(global_admin);
+    destroy(lending_market);
+    destroy(lend_cap);
+    destroy(prices);
+    destroy(bag);
+    destroy(clock);
     test_scenario::end(scenario);
 }

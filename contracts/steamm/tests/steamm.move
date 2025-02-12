@@ -291,10 +291,10 @@ fun test_full_amm_cycle() {
     let (reserve_a, reserve_b) = pool.balance_amounts();
 
     // Guarantees that roundings are in favour of the pool
-    assert_eq(coin_a.value(), 549_989);
-    assert_eq(coin_b.value(), 450_390);
-    assert_eq(reserve_a, 11);
-    assert_eq(reserve_b, 10);
+    assert_eq(coin_a.value(), 548_900);
+    assert_eq(coin_b.value(), 449_499);
+    assert_eq(reserve_a, 1_100);
+    assert_eq(reserve_b, 901);
     assert_eq(pool.lp_supply_val(), minimum_liquidity());
 
     destroy(coin_a);
@@ -927,8 +927,8 @@ fun test_redeem_fees() {
     );
 
     // Guarantees that roundings are in favour of the pool
-    assert_eq(coin_a.value(), 99_899_999_999_990);
-    assert_eq(coin_b.value(), 99_899_999_999_990);
+    assert_eq(coin_a.value(), 99_899_999_999_001);
+    assert_eq(coin_b.value(), 99_899_999_999_001);
 
     destroy(coin_a);
     destroy(coin_b);
@@ -1218,8 +1218,8 @@ fun test_one_sided_deposit_redeem() {
         ctx,
     );
 
-    assert_eq(redeem_result.burn_lp(), 499990);
-    assert_eq(pool.balance_amount_a(), 10);
+    assert_eq(redeem_result.burn_lp(), 499000);
+    assert_eq(pool.balance_amount_a(), 1000);
     assert_eq(pool.balance_amount_b(), 0);
 
     destroy(bank_a);
