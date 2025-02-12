@@ -1,9 +1,7 @@
 /// Constant-Product AMM Quoter implementation
 module steamm::cpmm;
-
-use std::option::none;
 use steamm::global_admin::GlobalAdmin;
-use steamm::math::{safe_mul_div, checked_mul_div};
+use steamm::math::safe_mul_div;
 use steamm::pool::{Self, Pool, PoolCap, SwapResult, assert_liquidity};
 use steamm::quote::SwapQuote;
 use steamm::version::{Self, Version};
@@ -229,6 +227,12 @@ public(package) fun check_invariance<A, B, Quoter: store, LpType: drop>(
     assert!(k1 >= k0, EInvariantViolation);
 }
 
+#[test_only]
+use std::option::none;
+#[test_only]
+use steamm::math::checked_mul_div_up;
+
+#[test_only]
 public(package) fun max_amount_in_on_a2b<A, B, LpType: drop>(
     pool: &Pool<A, B, CpQuoter, LpType>,
 ): Option<u64> {
@@ -239,7 +243,7 @@ public(package) fun max_amount_in_on_a2b<A, B, LpType: drop>(
         return none()
     };
 
-    checked_mul_div(reserve_out, reserve_in, offset) // max_amount_in
+    checked_mul_div_up(reserve_out, reserve_in, offset) // max_amount_in
 }
 
 // ===== Private Functions =====

@@ -10,6 +10,7 @@ use steamm::lp_usdc_sui::LP_USDC_SUI;
 use steamm::pool::{Self, Pool, minimum_liquidity};
 use steamm::pool_math;
 use steamm::quote;
+use steamm::dummy_quoter;
 use steamm::test_utils::{test_setup_dummy, test_setup_cpmm, e9, reserve_args};
 use sui::coin;
 use sui::test_scenario::{Self, ctx};
@@ -1226,6 +1227,47 @@ fun test_one_sided_deposit_redeem() {
     destroy(coin_a);
     destroy(coin_b);
     destroy(pool);
+    destroy(lend_cap);
+    destroy(prices);
+    destroy(clock);
+    destroy(bag);
+    destroy(lending_market);
+    test_scenario::end(scenario);
+}
+
+#[test]
+#[expected_failure(abort_code = pool::ETypeAandBDuplicated)]
+fun test_fail_create_pool_duplicated_type() {
+    let mut scenario = test_scenario::begin(ADMIN);
+
+    // Init Pool
+    test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+
+    let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
+        reserve_args(&mut scenario),
+        &mut scenario,
+    ).destruct_state();
+
+    let ctx = ctx(&mut scenario);
+    let (treasury_cap_lp, mut meta_lp_usdc_sui) = steamm::lp_usdc_sui::create_currency(ctx);
+    let (treasury_cap_b_usdc, meta_b_usdc) = steamm::b_test_usdc::create_currency(ctx);
+
+    // Create pool
+
+    let (pool, pool_cap) = dummy_quoter::new<B_TEST_USDC, B_TEST_USDC, LP_USDC_SUI>(
+        &meta_b_usdc,
+        &meta_b_usdc,
+        &mut meta_lp_usdc_sui,
+        treasury_cap_lp,
+        100,
+        ctx,
+    );
+
+    destroy(pool);
+    destroy(pool_cap);
+    destroy(treasury_cap_b_usdc);
+    destroy(meta_lp_usdc_sui);
+    destroy(meta_b_usdc);
     destroy(lend_cap);
     destroy(prices);
     destroy(clock);
