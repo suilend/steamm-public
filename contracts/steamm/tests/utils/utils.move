@@ -155,7 +155,7 @@ public fun test_setup_cpmm(
 
     // Create pool
 
-    let (pool, pool_cap) = cpmm::new<B_TEST_USDC, B_TEST_SUI, LP_USDC_SUI>(
+    let pool = cpmm::new<B_TEST_USDC, B_TEST_SUI, LP_USDC_SUI>(
         &meta_b_usdc,
         &meta_b_sui,
         &mut meta_lp_usdc_sui,
@@ -172,7 +172,6 @@ public fun test_setup_cpmm(
     destroy(meta_b_usdc);
     destroy(meta_sui);
     destroy(meta_usdc);
-    destroy(pool_cap);
 
     test_scenario::end(scenario);
 
@@ -212,7 +211,7 @@ public fun test_setup_dummy(
 
     // Create pool
 
-    let (pool, pool_cap) = dummy_quoter::new<B_TEST_USDC, B_TEST_SUI, LP_USDC_SUI>(
+    let pool = dummy_quoter::new<B_TEST_USDC, B_TEST_SUI, LP_USDC_SUI>(
         &meta_b_usdc,
         &meta_b_sui,
         &mut meta_lp_usdc_sui,
@@ -228,7 +227,6 @@ public fun test_setup_dummy(
     destroy(meta_b_usdc);
     destroy(meta_sui);
     destroy(meta_usdc);
-    destroy(pool_cap);
 
     test_scenario::end(scenario);
 
@@ -244,7 +242,6 @@ public fun test_setup_dummy_no_fees(): (
     let (mut pool, bank_a, bank_b) = test_setup_dummy(0);
 
     pool.no_protocol_fees_for_testing();
-    pool.no_redemption_fees_for_testing();
 
     (pool, bank_a, bank_b)
 }

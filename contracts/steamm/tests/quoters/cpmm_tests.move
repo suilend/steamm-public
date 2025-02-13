@@ -65,7 +65,6 @@ fun test_full_cpmm_cycle() {
     let (clock, lend_cap, lending_market, mut pool) = setup(100, 0, &mut scenario);
 
     let ctx = ctx(&mut scenario);
-    pool.no_redemption_fees_for_testing();
 
     let mut coin_a = coin::mint_for_testing<B_TEST_USDC>(500_000, ctx);
     let mut coin_b = coin::mint_for_testing<B_TEST_SUI>(500_000, ctx);
@@ -226,7 +225,6 @@ fun test_cpmm_deposit_redeem_swap() {
     let (clock, lend_cap, lending_market, mut pool) = setup(100, 0, &mut scenario);
 
     let ctx = ctx(&mut scenario);
-    pool.no_redemption_fees_for_testing();
 
     let mut coin_a = coin::mint_for_testing<B_TEST_USDC>(e9(1_000), ctx);
     let mut coin_b = coin::mint_for_testing<B_TEST_SUI>(e9(500_000), ctx);

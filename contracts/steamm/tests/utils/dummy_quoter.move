@@ -1,7 +1,7 @@
 #[test_only]
 module steamm::dummy_quoter;
 
-use steamm::pool::{Self, Pool, PoolCap, SwapResult};
+use steamm::pool::{Self, Pool, SwapResult};
 use steamm::quote::SwapQuote;
 use sui::coin::{Coin, TreasuryCap, CoinMetadata};
 
@@ -16,10 +16,10 @@ public fun new<A, B, LpType: drop>(
     lp_treasury: TreasuryCap<LpType>,
     swap_fee_bps: u64,
     ctx: &mut TxContext,
-): (Pool<A, B, DummyQuoter, LpType>, PoolCap<A, B, DummyQuoter, LpType>) {
+): Pool<A, B, DummyQuoter, LpType> {
     let quoter = DummyQuoter {};
 
-    let (pool, pool_cap) = pool::new<A, B, DummyQuoter, LpType>(
+    pool::new<A, B, DummyQuoter, LpType>(
         meta_a,
         meta_b,
         meta_lp,
@@ -27,9 +27,7 @@ public fun new<A, B, LpType: drop>(
         swap_fee_bps,
         quoter,
         ctx,
-    );
-
-    (pool, pool_cap)
+    )
 }
 
 public fun swap<A, B, LpType: drop>(

@@ -2,8 +2,6 @@
 module steamm::quote;
 
 public use fun steamm::pool::swap_inner as SwapQuote.swap_inner;
-public use fun redemption_fee_a as RedeemQuote.fees_a;
-public use fun redemption_fee_b as RedeemQuote.fees_b;
 
 public struct SwapQuote has drop, store {
     amount_in: u64,
@@ -27,8 +25,6 @@ public struct DepositQuote has drop, store {
 public struct RedeemQuote has drop, store {
     withdraw_a: u64,
     withdraw_b: u64,
-    fees_a: u64,
-    fees_b: u64,
     burn_lp: u64,
 }
 
@@ -69,15 +65,11 @@ public(package) fun deposit_quote(
 public(package) fun redeem_quote(
     withdraw_a: u64,
     withdraw_b: u64,
-    fees_a: u64,
-    fees_b: u64,
     burn_lp: u64,
 ): RedeemQuote {
     RedeemQuote {
         withdraw_a,
         withdraw_b,
-        fees_a,
-        fees_b,
         burn_lp,
     }
 }
@@ -124,10 +116,6 @@ public fun mint_lp(deposit_quote: &DepositQuote): u64 { deposit_quote.mint_lp }
 public fun withdraw_a(redeem_quote: &RedeemQuote): u64 { redeem_quote.withdraw_a }
 
 public fun withdraw_b(redeem_quote: &RedeemQuote): u64 { redeem_quote.withdraw_b }
-
-public fun redemption_fee_a(redeem_quote: &RedeemQuote): u64 { redeem_quote.fees_a }
-
-public fun redemption_fee_b(redeem_quote: &RedeemQuote): u64 { redeem_quote.fees_b }
 
 public fun burn_lp(redeem_quote: &RedeemQuote): u64 { redeem_quote.burn_lp }
 

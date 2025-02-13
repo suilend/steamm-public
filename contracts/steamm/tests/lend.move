@@ -1749,7 +1749,6 @@ public fun test_interest_distribution_one_lp() {
     );
 
     pool.no_protocol_fees_for_testing();
-    pool.no_redemption_fees_for_testing();
     bank_b.mock_min_token_block_size(10);
 
     // Deposit funds in AMM Pool
@@ -1967,7 +1966,6 @@ public fun test_interest_distribution_multiple_lps() {
     );
 
     pool.no_protocol_fees_for_testing();
-    pool.no_redemption_fees_for_testing();
     bank_b.mock_min_token_block_size(10);
 
     // Deposit funds in AMM Pool

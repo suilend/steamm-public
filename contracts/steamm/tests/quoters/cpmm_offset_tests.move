@@ -31,7 +31,6 @@ fun test_quotes_with_consecutive_price_increase() {
     let ctx = ctx(&mut scenario);
 
     pool.no_protocol_fees_for_testing();
-    pool.no_redemption_fees_for_testing();
 
     let mut coin_a = coin::mint_for_testing<B_TEST_USDC>(500_000, ctx);
     let mut coin_b = coin::mint_for_testing<B_TEST_SUI>(0, ctx);
@@ -96,7 +95,6 @@ fun test_quote_lateral_price_increase_with_increasing_offset() {
         let mut pool = setup_pool(0, offset);
 
         pool.no_protocol_fees_for_testing();
-        pool.no_redemption_fees_for_testing();
 
         let mut coin_a = coin::mint_for_testing<B_TEST_USDC>(
             500_000,
@@ -159,7 +157,6 @@ fun test_quote_lateral_price_decrease_with_increasing_initial_coin_supply() {
         let outlay = default_outlay * 10_u64.pow(pow_n);
 
         pool.no_protocol_fees_for_testing();
-        pool.no_redemption_fees_for_testing();
 
         let mut coin_a = coin::mint_for_testing<B_TEST_USDC>(
             outlay,
@@ -215,7 +212,6 @@ fun test_one_sided_deposit_swap_back_and_forth() {
     );
 
     pool.no_protocol_fees_for_testing();
-    pool.no_redemption_fees_for_testing();
 
     let ctx = ctx(&mut scenario);
     let mut coin_a = coin::mint_for_testing<B_TEST_USDC>(500_000, ctx);
@@ -284,7 +280,6 @@ fun test_try_exaust_pool() {
     let ctx = ctx(&mut scenario);
 
     pool.no_protocol_fees_for_testing();
-    pool.no_redemption_fees_for_testing();
 
     let mut coin_a = coin::mint_for_testing<B_TEST_USDC>(500_000, ctx);
     let mut coin_b = coin::mint_for_testing<B_TEST_SUI>(0, ctx);
@@ -348,7 +343,6 @@ fun test_try_exaust_pool_2() {
     let ctx = ctx(&mut scenario);
 
     pool.no_protocol_fees_for_testing();
-    pool.no_redemption_fees_for_testing();
 
     let mut coin_a = coin::mint_for_testing<B_TEST_USDC>(500_000, ctx);
     let mut coin_b = coin::mint_for_testing<B_TEST_SUI>(0, ctx);
@@ -430,7 +424,6 @@ fun test_one_sided_deposit_quote_swap_against_liquidity() {
     let ctx = ctx(&mut scenario);
 
     pool.no_protocol_fees_for_testing();
-    pool.no_redemption_fees_for_testing();
 
     let mut coin_a = coin::mint_for_testing<B_TEST_USDC>(500_000, ctx);
     let mut coin_b = coin::mint_for_testing<B_TEST_SUI>(0, ctx);
@@ -477,7 +470,6 @@ fun test_one_sided_deposit_swap_against_liquidity() {
     let ctx = ctx(&mut scenario);
 
     pool.no_protocol_fees_for_testing();
-    pool.no_redemption_fees_for_testing();
 
     let mut coin_a = coin::mint_for_testing<B_TEST_USDC>(500_000, ctx);
     let mut coin_b = coin::mint_for_testing<B_TEST_SUI>(0, ctx);

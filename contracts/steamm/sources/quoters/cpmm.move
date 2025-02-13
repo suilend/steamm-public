@@ -2,7 +2,7 @@
 module steamm::cpmm;
 use steamm::global_admin::GlobalAdmin;
 use steamm::math::safe_mul_div;
-use steamm::pool::{Self, Pool, PoolCap, SwapResult, assert_liquidity};
+use steamm::pool::{Self, Pool, SwapResult, assert_liquidity};
 use steamm::quote::SwapQuote;
 use steamm::version::{Self, Version};
 use sui::coin::{Coin, TreasuryCap, CoinMetadata};
@@ -57,10 +57,10 @@ public fun new<A, B, LpType: drop>(
     swap_fee_bps: u64,
     offset: u64,
     ctx: &mut TxContext,
-): (Pool<A, B, CpQuoter, LpType>, PoolCap<A, B, CpQuoter, LpType>) {
+): Pool<A, B, CpQuoter, LpType> {
     let quoter = CpQuoter { version: version::new(CURRENT_VERSION), offset };
 
-    let (pool, pool_cap) = pool::new<A, B, CpQuoter, LpType>(
+    pool::new<A, B, CpQuoter, LpType>(
         meta_a,
         meta_b,
         meta_lp,
@@ -68,9 +68,7 @@ public fun new<A, B, LpType: drop>(
         swap_fee_bps,
         quoter,
         ctx,
-    );
-
-    (pool, pool_cap)
+    )
 }
 
 /// Executes a swap between coin A and coin B in the constant product AMM pool.
