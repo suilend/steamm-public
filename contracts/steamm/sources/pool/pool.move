@@ -186,6 +186,8 @@ public fun deposit_liquidity<A, B, Quoter: store, LpType: drop>(
         deposit_a: quote.deposit_a(),
         deposit_b: quote.deposit_b(),
         mint_lp: quote.mint_lp(),
+        balance_a: pool.balance_a.value(),
+        balance_b: pool.balance_b.value(),
     };
 
     emit_event(result);
@@ -303,6 +305,8 @@ public fun redeem_liquidity<A, B, Quoter: store, LpType: drop>(
         withdraw_a: tokens_a.value(),
         withdraw_b: tokens_b.value(),
         burn_lp: lp_burn,
+        balance_a: pool.balance_a.value(),
+        balance_b: pool.balance_b.value(),
     };
 
     emit_event(result);
@@ -540,6 +544,8 @@ public(package) fun swap<A, B, Quoter: store, LpType: drop>(
         amount_out: quote.amount_out(),
         output_fees: *quote.output_fees(),
         a2b: quote.a2b(),
+        balance_a: pool.balance_a.value(),
+        balance_b: pool.balance_b.value(),
     };
 
     emit_event(result);
@@ -823,6 +829,9 @@ public struct SwapResult has copy, drop, store {
     amount_out: u64,
     output_fees: SwapFee,
     a2b: bool,
+
+    balance_a: u64,
+    balance_b: u64,
 }
 
 public struct DepositResult has copy, drop, store {
@@ -831,6 +840,9 @@ public struct DepositResult has copy, drop, store {
     deposit_a: u64,
     deposit_b: u64,
     mint_lp: u64,
+
+    balance_a: u64,
+    balance_b: u64,
 }
 
 public struct RedeemResult has copy, drop, store {
@@ -839,6 +851,9 @@ public struct RedeemResult has copy, drop, store {
     withdraw_a: u64,
     withdraw_b: u64,
     burn_lp: u64,
+
+    balance_a: u64,
+    balance_b: u64,
 }
 
 public use fun swap_result_user as SwapResult.user;
@@ -990,6 +1005,8 @@ public(package) fun to_quote(result: SwapResult): SwapQuote {
         amount_out,
         output_fees,
         a2b,
+        balance_a: _,
+        balance_b: _,
     } = result;
 
     quote::quote_for_testing(
