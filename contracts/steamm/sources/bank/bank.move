@@ -25,7 +25,7 @@ const CURRENT_VERSION: u16 = 1;
 const MIN_TOKEN_BLOCK_SIZE: u64 = 1_000_000_000;
 // Minimum liquidity of btokens that cannot be withdrawn
 const MINIMUM_LIQUIDITY: u64 = 1_000;
-const BTOKEN_ICON_URL: vector<u8> = b"TODO";
+const BTOKEN_ICON_URL: vector<u8> = b"https://suilend-assets.s3.us-east-2.amazonaws.com/steamm/STEAMM+bToken.svg";
 
 // ===== Errors =====
 
@@ -280,7 +280,7 @@ public fun burn_btokens<P, T, BToken>(
     bank.btoken_supply.decrease_supply(btoken_input.into_balance());
 
     if (bank.funds_available.value() < tokens_to_withdraw) {
-        // TODO: add a slack to the tokens_to_withdraw to handle rounding errs
+        // TODO: consider adding a slack to the tokens_to_withdraw to handle rounding errs
         bank.prepare_for_pending_withdraw(lending_market, tokens_to_withdraw, clock, ctx);
     };
 
@@ -674,9 +674,8 @@ fun btoken_ratio<P, T, BToken>(
     lending_market: &LendingMarket<P>,
     clock: &Clock,
 ): (Decimal, Decimal) {
-    // this branch is only used once -- when the bank is first initialized and has
-    // zero deposits. after that, borrows and redemptions won't let the btokn supply fall
-    // below MIN_AVAILABLE_AMOUNT - TODO: add MIN_AVAILABLE_AMOUNT
+    // this branch is only used once -- when the bank is
+    // first initialized and has zero deposits
     if (bank.btoken_supply.supply_value() == 0) {
         (decimal::from(1), decimal::from(1))
     } else {

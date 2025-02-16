@@ -35,7 +35,7 @@ const BPS_DENOMINATOR: u64 = 10_000;
 const MINIMUM_LIQUIDITY: u64 = 1_000;
 
 const CURRENT_VERSION: u16 = 1;
-const LP_ICON_URL: vector<u8> = b"TODO";
+const LP_ICON_URL: vector<u8> = b"https://suilend-assets.s3.us-east-2.amazonaws.com/steamm/STEAMM+LP+Token.svg";
 
 // ===== Errors =====
 

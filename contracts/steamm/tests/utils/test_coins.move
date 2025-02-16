@@ -17,7 +17,7 @@ module steamm::lp_usdc_sui {
             b"steammLP bUSDC-bSUI",
             b"Steamm LP Token bUSDC-bSUI",
             vector::empty(),
-            option::some(url::new_unsafe_from_bytes(b"TODO")),
+            option::some(url::new_unsafe_from_bytes(b"NONE")),
             ctx
         )
     }
@@ -41,7 +41,7 @@ module steamm::b_test_usdc {
             b"bTEST_USDC ",
             b"bToken TEST_USDC",
             vector::empty(),
-            option::some(url::new_unsafe_from_bytes(b"TODO")),
+            option::some(url::new_unsafe_from_bytes(b"NONE")),
             ctx
         )
     }
@@ -65,7 +65,7 @@ module steamm::b_test_sui {
             b"bTEST_SUI ",
             b"bToken TEST_SUI",
             vector::empty(),
-            option::some(url::new_unsafe_from_bytes(b"TODO")),
+            option::some(url::new_unsafe_from_bytes(b"NONE")),
             ctx
         )
     }
