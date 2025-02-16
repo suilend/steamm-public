@@ -168,8 +168,6 @@ fun proptest_redeem() {
 
     let ctx = ctx(&mut scenario);
 
-    pool.no_redemption_fees_for_testing();
-
     let mut coin_a = coin::mint_for_testing<B_TEST_USDC>(
         10_000_000_000_000_000_000,
         ctx,

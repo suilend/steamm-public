@@ -1,5 +1,4 @@
 # STEAMM
 
 Build:`just sui build`
-
-Test: `just sui test`
+Sui Move Tests: `just sui test`

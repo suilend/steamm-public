@@ -36,7 +36,7 @@ public fun setup(
         scenario,
     ).destruct_state();
 
-    let pool = setup_pool(fee, offset);
+    let pool = setup_pool(fee, offset, scenario);
     destroy(bag);
     destroy(prices);
 
@@ -47,10 +47,29 @@ public fun setup(
 public fun setup_pool(
     fee: u64,
     offset: u64,
+    scenario: &mut Scenario,
 ): (Pool<B_TEST_USDC, B_TEST_SUI, CpQuoter, LP_USDC_SUI>) {
-    let (pool, bank_a, bank_b) = test_setup_cpmm(fee, offset);
+    let is_no_fee = fee == 0;
+    let fee = if (is_no_fee) { 100 } else { fee };
+
+    let (mut pool, bank_a, bank_b, lending_market, lend_cap, prices, bag, clock) = test_setup_cpmm(
+        fee,
+        offset,
+        scenario,
+    );
+
+    if (is_no_fee) {
+        pool.no_protocol_fees_for_testing();
+        pool.no_swap_fees_for_testing();
+    };
+
     destroy(bank_a);
     destroy(bank_b);
+    destroy(lending_market);
+    destroy(lend_cap);
+    destroy(prices);
+    destroy(bag);
+    destroy(clock);
 
     pool
 }
@@ -65,7 +84,6 @@ fun test_full_cpmm_cycle() {
     let (clock, lend_cap, lending_market, mut pool) = setup(100, 0, &mut scenario);
 
     let ctx = ctx(&mut scenario);
-    pool.no_redemption_fees_for_testing();
 
     let mut coin_a = coin::mint_for_testing<B_TEST_USDC>(500_000, ctx);
     let mut coin_b = coin::mint_for_testing<B_TEST_SUI>(500_000, ctx);
@@ -81,7 +99,7 @@ fun test_full_cpmm_cycle() {
     let (reserve_a, reserve_b) = pool.balance_amounts();
     let reserve_ratio_0 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
 
-    assert_eq(pool.cpmm_k(0), 500_000 * 500_000);
+    assert_eq(pool.cpmm_k(), 500_000 * 500_000);
     assert_eq(pool.lp_supply_val(), 500_000);
     assert_eq(reserve_a, 500_000);
     assert_eq(reserve_b, 500_000);
@@ -160,7 +178,7 @@ fun test_full_cpmm_cycle() {
     assert_eq(swap_result.a2b(), true);
     assert_eq(swap_result.pool_fees(), 364);
     assert_eq(swap_result.protocol_fees(), 91);
-    assert_eq(swap_result.amount_out(), 45_454);
+    assert_eq(swap_result.amount_out(), 44_999);
 
     destroy(coin_a);
     destroy(coin_b);
@@ -179,10 +197,10 @@ fun test_full_cpmm_cycle() {
     let (reserve_a, reserve_b) = pool.balance_amounts();
 
     // Guarantees that roundings are in favour of the pool
-    assert_eq(coin_a.value(), 549_989);
-    assert_eq(coin_b.value(), 454_900);
-    assert_eq(reserve_a, 11);
-    assert_eq(reserve_b, 10);
+    assert_eq(coin_a.value(), 548_900);
+    assert_eq(coin_b.value(), 454_000);
+    assert_eq(reserve_a, 1_100);
+    assert_eq(reserve_b, 910);
     assert_eq(pool.lp_supply_val(), minimum_liquidity());
 
     destroy(coin_a);
@@ -200,7 +218,7 @@ fun test_full_cpmm_cycle() {
     assert_eq(pool.trading_data().pool_fees_b(), 364);
 
     assert_eq(pool.trading_data().total_swap_a_in_amount(), 50_000);
-    assert_eq(pool.trading_data().total_swap_b_out_amount(), 45_454);
+    assert_eq(pool.trading_data().total_swap_b_out_amount(), 44_999);
     assert_eq(pool.trading_data().total_swap_a_out_amount(), 0);
     assert_eq(pool.trading_data().total_swap_b_in_amount(), 0);
 
@@ -226,7 +244,6 @@ fun test_cpmm_deposit_redeem_swap() {
     let (clock, lend_cap, lending_market, mut pool) = setup(100, 0, &mut scenario);
 
     let ctx = ctx(&mut scenario);
-    pool.no_redemption_fees_for_testing();
 
     let mut coin_a = coin::mint_for_testing<B_TEST_USDC>(e9(1_000), ctx);
     let mut coin_b = coin::mint_for_testing<B_TEST_SUI>(e9(500_000), ctx);
@@ -242,7 +259,7 @@ fun test_cpmm_deposit_redeem_swap() {
     let (reserve_a, reserve_b) = pool.balance_amounts();
     let reserve_ratio_0 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
 
-    assert_eq(pool.cpmm_k(0), 500000000000000000000000000);
+    assert_eq(pool.cpmm_k(), 500000000000000000000000000);
     assert_eq(pool.lp_supply_val(), 22360679774997);
     assert_eq(reserve_a, e9(1_000));
     assert_eq(reserve_b, e9(500_000));
@@ -318,7 +335,7 @@ fun test_cpmm_deposit_redeem_swap() {
     );
 
     assert_eq(swap_result.a2b(), true);
-    assert_eq(swap_result.amount_out(), 83333333333265);
+    assert_eq(swap_result.amount_out(), 82499999999932);
     assert_eq(swap_result.pool_fees(), 666666666666);
     assert_eq(swap_result.protocol_fees(), 166666666667);
 
@@ -425,7 +442,7 @@ fun test_trade_that_balances_highly_imbalanced_pool() {
         ctx,
     );
 
-    assert_eq(swap_result.amount_out(), 499999999999950);
+    assert_eq(swap_result.amount_out(), 494999999999950);
     assert_eq(swap_result.amount_in(), 10000000000000);
     assert_eq(swap_result.protocol_fees(), 1000000000000);
     assert_eq(swap_result.pool_fees(), 4000000000000);
@@ -511,9 +528,8 @@ fun test_cpmm_fees() {
         &mut scenario,
     );
 
+    let mut pool_2 = setup_pool(100, 0, &mut scenario);
     let ctx = ctx(&mut scenario);
-
-    let mut pool_2 = setup_pool(100, 0);
 
     let mut coin_a = coin::mint_for_testing<B_TEST_USDC>(e9(200_000_000), ctx);
     let mut coin_b = coin::mint_for_testing<B_TEST_SUI>(e9(200_000_000), ctx);

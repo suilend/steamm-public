@@ -10,6 +10,7 @@ use steamm::math as steamm_math;
 use steamm::pool::Pool;
 use steamm::pool_math::{Self, quote_deposit_test, quote_redeem_test};
 use steamm::test_utils;
+use sui::test_scenario::{Self, Scenario};
 use sui::test_utils::{destroy, assert_eq};
 
 #[test_only]
@@ -17,9 +18,21 @@ fun setup_pool(
     reserve_a: u64,
     reserve_b: u64,
     lp_supply: u64,
-    swap_fee_bps: u64,
+    scenario: &mut Scenario,
 ): (Pool<B_TEST_USDC, B_TEST_SUI, CpQuoter, LP_USDC_SUI>) {
-    let (mut pool, bank_a, bank_b) = test_utils::test_setup_cpmm(swap_fee_bps, 0);
+    let (
+        mut pool,
+        bank_a,
+        bank_b,
+        lending_market,
+        lend_cap,
+        prices,
+        bag,
+        clock,
+    ) = test_utils::test_setup_cpmm(100, 0, scenario);
+
+    pool.no_swap_fees_for_testing();
+    pool.no_protocol_fees_for_testing();
 
     pool.mut_reserve_a(reserve_a, true);
     pool.mut_reserve_b(reserve_b, true);
@@ -28,17 +41,24 @@ fun setup_pool(
     destroy(lp);
     destroy(bank_a);
     destroy(bank_b);
+    destroy(lending_market);
+    destroy(lend_cap);
+    destroy(prices);
+    destroy(bag);
+    destroy(clock);
 
     pool
 }
 
 #[test]
 fun test_initial_deposit() {
+    let mut scenario = test_scenario::begin(@0x10);
+
     let pool = setup_pool(
         0,
         0,
         0,
-        0,
+        &mut scenario,
     );
 
     let quote = pool.quote_deposit_impl_test(
@@ -52,15 +72,18 @@ fun test_initial_deposit() {
     assert_eq(quote.mint_lp(), 5);
 
     destroy(pool);
+    destroy(scenario);
 }
 
 #[test]
 fun test_simple_deposit() {
+    let mut scenario = test_scenario::begin(@0x10);
+
     let pool = setup_pool(
         5,
         1,
         sqrt(5 as u128) as u64,
-        0,
+        &mut scenario,
     );
 
     let quote = pool.quote_deposit_impl_test(
@@ -74,15 +97,18 @@ fun test_simple_deposit() {
     assert_eq(quote.mint_lp(), 2);
 
     destroy(pool);
+    destroy(scenario);
 }
 
 #[test]
 fun test_simple_redeem() {
+    let mut scenario = test_scenario::begin(@0x10);
+
     let pool = setup_pool(
         6,
         6,
         6,
-        0,
+        &mut scenario,
     );
 
     let quote = pool.quote_redeem_impl_test(
@@ -95,16 +121,19 @@ fun test_simple_redeem() {
     assert_eq(quote.withdraw_b(), 2);
 
     destroy(pool);
+    destroy(scenario);
 }
 
 #[test]
 #[expected_failure(abort_code = pool_math::ERedeemSlippageAExceeded)]
 fun test_fail_min_a_too_high() {
+    let mut scenario = test_scenario::begin(@0x10);
+
     let pool = setup_pool(
         6,
         6,
         6,
-        0,
+        &mut scenario,
     );
 
     let quote = pool.quote_redeem_impl_test(
@@ -117,16 +146,19 @@ fun test_fail_min_a_too_high() {
     assert_eq(quote.withdraw_b(), 2);
 
     destroy(pool);
+    destroy(scenario);
 }
 
 #[test]
 #[expected_failure(abort_code = pool_math::ERedeemSlippageBExceeded)]
 fun test_fail_min_b_too_high() {
+    let mut scenario = test_scenario::begin(@0x10);
+
     let pool = setup_pool(
         6,
         6,
         6,
-        0,
+        &mut scenario,
     );
 
     let quote = pool.quote_redeem_impl_test(
@@ -139,15 +171,18 @@ fun test_fail_min_b_too_high() {
     assert_eq(quote.withdraw_b(), 2);
 
     destroy(pool);
+    destroy(scenario);
 }
 
 #[test]
 fun test_last_redeem() {
+    let mut scenario = test_scenario::begin(@0x10);
+
     let pool = setup_pool(
         6,
         6,
         6,
-        0,
+        &mut scenario,
     );
 
     let quote = pool.quote_redeem_impl_test(
@@ -160,6 +195,7 @@ fun test_last_redeem() {
     assert_eq(quote.withdraw_b(), 6);
 
     destroy(pool);
+    destroy(scenario);
 }
 
 #[test]
@@ -288,11 +324,13 @@ fun test_deposit_liquidity_inner() {
 #[test]
 #[expected_failure(abort_code = pool_math::EDepositMaxAParamCantBeZero)]
 fun test_fail_max_params_as_zero() {
+    let mut scenario = test_scenario::begin(@0x10);
+
     let pool = setup_pool(
         5,
         5,
         sqrt(5 as u128) as u64,
-        0,
+        &mut scenario,
     );
 
     let _quote = pool.quote_deposit_impl_test(
@@ -301,16 +339,19 @@ fun test_fail_max_params_as_zero() {
     );
 
     destroy(pool);
+    destroy(scenario);
 }
 
 #[test]
 #[expected_failure(abort_code = steamm_math::EMathOverflow)]
 fun test_fail_deposit_maximally_imbalanced_pool() {
+    let mut scenario = test_scenario::begin(@0x10);
+
     let pool = setup_pool(
         1,
         5_000_000_000_000_000,
         sqrt(5_000_000_000_000_00 as u128) as u64,
-        0,
+        &mut scenario,
     );
 
     let _quote = pool.quote_deposit_impl_test(
@@ -319,6 +360,7 @@ fun test_fail_deposit_maximally_imbalanced_pool() {
     );
 
     destroy(pool);
+    destroy(scenario);
 }
 
 #[test]

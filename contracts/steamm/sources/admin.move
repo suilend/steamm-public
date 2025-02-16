@@ -14,7 +14,7 @@ fun init(ctx: &mut TxContext) {
 }
 
 #[test_only]
-public(package) fun init_for_testing(ctx: &mut TxContext): GlobalAdmin {
+public fun init_for_testing(ctx: &mut TxContext): GlobalAdmin {
     GlobalAdmin {
         id: object::new(ctx),
     }

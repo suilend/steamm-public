@@ -1,11 +1,10 @@
 /// Constant-Product AMM Quoter implementation
 module steamm::cpmm;
-
-use std::option::none;
 use steamm::global_admin::GlobalAdmin;
-use steamm::math::{safe_mul_div, checked_mul_div};
-use steamm::pool::{Self, Pool, PoolCap, SwapResult, assert_liquidity};
+use steamm::math::safe_mul_div;
+use steamm::pool::{Self, Pool, SwapResult, assert_liquidity};
 use steamm::quote::SwapQuote;
+use steamm::registry::Registry;
 use steamm::version::{Self, Version};
 use sui::coin::{Coin, TreasuryCap, CoinMetadata};
 
@@ -15,8 +14,10 @@ const CURRENT_VERSION: u16 = 1;
 
 // ===== Errors =====
 
-const EInvariantViolation: u64 = 1;
-const EZeroInvariant: u64 = 2;
+// Product of reserves after swap is less than before swap
+const EInvariantViolation: u64 = 0;
+// Product of reserves plus offset equals zero
+const EZeroInvariant: u64 = 1;
 
 /// Constant-Product AMM specific state. We do not store the invariant,
 /// instead we compute it at runtime.
@@ -52,27 +53,27 @@ public struct CpQuoter has store {
 /// This function will panic if `swap_fee_bps` is greater than or equal to
 /// `SWAP_FEE_DENOMINATOR`
 public fun new<A, B, LpType: drop>(
+    registry: &mut Registry,
+    swap_fee_bps: u64,
+    offset: u64,
     meta_a: &CoinMetadata<A>,
     meta_b: &CoinMetadata<B>,
     meta_lp: &mut CoinMetadata<LpType>,
     lp_treasury: TreasuryCap<LpType>,
-    swap_fee_bps: u64,
-    offset: u64,
     ctx: &mut TxContext,
-): (Pool<A, B, CpQuoter, LpType>, PoolCap<A, B, CpQuoter, LpType>) {
+): Pool<A, B, CpQuoter, LpType> {
     let quoter = CpQuoter { version: version::new(CURRENT_VERSION), offset };
 
-    let (pool, pool_cap) = pool::new<A, B, CpQuoter, LpType>(
+    pool::new<A, B, CpQuoter, LpType>(
+        registry,
+        swap_fee_bps,
+        quoter,
         meta_a,
         meta_b,
         meta_lp,
         lp_treasury,
-        swap_fee_bps,
-        quoter,
         ctx,
-    );
-
-    (pool, pool_cap)
+    )
 }
 
 /// Executes a swap between coin A and coin B in the constant product AMM pool.
@@ -112,7 +113,7 @@ public fun swap<A, B, LpType: drop>(
     pool.quoter_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
 
     let quote = quote_swap(pool, amount_in, a2b);
-    let k0 = k(pool, offset(pool));
+    let k0 = k(pool);
 
     let response = pool.swap(
         coin_a,
@@ -200,7 +201,13 @@ public fun offset<A, B, LpType: drop>(pool: &Pool<A, B, CpQuoter, LpType>): u64 
     pool.quoter().offset
 }
 
-public fun k<A, B, Quoter: store, LpType: drop>(
+public fun k<A, B, LpType: drop>(
+    pool: &Pool<A, B, CpQuoter, LpType>,
+): u128 {
+    k_external(pool, offset(pool))
+}
+
+public fun k_external<A, B, Quoter: store, LpType: drop>(
     pool: &Pool<A, B, Quoter, LpType>,
     offset: u64,
 ): u128 {
@@ -224,11 +231,24 @@ public(package) fun check_invariance<A, B, Quoter: store, LpType: drop>(
     k0: u128,
     offset: u64,
 ) {
-    let k1 = k(pool, offset);
+    let k1 = k_external(pool, offset);
     assert!(k1 > 0, EZeroInvariant);
     assert!(k1 >= k0, EInvariantViolation);
 }
 
+#[test_only]
+use std::option::none;
+#[test_only]
+use steamm::math::checked_mul_div_up;
+
+#[test_only]
+public fun new_for_testing(
+    offset: u64,
+): CpQuoter {
+    CpQuoter { version: version::new(CURRENT_VERSION), offset }
+}
+
+#[test_only]
 public(package) fun max_amount_in_on_a2b<A, B, LpType: drop>(
     pool: &Pool<A, B, CpQuoter, LpType>,
 ): Option<u64> {
@@ -239,7 +259,7 @@ public(package) fun max_amount_in_on_a2b<A, B, LpType: drop>(
         return none()
     };
 
-    checked_mul_div(reserve_out, reserve_in, offset) // max_amount_in
+    checked_mul_div_up(reserve_out, reserve_in, offset) // max_amount_in
 }
 
 // ===== Private Functions =====

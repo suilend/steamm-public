@@ -6,8 +6,11 @@ use suilend::decimal::Decimal;
 
 const MAX_U64: u128 = 18_446_744_073_709_551_615u128;
 
+// Result of operation exceeds maximum u64 value
 const EMathOverflow: u64 = 0;
+// Attempted division by zero
 const EDivideByZero: u64 = 1;
+// Both arguments to min_non_zero function are zero
 const EInvalidMinArgs: u64 = 2;
 
 public(package) fun abs_diff(x: Decimal, y: Decimal): Decimal {
@@ -47,12 +50,6 @@ public(package) fun checked_mul_div_up(x: u64, y: u64, z: u64): Option<u64> {
     let res = std::macros::num_divide_and_round_up!((x as u128) * (y as u128), (z as u128));
     if (res > MAX_U64) { return none() };
     some(res as u64)
-}
-
-public(package) fun safe_compare_mul_u64(a1: u64, b1: u64, a2: u64, b2: u64): bool {
-    let left = (a1 as u128) * (b1 as u128);
-    let right = (a2 as u128) * (b2 as u128);
-    left >= right
 }
 
 public(package) fun min_non_zero(x: u64, y: u64): u64 {

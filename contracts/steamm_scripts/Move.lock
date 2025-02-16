@@ -2,10 +2,11 @@
 
 [move]
 version = 3
-manifest_digest = "6D38B37B6107A320A9268D357A5F510C1BEB949249F047C6F5319155E948F793"
-deps_digest = "3C4103934B1E040BB6B23F1D610B4EF9F2F1166A50A104EADCF77467C004C600"
+manifest_digest = "BF45A104F5A1440596C95B4EB04015266DB658D02808835440BD2F01DE14D700"
+deps_digest = "060AD7E57DFB13104F21BE5F5C3759D03F0553FC3229247D9A7A6B45F50D03A3"
 dependencies = [
   { id = "Sui", name = "Sui" },
+  { id = "steamm", name = "steamm" },
   { id = "suilend", name = "suilend" },
 ]
 
@@ -65,6 +66,15 @@ dependencies = [
 ]
 
 [[move.package]]
+id = "steamm"
+source = { local = "../steamm" }
+
+dependencies = [
+  { id = "Sui", name = "Sui" },
+  { id = "suilend", name = "suilend" },
+]
+
+[[move.package]]
 id = "suilend"
 source = { git = "https://github.com/solendprotocol/suilend.git", rev = "devel", subdir = "contracts/suilend" }
 
@@ -84,3 +94,6 @@ flavor = "sui"
 
 [env.mainnet]
 chain-id = "35834a8a"
+original-published-id = "0xe167bfdc4b8410e4af76079a37412590ace95064b2d17f1f3b7fed2009a59843"
+latest-published-id = "0x772b3d9c5d170f8225a231fa4f0366eef608117099191d316482139c2bc223fc"
+published-version = "2"

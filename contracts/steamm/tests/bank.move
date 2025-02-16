@@ -5,27 +5,45 @@ use steamm::bank::{Self, Bank};
 use steamm::bank_math;
 use steamm::global_admin;
 use steamm::test_utils::{Self, reserve_args};
-use sui::test_scenario::{Self, ctx};
+use sui::coin;
+use sui::test_scenario::{Self, Scenario, ctx};
 use sui::test_utils::{destroy, assert_eq};
 use suilend::lending_market_tests::{LENDING_MARKET, setup as suilend_setup};
 use suilend::test_usdc::TEST_USDC;
 
 #[test_only]
-fun setup_bank(): Bank<LENDING_MARKET, TEST_USDC, B_TEST_USDC> {
-    let (pool, bank_a, bank_b) = test_utils::test_setup_dummy(0);
+fun setup_bank(scenario: &mut Scenario): Bank<LENDING_MARKET, TEST_USDC, B_TEST_USDC> {
+    let (
+        pool,
+        bank_a,
+        bank_b,
+        lending_market,
+        lend_cap,
+        prices,
+        bag,
+        clock,
+    ) = test_utils::test_setup_dummy(0, scenario);
 
     destroy(pool);
     destroy(bank_b);
+    destroy(lending_market);
+    destroy(lend_cap);
+    destroy(prices);
+    destroy(bag);
+    destroy(clock);
 
     bank_a
 }
 
 #[test]
 fun test_create_bank() {
+    let mut scenario = test_scenario::begin(@0x0);
+
     // Create amm bank
-    let bank = setup_bank();
+    let bank = setup_bank(&mut scenario);
 
     destroy(bank);
+    destroy(scenario);
 }
 
 #[test]
@@ -38,7 +56,7 @@ fun test_init_lending() {
     ).destruct_state();
 
     // Create bank
-    let mut bank = setup_bank();
+    let mut bank = setup_bank(&mut scenario);
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
     bank.init_lending(
@@ -70,7 +88,7 @@ fun test_fail_init_lending_twice() {
     ).destruct_state();
 
     // Create bank
-    let mut bank = setup_bank();
+    let mut bank = setup_bank(&mut scenario);
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
     bank.init_lending(
@@ -111,7 +129,7 @@ fun test_invalid_utilisation_liquidity_above_100() {
     // Create amm bank
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-    let mut bank = setup_bank();
+    let mut bank = setup_bank(&mut scenario);
 
     bank.init_lending(
         &global_admin,
@@ -132,7 +150,7 @@ fun test_invalid_utilisation_liquidity_above_100() {
 }
 
 #[test]
-#[expected_failure(abort_code = bank::EUtilisationRangeBelowHundredPercent)]
+#[expected_failure(abort_code = bank::EUtilisationRangeBelowZeroPercent)]
 fun test_invalid_target_liquidity_below_100() {
     let mut scenario = test_scenario::begin(@0x0);
 
@@ -143,7 +161,7 @@ fun test_invalid_target_liquidity_below_100() {
     // Create amm bank
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-    let mut bank = setup_bank();
+    let mut bank = setup_bank(&mut scenario);
 
     bank.init_lending(
         &global_admin,
@@ -175,7 +193,7 @@ fun test_fail_assert_empty_bank() {
     // Create amm bank
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
-    let mut bank = setup_bank();
+    let mut bank = setup_bank(&mut scenario);
 
     bank.init_lending(
         &global_admin,
@@ -211,7 +229,7 @@ fun test_bank_rebalance_deploy() {
     ).destruct_state();
 
     // Create bank
-    let mut bank = setup_bank();
+    let mut bank = setup_bank(&mut scenario);
     bank.mock_min_token_block_size(10);
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
@@ -261,7 +279,7 @@ fun test_bank_rebalance_recall() {
     ).destruct_state();
 
     // Create bank
-    let mut bank = setup_bank();
+    let mut bank = setup_bank(&mut scenario);
     bank.mock_min_token_block_size(10);
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
@@ -317,7 +335,7 @@ fun test_bank_prepare_bank_for_pending_withdraw() {
     ).destruct_state();
 
     // Create bank
-    let mut bank = setup_bank();
+    let mut bank = setup_bank(&mut scenario);
     bank.mock_min_token_block_size(10);
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
 
@@ -361,5 +379,53 @@ fun test_bank_prepare_bank_for_pending_withdraw() {
     destroy(global_admin);
     destroy(lending_market);
     destroy(usdc);
+    destroy(scenario);
+}
+
+#[test]
+fun test_bank_withdraw_except_minimum_liquidity() {
+    let mut scenario = test_scenario::begin(@0x0);
+
+    let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
+        reserve_args(&mut scenario),
+        &mut scenario,
+    ).destruct_state();
+
+    // Create bank
+    let mut bank = setup_bank(&mut scenario);
+    let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
+
+    bank.init_lending(
+        &global_admin,
+        &mut lending_market,
+        5_000,
+        1_000,
+        ctx(&mut scenario),
+    );
+
+    let mut coin = coin::mint_for_testing<TEST_USDC>(500_000, ctx(&mut scenario));
+    let mut btoken = bank.mint_btokens(&mut lending_market, &mut coin, 500_000, &clock, ctx(&mut scenario));
+    destroy(coin);
+
+    let btoken_value = btoken.value();
+    let coin = bank.burn_btokens(
+        &mut lending_market,
+        &mut btoken,
+        btoken_value,
+        &clock,
+        ctx(&mut scenario),
+    );
+
+    assert_eq(coin.value(), 500_000 - bank::minimum_liquidity());
+
+    destroy(coin);
+    destroy(btoken);
+    destroy(clock);
+    destroy(bank);
+    destroy(prices);
+    destroy(bag);
+    destroy(lend_cap);
+    destroy(global_admin);
+    destroy(lending_market);
     destroy(scenario);
 }

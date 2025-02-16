@@ -3,8 +3,8 @@ module steamm::bank_math;
 
 // ===== Errors =====
 
-const EOutputExceedsTotalBankReserves: u64 = 1;
-const EEmptyBank: u64 = 2;
+const EOutputExceedsTotalBankReserves: u64 = 0;
+const EEmptyBank: u64 = 1;
 
 // Only computes recall if needed, else returns zero
 public(package) fun compute_recall_for_pending_withdraw(
@@ -47,7 +47,7 @@ public(package) fun compute_amount_to_recall(
     target_utilisation: u64,
 ): u64 {
     let optimal_funds_deployed =
-        target_utilisation * (funds_available + funds_deployed - withdraw_amount) / 10_000;
+        ((target_utilisation as u128) * ((funds_available + funds_deployed - withdraw_amount) as u128) / 10_000_u128) as u64;
     funds_deployed - optimal_funds_deployed
 }
 
@@ -63,8 +63,8 @@ public(package) fun compute_amount_to_deploy(
     funds_deployed: u64,
     target_utilisation: u64,
 ): u64 {
-    let optimal_funds_deployed = target_utilisation * (funds_available + funds_deployed) / 10_000;
-    optimal_funds_deployed - funds_deployed
+    let optimal_funds_deployed = (target_utilisation as u128) * ((funds_available + funds_deployed) as u128) / 10_000_u128;
+    (optimal_funds_deployed - (funds_deployed as u128)) as u64
 }
 
 public(package) fun assert_output(liquid_reserve: u64, lent: u64, output: u64) {
