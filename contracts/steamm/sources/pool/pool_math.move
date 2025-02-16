@@ -11,18 +11,18 @@ use steamm::math::{safe_mul_div, safe_mul_div_up};
 // ===== Errors =====
 
 // When the deposit max parameter ratio is invalid
-const EDepositRatioInvalid: u64 = 3;
+const EDepositRatioInvalid: u64 = 0;
 // The amount of coin A reedemed is below the minimum set
-const ERedeemSlippageAExceeded: u64 = 4;
+const ERedeemSlippageAExceeded: u64 = 1;
 // The amount of coin B reedemed is below the minimum set
-const ERedeemSlippageBExceeded: u64 = 5;
+const ERedeemSlippageBExceeded: u64 = 2;
 // Assert that the reserve to lp supply ratio updates
 // in favor of of the pool. This error should not occur
-const ELpSupplyToReserveRatioViolation: u64 = 6;
+const ELpSupplyToReserveRatioViolation: u64 = 3;
 // When depositing the max deposit params cannot be zero
-const EDepositMaxAParamCantBeZero: u64 = 7;
+const EDepositMaxAParamCantBeZero: u64 = 4;
 // The deposit ratio computed leads to a coin A deposit of zero
-const EDepositRatioLeadsToZeroA: u64 = 8;
+const EDepositRatioLeadsToZeroA: u64 = 5;
 
 // ===== Package functions =====
 

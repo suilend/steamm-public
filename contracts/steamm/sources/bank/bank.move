@@ -29,27 +29,44 @@ const BTOKEN_ICON_URL: vector<u8> = b"TODO";
 
 // ===== Errors =====
 
+// bToken name must start with "B_" followed by underlying token name
 const EBTokenTypeInvalid: u64 = 0;
+// bToken decimals must be 9
 const EInvalidBTokenDecimals: u64 = 1;
+// bToken treasury must have zero supply when creating bank
 const EBTokenSupplyMustBeZero: u64 = 2;
+// Target utilisation + buffer cannot exceed 100%
 const EUtilisationRangeAboveHundredPercent: u64 = 3;
+// Target utilisation must be greater than buffer
 const EUtilisationRangeBelowZeroPercent: u64 = 4;
+// Bank already has lending initialized
 const ELendingAlreadyActive: u64 = 5;
+// Insufficient cTokens in reserve after redemption
 const ECTokenRatioTooLow: u64 = 6;
+// Lending must be initialized first
 const ELendingNotActive: u64 = 7;
+// Interest must be compounded before operation
 const ECompoundedInterestNotUpdated: u64 = 8;
+// Bank has insufficient funds for withdrawal
 const EInsufficientBankFunds: u64 = 9;
+// Input coin balance too low for requested operation
 const EInsufficientCoinBalance: u64 = 10;
+// Cannot deposit zero coins
 const EEmptyCoinAmount: u64 = 11;
+// Cannot burn empty bToken
 const EEmptyBToken: u64 = 12;
+// bToken balance less than amount to burn
 const EInvalidBtokenBalance: u64 = 13;
+// No bTokens available to burn after minimum liquidity check
 const ENoBTokensToBurn: u64 = 14;
+// No tokens available to withdraw after calculations
 const ENoTokensToWithdraw: u64 = 15;
+// First deposit must be greater than minimum liquidity
 const EInitialDepositBelowMinimumLiquidity: u64 = 16;
 
 // ===== Structs =====
 
-public struct Bank<phantom P, phantom T, phantom BToken> has key {
+public struct Bank<phantom P, phantom T, phantom BToken> has key, store {
     id: UID,
     funds_available: Balance<T>,
     lending: Option<Lending<P>>,
@@ -198,7 +215,7 @@ public fun mint_btokens<P, T, BToken>(
     bank.compound_interest_if_any(lending_market, clock);
 
     let coin_input = coin_t.split(coin_amount, ctx);
-    let new_btokens = bank.to_btokens(lending_market, coin_amount, clock).floor();
+    let new_btokens = bank.to_btokens(lending_market, coin_amount, clock);
 
     emit_event(MintBTokenEvent {
         user: ctx.sender(),
@@ -241,6 +258,10 @@ public fun burn_btokens<P, T, BToken>(
 ): Coin<T> {
     bank.version.assert_version_and_upgrade(CURRENT_VERSION);
     bank.compound_interest_if_any(lending_market, clock);
+
+    if (btoken_amount == 0) {
+        return coin::zero(ctx)
+    };
     
     assert!(btokens.value() != 0, EEmptyBToken);
     assert!(btokens.value() >= btoken_amount, EInvalidBtokenBalance);
@@ -254,7 +275,7 @@ public fun burn_btokens<P, T, BToken>(
     assert!(btoken_amount > 0, ENoBTokensToBurn);
 
     let btoken_input = btokens.split(btoken_amount, ctx);
-    let mut tokens_to_withdraw = bank.from_btokens(lending_market, btoken_amount, clock).floor();
+    let mut tokens_to_withdraw = bank.from_btokens(lending_market, btoken_amount, clock);
 
     bank.btoken_supply.decrease_supply(btoken_input.into_balance());
 
@@ -348,6 +369,38 @@ public fun rebalance<P, T, BToken>(
             ctx,
         );
     };
+}
+
+public fun compound_interest_if_any<P, T, BToken>(
+    bank: &Bank<P, T, BToken>,
+    lending_market: &mut LendingMarket<P>,
+    clock: &Clock,
+) {
+    if (bank.lending.is_some()) {
+        lending_market.compound_interest<P>(bank.reserve_array_index(), clock);
+    }
+}
+
+public fun to_btokens<P, T, BToken>(
+    bank: &Bank<P, T, BToken>,
+    lending_market: &LendingMarket<P>,
+    amount: u64,
+    clock: &Clock,
+): u64 {
+    let (total_funds, btoken_supply) = bank.btoken_ratio(lending_market, clock);
+    // Divides by btoken ratio
+    decimal::from(amount).mul(btoken_supply).div(total_funds).floor()
+}
+
+public fun from_btokens<P, T, BToken>(
+    bank: &Bank<P, T, BToken>,
+    lending_market: &LendingMarket<P>,
+    btoken_amount: u64,
+    clock: &Clock,
+): u64 {
+    let (total_funds, btoken_supply) = bank.btoken_ratio(lending_market, clock);
+    // Multiplies by btoken ratio
+    decimal::from(btoken_amount).mul(total_funds).div(btoken_supply).floor()
 }
 
 // ====== Admin Functions =====
@@ -498,28 +551,6 @@ public(package) fun funds_deployed<P, T, BToken>(
 }
 
 // ====== Private Functions =====
-
-fun to_btokens<P, T, BToken>(
-    bank: &Bank<P, T, BToken>,
-    lending_market: &LendingMarket<P>,
-    amount: u64,
-    clock: &Clock,
-): Decimal {
-    let (total_funds, btoken_supply) = bank.btoken_ratio(lending_market, clock);
-    // Divides by btoken ratio
-    decimal::from(amount).mul(btoken_supply).div(total_funds)
-}
-
-fun from_btokens<P, T, BToken>(
-    bank: &Bank<P, T, BToken>,
-    lending_market: &LendingMarket<P>,
-    btoken_amount: u64,
-    clock: &Clock,
-): Decimal {
-    let (total_funds, btoken_supply) = bank.btoken_ratio(lending_market, clock);
-    // Multiplies by btoken ratio
-    decimal::from(btoken_amount).mul(total_funds).div(btoken_supply)
-}
 
 fun deploy<P, T, BToken>(
     bank: &mut Bank<P, T, BToken>,
@@ -678,16 +709,6 @@ fun update_btoken_metadata<T, BToken: drop>(
     treasury_btoken.update_icon_url(meta_btoken, ascii::string(BTOKEN_ICON_URL));
 }
 
-fun compound_interest_if_any<P, T, BToken>(
-    bank: &Bank<P, T, BToken>,
-    lending_market: &mut LendingMarket<P>,
-    clock: &Clock,
-) {
-    if (bank.lending.is_some()) {
-        lending_market.compound_interest<P>(bank.reserve_array_index(), clock);
-    }
-}
-
 // ====== View Functions =====
 
 public fun needs_rebalance<P, T, BToken>(
@@ -800,7 +821,25 @@ public struct NeedsRebalance has copy, drop, store {
 // ===== Test-Only Functions =====
 
 #[test_only]
-public(package) fun mock_min_token_block_size<P, T, BToken>(
+public fun new_for_testing<P, T, BToken: drop>(
+    ctx: &mut TxContext,
+): Bank<P, T, BToken> {
+    let btoken_treasury = coin::create_treasury_cap_for_testing(ctx);
+
+    let bank = Bank<P, T, BToken> {
+        id: object::new(ctx),
+        funds_available: balance::zero(),
+        lending: none(),
+        min_token_block_size: MIN_TOKEN_BLOCK_SIZE,
+        btoken_supply: btoken_treasury.treasury_into_supply(),
+        version: version::new(CURRENT_VERSION),
+    };
+
+    bank
+}
+
+#[test_only]
+public fun mock_min_token_block_size<P, T, BToken>(
     bank: &mut Bank<P, T, BToken>,
     amount: u64,
 ) {
@@ -875,7 +914,7 @@ public fun needs_rebalance_after_outflow<P, T, BToken>(
     };
 
     let funds_deployed = bank.funds_deployed(lending_market, clock).floor();
-    let amount = bank.from_btokens(lending_market, btoken_amount, clock).floor();
+    let amount = bank.from_btokens(lending_market, btoken_amount, clock);
 
     if (amount > bank.funds_available.value()) {
         return true
@@ -894,4 +933,4 @@ public fun needs_rebalance_after_outflow<P, T, BToken>(
 }
 
 #[test_only]
-public fun needs_rebalance_(needs_rebalance: NeedsRebalance): bool { needs_rebalance.needs_rebalance } 
+public fun needs_rebalance_(needs_rebalance: NeedsRebalance): bool { needs_rebalance.needs_rebalance }

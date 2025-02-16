@@ -3,8 +3,8 @@ module steamm::bank_math;
 
 // ===== Errors =====
 
-const EOutputExceedsTotalBankReserves: u64 = 1;
-const EEmptyBank: u64 = 2;
+const EOutputExceedsTotalBankReserves: u64 = 0;
+const EEmptyBank: u64 = 1;
 
 // Only computes recall if needed, else returns zero
 public(package) fun compute_recall_for_pending_withdraw(

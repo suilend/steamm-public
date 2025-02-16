@@ -24,4 +24,5 @@ build: _check_sui
 
 # Tests all things Sui
 test: _check_sui
+    sui move test -p steamm_scripts --gas-limit 5000000000000
     sui move test -p steamm --gas-limit 5000000000000

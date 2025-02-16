@@ -6,8 +6,11 @@ use suilend::decimal::Decimal;
 
 const MAX_U64: u128 = 18_446_744_073_709_551_615u128;
 
+// Result of operation exceeds maximum u64 value
 const EMathOverflow: u64 = 0;
+// Attempted division by zero
 const EDivideByZero: u64 = 1;
+// Both arguments to min_non_zero function are zero
 const EInvalidMinArgs: u64 = 2;
 
 public(package) fun abs_diff(x: Decimal, y: Decimal): Decimal {

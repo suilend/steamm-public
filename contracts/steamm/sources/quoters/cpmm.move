@@ -14,8 +14,10 @@ const CURRENT_VERSION: u16 = 1;
 
 // ===== Errors =====
 
-const EInvariantViolation: u64 = 1;
-const EZeroInvariant: u64 = 2;
+// Product of reserves after swap is less than before swap
+const EInvariantViolation: u64 = 0;
+// Product of reserves plus offset equals zero
+const EZeroInvariant: u64 = 1;
 
 /// Constant-Product AMM specific state. We do not store the invariant,
 /// instead we compute it at runtime.
@@ -238,6 +240,13 @@ public(package) fun check_invariance<A, B, Quoter: store, LpType: drop>(
 use std::option::none;
 #[test_only]
 use steamm::math::checked_mul_div_up;
+
+#[test_only]
+public fun new_for_testing(
+    offset: u64,
+): CpQuoter {
+    CpQuoter { version: version::new(CURRENT_VERSION), offset }
+}
 
 #[test_only]
 public(package) fun max_amount_in_on_a2b<A, B, LpType: drop>(

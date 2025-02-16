@@ -3,7 +3,7 @@ module steamm::quote;
 
 public use fun steamm::pool::swap_inner as SwapQuote.swap_inner;
 
-public struct SwapQuote has drop, store {
+public struct SwapQuote has drop, store, copy {
     amount_in: u64,
     amount_out: u64,
     output_fees: SwapFee,
@@ -15,22 +15,20 @@ public struct SwapFee has copy, drop, store {
     pool_fees: u64,
 }
 
-public struct DepositQuote has drop, store {
+public struct DepositQuote has copy, drop, store {
     initial_deposit: bool,
     deposit_a: u64,
     deposit_b: u64,
     mint_lp: u64,
 }
 
-public struct RedeemQuote has drop, store {
+public struct RedeemQuote has copy, drop, store {
     withdraw_a: u64,
     withdraw_b: u64,
     burn_lp: u64,
 }
 
-// ===== Package Methods =====
-
-public(package) fun quote(
+public fun quote(
     amount_in: u64,
     amount_out: u64,
     protocol_fees: u64,
@@ -48,7 +46,7 @@ public(package) fun quote(
     }
 }
 
-public(package) fun deposit_quote(
+public fun deposit_quote(
     initial_deposit: bool,
     deposit_a: u64,
     deposit_b: u64,
@@ -62,7 +60,7 @@ public(package) fun deposit_quote(
     }
 }
 
-public(package) fun redeem_quote(
+public fun redeem_quote(
     withdraw_a: u64,
     withdraw_b: u64,
     burn_lp: u64,
@@ -73,6 +71,8 @@ public(package) fun redeem_quote(
         burn_lp,
     }
 }
+
+// ===== Package Methods =====
 
 public(package) fun add_extra_fees(swap_quote: &mut SwapQuote, protocol_fees: u64, pool_fees: u64) {
     swap_quote.output_fees.protocol_fees = swap_quote.output_fees.protocol_fees + protocol_fees;
