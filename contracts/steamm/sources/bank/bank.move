@@ -6,6 +6,7 @@ use std::option::none;
 use std::string;
 use std::type_name::{get, TypeName};
 use steamm::bank_math;
+use steamm::registry::Registry;
 use steamm::events::emit_event;
 use steamm::global_admin::GlobalAdmin;
 use steamm::utils::get_type_reflection;
@@ -85,15 +86,19 @@ public struct Lending<phantom P> has store {
 /// * `ID` - The object ID of the created bank
 #[allow(lint(share_owned))]
 public entry fun create_bank_and_share<P, T, BToken: drop>(
+    registry: &mut Registry,
     meta_t: &CoinMetadata<T>,
     meta_b: &mut CoinMetadata<BToken>,
     btoken_treasury: TreasuryCap<BToken>,
+    lending_market: &LendingMarket<P>,
     ctx: &mut TxContext,
 ): ID {
     let bank = create_bank<P, T, BToken>(
+        registry,
         meta_t,
         meta_b,
         btoken_treasury,
+        lending_market,
         ctx,
     );
 
@@ -374,9 +379,11 @@ entry fun migrate<P, T, BToken>(bank: &mut Bank<P, T, BToken>, _admin: &GlobalAd
 // ====== Package Functions =====
 
 public(package) fun create_bank<P, T, BToken: drop>(
+    registry: &mut Registry,
     meta_t: &CoinMetadata<T>,
     meta_b: &mut CoinMetadata<BToken>,
     btoken_treasury: TreasuryCap<BToken>,
+    lending_market: &LendingMarket<P>,
     ctx: &mut TxContext,
 ): Bank<P, T, BToken> {
     assert!(btoken_treasury.total_supply() == 0, EBTokenSupplyMustBeZero);
@@ -392,12 +399,23 @@ public(package) fun create_bank<P, T, BToken: drop>(
         version: version::new(CURRENT_VERSION),
     };
 
-    emit_event(NewBankEvent {
+    let event = NewBankEvent {
         bank_id: object::id(&bank),
         coin_type: get<T>(),
         btoken_type: get<BToken>(),
+        lending_market_id: object::id(lending_market),
         lending_market_type: get<P>(),
-    });
+    };
+    
+    registry.register_bank(
+        event.bank_id,
+        event.coin_type,
+        event.btoken_type,
+        event.lending_market_id,
+        event.lending_market_type,
+    );
+
+    emit_event(event);
 
     bank
 }
@@ -676,9 +694,9 @@ public fun needs_rebalance<P, T, BToken>(
     bank: &Bank<P, T, BToken>,
     lending_market: &LendingMarket<P>,
     clock: &Clock,
-): bool {
+): NeedsRebalance {
     if (bank.lending.is_none()) {
-        return false
+        return NeedsRebalance { needs_rebalance: false }
     };
 
     let effective_utilisation_bps = bank.effective_utilisation_bps(lending_market, clock);
@@ -689,11 +707,7 @@ public fun needs_rebalance<P, T, BToken>(
         effective_utilisation_bps <= target_utilisation_bps + buffer_bps && effective_utilisation_bps >= target_utilisation_bps - buffer_bps
     ) { false } else { true };
 
-    emit_event(NeedsRebalanceEvent {
-        needs_rebalance,
-    });
-
-    needs_rebalance
+    NeedsRebalance { needs_rebalance }
 }
 
 public fun lending<P, T, BToken>(bank: &Bank<P, T, BToken>): &Option<Lending<P>> { &bank.lending }
@@ -745,6 +759,7 @@ public struct NewBankEvent has copy, drop, store {
     bank_id: ID,
     coin_type: TypeName,
     btoken_type: TypeName,
+    lending_market_id: ID,
     lending_market_type: TypeName,
 }
 
@@ -778,8 +793,7 @@ public struct RecallEvent has copy, drop, store {
     ctokens_burned: u64,
 }
 
-// Only used for easily inspecting dry run results
-public struct NeedsRebalanceEvent has copy, drop, store {
+public struct NeedsRebalance has copy, drop, store {
     needs_rebalance: bool,
 }
 
@@ -878,3 +892,6 @@ public fun needs_rebalance_after_outflow<P, T, BToken>(
         effective_utilisation_bps <= target_utilisation_bps + buffer_bps && effective_utilisation_bps >= target_utilisation_bps - buffer_bps
     ) { false } else { true }
 }
+
+#[test_only]
+public fun needs_rebalance_(needs_rebalance: NeedsRebalance): bool { needs_rebalance.needs_rebalance } 

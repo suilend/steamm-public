@@ -1,5 +1,7 @@
 local/*
 .vscode/*
+temp/*
+sdk/.env
 
 contracts/*/build/*
 
@@ -12,3 +14,4 @@ grcov.log
 package-lock.json
 yarn.lock
 sui/*
+dist/*

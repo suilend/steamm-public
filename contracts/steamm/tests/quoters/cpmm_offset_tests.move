@@ -92,7 +92,7 @@ fun test_quote_lateral_price_increase_with_increasing_offset() {
 
     while (pow_n <= 5) {
         let offset = default_offset * 10_u64.pow(pow_n);
-        let mut pool = setup_pool(0, offset);
+        let mut pool = setup_pool(0, offset, &mut scenario);
 
         pool.no_protocol_fees_for_testing();
 
@@ -152,7 +152,7 @@ fun test_quote_lateral_price_decrease_with_increasing_initial_coin_supply() {
     let default_outlay = 500_000;
 
     while (pow_n <= 5) {
-        let mut pool = setup_pool(0, offset);
+        let mut pool = setup_pool(0, offset, &mut scenario);
 
         let outlay = default_outlay * 10_u64.pow(pow_n);
 

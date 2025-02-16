@@ -8,6 +8,7 @@ use std::ascii;
 use std::string;
 use std::type_name::{get, TypeName};
 use steamm::events::emit_event;
+use steamm::registry::Registry;
 use steamm::fees::{Self, Fees, FeeConfig};
 use steamm::global_admin::GlobalAdmin;
 use steamm::math::safe_mul_div_up;
@@ -42,9 +43,8 @@ const LP_ICON_URL: vector<u8> = b"TODO";
 const EInvalidLpDecimals: u64 = 0;
 /// Error when trying to initialize a pool with non-zero LP supply
 const ELpSupplyMustBeZero: u64 = 1;
-// The pool swap fee is a percentage and therefore
-// can't surpass 100%
-const EFeeAbove100Percent: u64 = 2;
+/// Error when swap fee bps is not one of the allowed values
+const EInvalidSwapFeeBpsType: u64 = 2;
 // Occurs when the swap amount_out is below the
 // minimum amount out declared
 const ESwapExceedsSlippage: u64 = 3;
@@ -350,7 +350,7 @@ public fun quote_deposit<A, B, Quoter: store, LpType: drop>(
 ///
 /// `RedeemQuote`: A quote containing the amounts of tokens A and B to be received and any fees
 public fun quote_redeem<A, B, Quoter: store, LpType: drop>(
-    pool: &mut Pool<A, B, Quoter, LpType>,
+    pool: &Pool<A, B, Quoter, LpType>,
     lp_tokens: u64,
 ): RedeemQuote {
     quote_redeem_(
@@ -413,16 +413,17 @@ entry fun migrate<A, B, Quoter: store, LpType: drop>(
 /// - `swap_fee_bps` is greater than or equal to `BPS_DENOMINATOR`
 /// - `lp_treasury` has non-zero total supply
 public(package) fun new<A, B, Quoter: store, LpType: drop>(
+    registry: &mut Registry,
+    swap_fee_bps: u64,
+    quoter: Quoter,
     meta_a: &CoinMetadata<A>,
     meta_b: &CoinMetadata<B>,
     meta_lp: &mut CoinMetadata<LpType>,
     lp_treasury: TreasuryCap<LpType>,
-    swap_fee_bps: u64,
-    quoter: Quoter,
     ctx: &mut TxContext,
 ): Pool<A, B, Quoter, LpType> {
     assert!(lp_treasury.total_supply() == 0, ELpSupplyMustBeZero);
-    assert!(swap_fee_bps < BPS_DENOMINATOR, EFeeAbove100Percent);
+    assert_swap_fee_bps(swap_fee_bps);
     assert!(get<A>() != get<B>(), ETypeAandBDuplicated);
 
     update_lp_metadata(meta_a, meta_b, meta_lp, &lp_treasury);
@@ -450,15 +451,25 @@ public(package) fun new<A, B, Quoter: store, LpType: drop>(
         version: version::new(CURRENT_VERSION),
     };
 
-    // Emit event
-    emit_event(NewPoolResult {
-        creator: sender(ctx),
+    let event = NewPoolResult {
         pool_id: object::id(&pool),
         coin_type_a: get<A>(),
         coin_type_b: get<B>(),
         lp_token_type: get<LpType>(),
         quoter_type: get<Quoter>(),
-    });
+        swap_fee_bps
+    };
+
+    emit_event(event);
+
+    registry.register_pool(
+        event.pool_id,
+        event.coin_type_a,
+        event.coin_type_b,
+        event.lp_token_type,
+        event.swap_fee_bps,
+        event.quoter_type,
+    );
 
     pool
 }
@@ -564,10 +575,11 @@ public(package) fun get_quote<A, B, Quoter: store, LpType: drop>(
     a2b: bool,
 ): SwapQuote {
     let (protocol_fees, pool_fees) = pool.compute_swap_fees_(amount_out);
+    let amount_out_net = amount_out - protocol_fees - pool_fees;
 
     quote::quote(
         amount_in,
-        amount_out,
+        amount_out_net,
         protocol_fees,
         pool_fees,
         a2b,
@@ -695,15 +707,12 @@ fun swap_inner<In, Out>(
     // Transfers amount out - post fees if any
     let protocol_fees = quote.output_fees().protocol_fees();
     let pool_fees = quote.output_fees().pool_fees();
-    let total_fees = protocol_fees + pool_fees;
-
-    let net_output = quote.amount_out() - total_fees;
 
     // Transfer protocol fees out
     protocol_fee_balance.join(reserve_out.split(protocol_fees));
 
     // Transfers amount out
-    coin_out.balance_mut().join(reserve_out.split(net_output));
+    coin_out.balance_mut().join(reserve_out.split(quote.amount_out()));
 
     // Update trading data
     *lifetime_protocol_fee = *lifetime_protocol_fee + protocol_fees;
@@ -782,6 +791,17 @@ fun assert_lp_supply_reserve_ratio(
     );
 }
 
+fun assert_swap_fee_bps(swap_fee_bps: u64) {
+    assert!(
+        swap_fee_bps == 1 || 
+        swap_fee_bps == 5 || 
+        swap_fee_bps == 30 || 
+        swap_fee_bps == 100 ||
+        swap_fee_bps == 200,
+        EInvalidSwapFeeBpsType,
+    );
+}
+
 fun update_lp_metadata<A, B, LpType: drop>(
     meta_a: &CoinMetadata<A>,
     meta_b: &CoinMetadata<B>,
@@ -814,12 +834,12 @@ fun update_lp_metadata<A, B, LpType: drop>(
 // ===== Events =====
 
 public struct NewPoolResult has copy, drop, store {
-    creator: address,
     pool_id: ID,
     coin_type_a: TypeName,
     coin_type_b: TypeName,
     quoter_type: TypeName,
     lp_token_type: TypeName,
+    swap_fee_bps: u64,
 }
 
 public struct SwapResult has copy, drop, store {
@@ -925,6 +945,14 @@ public(package) fun no_protocol_fees_for_testing<A, B, Quoter: store, LpType: dr
     pool: &mut Pool<A, B, Quoter, LpType>,
 ) {
     let fee_num = pool.protocol_fees.config_mut().fee_numerator_mut();
+    *fee_num = 0;
+}
+
+#[test_only]
+public(package) fun no_swap_fees_for_testing<A, B, Quoter: store, LpType: drop>(
+    pool: &mut Pool<A, B, Quoter, LpType>,
+) {
+    let fee_num = pool.pool_fee_config.fee_numerator_mut();
     *fee_num = 0;
 }
 
