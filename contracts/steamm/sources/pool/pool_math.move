@@ -6,7 +6,7 @@ module steamm::pool_math;
 
 use std::u128::sqrt;
 use std::u64::min;
-use steamm::math::{safe_mul_div, safe_mul_div_up};
+use steamm::math::{safe_mul_div, checked_mul_div_up, safe_mul_div_up};
 
 // ===== Errors =====
 
@@ -23,6 +23,8 @@ const ELpSupplyToReserveRatioViolation: u64 = 3;
 const EDepositMaxAParamCantBeZero: u64 = 4;
 // The deposit ratio computed leads to a coin A deposit of zero
 const EDepositRatioLeadsToZeroA: u64 = 5;
+// When the amount of LP tokens to mint is zero
+const EEmptyLpMintAmount: u64 = 6;
 
 // ===== Package functions =====
 
@@ -48,6 +50,8 @@ public(package) fun quote_deposit(
         delta_a,
         delta_b,
     );
+
+    assert!(delta_lp > 0, EEmptyLpMintAmount);
 
     (delta_a, delta_b, delta_lp)
 }
@@ -93,8 +97,16 @@ fun tokens_to_deposit(reserve_a: u64, reserve_b: u64, max_a: u64, max_b: u64): (
     if (reserve_a == 0 && reserve_b == 0) {
         (max_a, max_b)
     } else {
-        let b_star = safe_mul_div_up(max_a, reserve_b, reserve_a);
-        if (b_star <= max_b) { (max_a, b_star) } else {
+        
+        let b_star = checked_mul_div_up(max_a, reserve_b, reserve_a);
+
+        let use_a_star = {
+            if (b_star.is_none()) { true } else {
+                if ( *b_star.borrow() <= max_b ) { false } else { true }
+            }
+        };
+
+        if (!use_a_star) { (max_a, *b_star.borrow()) } else {
             let a_star = safe_mul_div_up(max_b, reserve_a, reserve_b);
             assert!(a_star > 0, EDepositRatioLeadsToZeroA);
             assert!(a_star <= max_a, EDepositRatioInvalid);
@@ -200,3 +212,39 @@ fun test_assert_lp_supply_reserve_ratio_not_ok() {
         101, // final_lp_supply
     );
 }
+
+
+#[test]
+fun text_quote_deposit_b2a() {
+    use sui::test_utils::assert_eq;
+
+    let (delta_a, delta_b, delta_lp) = quote_deposit(
+        87614801926, // reserve_a
+        111778926070, // reserve_b
+        2426376600, // lp_supply
+        18446744073709551615, // max_a
+        200000000, // max_b
+    );
+
+    assert_eq(delta_a, 156764437);
+    assert_eq(delta_b, 200000000);
+    assert_eq(delta_lp, 4341384);
+}
+
+#[test]
+fun text_quote_deposit_a2b() {
+    use sui::test_utils::assert_eq;
+
+    let (delta_a, delta_b, delta_lp) = quote_deposit(
+        87614801926, // reserve_a
+        111778926070, // reserve_b
+        2426376600, // lp_supply
+        200000000, // max_b
+        18446744073709551615, // max_a
+    );
+
+    assert_eq(delta_a, 200000000);
+    assert_eq(delta_b, 255159913);
+    assert_eq(delta_lp, 5538736);
+}
+

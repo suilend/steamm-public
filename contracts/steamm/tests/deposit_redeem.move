@@ -6,7 +6,6 @@ use steamm::b_test_sui::B_TEST_SUI;
 use steamm::b_test_usdc::B_TEST_USDC;
 use steamm::cpmm::CpQuoter;
 use steamm::lp_usdc_sui::LP_USDC_SUI;
-use steamm::math as steamm_math;
 use steamm::pool::Pool;
 use steamm::pool_math::{Self, quote_deposit_test, quote_redeem_test};
 use steamm::test_utils;
@@ -61,7 +60,7 @@ fun test_initial_deposit() {
         &mut scenario,
     );
 
-    let quote = pool.quote_deposit_impl_test(
+    let quote = pool.quote_deposit(
         5, // max_base
         5, // max_quote,
     );
@@ -86,7 +85,7 @@ fun test_simple_deposit() {
         &mut scenario,
     );
 
-    let quote = pool.quote_deposit_impl_test(
+    let quote = pool.quote_deposit(
         5, // max_base
         5, // max_quote,
     );
@@ -333,7 +332,7 @@ fun test_fail_max_params_as_zero() {
         &mut scenario,
     );
 
-    let _quote = pool.quote_deposit_impl_test(
+    let _quote = pool.quote_deposit(
         0, // max_base
         0, // max_quote,
     );
@@ -343,7 +342,7 @@ fun test_fail_max_params_as_zero() {
 }
 
 #[test]
-#[expected_failure(abort_code = steamm_math::EMathOverflow)]
+#[expected_failure(abort_code = pool_math::EEmptyLpMintAmount)]
 fun test_fail_deposit_maximally_imbalanced_pool() {
     let mut scenario = test_scenario::begin(@0x10);
 
@@ -354,7 +353,7 @@ fun test_fail_deposit_maximally_imbalanced_pool() {
         &mut scenario,
     );
 
-    let _quote = pool.quote_deposit_impl_test(
+    let _quote = pool.quote_deposit(
         50_000_000, // max_a
         50, // max_b,
     );
