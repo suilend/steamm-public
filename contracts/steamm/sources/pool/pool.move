@@ -1024,20 +1024,6 @@ public(package) fun protocol_fees_mut_for_testing<A, B, Quoter: store, LpType: d
     &mut pool.protocol_fees
 }
 
-// DELETE
-// #[test_only]
-// public(package) fun quote_deposit_impl_test<A, B, Quoter: store, LpType: drop>(
-//     pool: &Pool<A, B, Quoter, LpType>,
-//     ideal_a: u64,
-//     ideal_b: u64,
-// ): DepositQuote {
-//     quote_deposit_(
-//         pool,
-//         ideal_a,
-//         ideal_b,
-//     )
-// }
-
 #[test_only]
 public(package) fun quote_redeem_impl_test<A, B, Quoter: store, LpType: drop>(
     pool: &Pool<A, B, Quoter, LpType>,
