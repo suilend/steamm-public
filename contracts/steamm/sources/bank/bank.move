@@ -479,6 +479,14 @@ public fun set_utilisation_bps<P, T, BToken>(
     lending.utilisation_buffer_bps = utilisation_buffer_bps;
 }
 
+public fun set_min_token_block_size<P, T, BToken>(
+    bank: &mut Bank<P, T, BToken>,
+    _: &GlobalAdmin,
+    min_token_block_size: u64,
+) {
+    bank.min_token_block_size = min_token_block_size;
+}
+
 entry fun migrate<P, T, BToken>(bank: &mut Bank<P, T, BToken>, _admin: &GlobalAdmin) {
     bank.version.migrate_(CURRENT_VERSION);
 }
