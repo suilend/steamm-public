@@ -7,7 +7,7 @@ published-at = "0x043ca0fb6dd5a60f20513d76aa49cb007b4554083ef8a5765b15e01ce16420
 
 [dependencies]
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet", override = true }
-suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/suilend", rev = "devel", override = true }
+suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/suilend", rev = "updated-ctoken-ratio", override = true }
 steamm = { local = "../steamm" }
 
 [addresses]
