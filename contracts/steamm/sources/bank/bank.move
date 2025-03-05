@@ -484,6 +484,7 @@ public fun set_min_token_block_size<P, T, BToken>(
     _: &GlobalAdmin,
     min_token_block_size: u64,
 ) {
+    bank.version.assert_version_and_upgrade(CURRENT_VERSION);
     bank.min_token_block_size = min_token_block_size;
 }
 
