@@ -12,6 +12,8 @@ use steamm::cpmm::CpQuoter;
 use steamm::quote::{SwapQuote, DepositQuote, RedeemQuote};
 use suilend::lending_market::{LendingMarket};
 
+const ESlippageExceeded: u64 = 0;
+
 public struct MultiRouteSwapQuote has store, copy, drop {
     amount_in: u64,
     amount_out: u64,
@@ -34,7 +36,6 @@ public fun deposit_liquidity<P, A, B, BTokenA, BTokenB, Quoter: store, LpType: d
 
     let max_ba = btoken_a.value();
     let max_bb = btoken_b.value();
-
 
     let (lp_coin, _) = pool.deposit_liquidity(&mut btoken_a, &mut btoken_b, max_ba, max_bb, ctx);
 
@@ -67,7 +68,13 @@ public fun redeem_liquidity<P, A, B, BTokenA, BTokenB, Quoter: store, LpType: dr
     clock: &Clock,
     ctx: &mut TxContext,
 ): (Coin<A>, Coin<B>) {
-    let (mut btoken_a, mut btoken_b, _) = pool.redeem_liquidity(lp_tokens, min_a, min_b, ctx);
+    bank_a.compound_interest_if_any(lending_market, clock);
+    bank_b.compound_interest_if_any(lending_market, clock);
+
+    let min_ba = bank_a.to_btokens(lending_market, min_a, clock);
+    let min_bb = bank_b.to_btokens(lending_market, min_b, clock);
+
+    let (mut btoken_a, mut btoken_b, _) = pool.redeem_liquidity(lp_tokens, min_ba, min_bb, ctx);
 
     let (btoken_a_amount, btoken_b_amount) = (btoken_a.value(), btoken_b.value());
 
@@ -96,7 +103,7 @@ public fun cpmm_swap<P, A, B, BTokenA, BTokenB, LpType: drop>(
     let (mut btoken_a, mut btoken_b) = if (a2b) {
         (
             bank_a.mint_btokens(lending_market, coin_a, amount_in, clock, ctx),
-            coin::zero(ctx)
+            coin::zero(ctx),
         )
     } else {
         (
@@ -105,17 +112,21 @@ public fun cpmm_swap<P, A, B, BTokenA, BTokenB, LpType: drop>(
         )
     };
 
-    pool.cpmm_swap(&mut btoken_a, &mut btoken_b, a2b, amount_in, min_amount_out, ctx);
+    let btoken_amount_in = if (a2b) { btoken_a.value() } else { btoken_b.value() };
+
+    pool.cpmm_swap(&mut btoken_a, &mut btoken_b, a2b, btoken_amount_in, 0, ctx);
 
     let remaining_value_ba = btoken_a.value();
     let remaining_value_bb = btoken_b.value();
 
     if (remaining_value_ba > 0) {
         let coin_a_ = bank_a.burn_btokens(lending_market, &mut btoken_a, remaining_value_ba, clock, ctx);
+        assert!(coin_a_.value() >= min_amount_out, ESlippageExceeded);
         coin_a.join(coin_a_);
     };
     if (remaining_value_bb > 0) {
         let coin_b_ = bank_b.burn_btokens(lending_market, &mut btoken_b, remaining_value_bb, clock, ctx);
+        assert!(coin_b_.value() >= min_amount_out, ESlippageExceeded);
         coin_b.join(coin_b_);
     };
 

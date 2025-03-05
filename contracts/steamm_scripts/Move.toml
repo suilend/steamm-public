@@ -1,7 +1,7 @@
 [package]
 name = "steamm_scripts"
 edition = "2024.beta"
-published-at = "0x7e69a01e9d856fdbfa315a3b0835d828ce632d3dd2fdc3d80de256895fca9e0a"
+published-at = "0x043ca0fb6dd5a60f20513d76aa49cb007b4554083ef8a5765b15e01ce1642036"
 # license = ""           # e.g., "MIT", "GPL", "Apache 2.0"
 # authors = ["..."]      # e.g., ["Joe Smith (joesmith@noemail.com)", "John Snow (johnsnow@noemail.com)"]
 
@@ -11,4 +11,4 @@ suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "con
 steamm = { local = "../steamm" }
 
 [addresses]
-steamm_scripts = "0x7e69a01e9d856fdbfa315a3b0835d828ce632d3dd2fdc3d80de256895fca9e0a"
+steamm_scripts = "0x13bfc09cfc1bd922d3aa53fcf7b2cd510727ee65068ce136e2ebd5f3b213fdd2"
