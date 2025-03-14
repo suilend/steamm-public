@@ -1,0 +1,15 @@
+[package]
+name = "steamm"
+edition = "2024.beta"
+published-at = "0x80e6e13fa97030984f871dcadbec36bcfe02a51225fca97ba60d32ea24c6f0fc"
+
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet" }
+suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/suilend", rev = "mainnet" }
+
+
+# v1 = 0x4fb1cf45dffd6230305f1d269dd1816678cc8e3ba0b747a813a556921219f261
+# v2 = 0x80e6e13fa97030984f871dcadbec36bcfe02a51225fca97ba60d32ea24c6f0fc
+
+[addresses]
+steamm = "0x4fb1cf45dffd6230305f1d269dd1816678cc8e3ba0b747a813a556921219f261"
