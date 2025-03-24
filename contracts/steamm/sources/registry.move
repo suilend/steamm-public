@@ -2,7 +2,7 @@
 /// Ensures that there is only one AMM pool of each type.
 module steamm::registry;
 
-use std::type_name::TypeName;
+use std::type_name::{TypeName, Self};
 use sui::vec_set::{Self, VecSet};
 use steamm::global_admin::GlobalAdmin;
 use steamm::version::{Self, Version};
@@ -103,6 +103,21 @@ public(package) fun register_bank(
         btoken_type,
         lending_market_type,
     });
+}
+
+// ===== View Functions =====
+
+public(package) fun get_bank_data<T>(registry: &Registry, lending_market_id: ID): &BankData {
+    let key = BankKey {
+        lending_market_id,
+        coin_type: type_name::get<T>(),
+    };
+
+    registry.banks.borrow(key)
+}
+
+public(package) fun btoken_type(bank_data: &BankData): TypeName {
+    bank_data.btoken_type
 }
 
 // ===== Versioning =====

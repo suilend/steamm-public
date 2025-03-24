@@ -745,6 +745,20 @@ fun btoken_ratio<P, T, BToken>(
     }
 }
 
+public(package) fun get_btoken_ratio<P, T, BToken>(
+    bank: &Bank<P, T, BToken>,
+    lending_market: &LendingMarket<P>,
+    clock: &Clock,
+): (Decimal, Decimal) {
+    if (bank.lending.is_some()) {
+        let ctoken_ratio = bank.ctoken_ratio(lending_market, clock);
+        let (total_funds, btoken_supply) = bank.btoken_ratio(some(ctoken_ratio));
+        (total_funds, btoken_supply)
+    } else {
+        (decimal::from(1), decimal::from(1))
+    }
+}
+
 fun update_btoken_metadata<T, BToken: drop>(
     meta_a: &CoinMetadata<T>,
     meta_btoken: &mut CoinMetadata<BToken>,

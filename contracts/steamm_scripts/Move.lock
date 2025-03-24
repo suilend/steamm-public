@@ -2,10 +2,11 @@
 
 [move]
 version = 3
-manifest_digest = "12DC16E84FFB6F51CDC39807CAB97943A6E57C2058CB623E149C39AC6A9FBBA0"
-deps_digest = "060AD7E57DFB13104F21BE5F5C3759D03F0553FC3229247D9A7A6B45F50D03A3"
+manifest_digest = "5CCF719FFDC04A0C7BF174C011E92FF70409E8E22555370920B947B06761D7A6"
+deps_digest = "F9B494B64F0615AED0E98FC12A85B85ECD2BC5185C22D30E7F67786BB52E507C"
 dependencies = [
   { id = "Sui", name = "Sui" },
+  { id = "oracles", name = "oracles" },
   { id = "steamm", name = "steamm" },
   { id = "suilend", name = "suilend" },
 ]
@@ -41,6 +42,14 @@ dependencies = [
 ]
 
 [[move.package]]
+id = "Switchboard"
+source = { git = "https://github.com/switchboard-xyz/sui.git", rev = "mainnet", subdir = "on_demand/" }
+
+dependencies = [
+  { id = "Sui", name = "Sui" },
+]
+
+[[move.package]]
 id = "Wormhole"
 source = { git = "https://github.com/solendprotocol/wormhole.git", rev = "e1698d3c72b15cdddd7da98ad43e151f83b72a0a", subdir = "sui/wormhole" }
 
@@ -58,8 +67,18 @@ dependencies = [
 ]
 
 [[move.package]]
+id = "oracles"
+source = { git = "https://github.com/solendprotocol/suilend.git", rev = "3abbc6c4c8e4c74e40e9128db0388416878a64d6", subdir = "contracts/oracles" }
+
+dependencies = [
+  { id = "Pyth", name = "Pyth" },
+  { id = "Sui", name = "Sui" },
+  { id = "Switchboard", name = "Switchboard" },
+]
+
+[[move.package]]
 id = "sprungsui"
-source = { git = "https://github.com/solendprotocol/suilend.git", rev = "mainnet", subdir = "contracts/sprungsui" }
+source = { git = "https://github.com/solendprotocol/suilend.git", rev = "06dc051391967ddd6c3aa6eabefc2e66147ac071", subdir = "contracts/sprungsui" }
 
 dependencies = [
   { id = "Sui", name = "Sui" },
@@ -71,12 +90,13 @@ source = { local = "../steamm" }
 
 dependencies = [
   { id = "Sui", name = "Sui" },
+  { id = "oracles", name = "oracles" },
   { id = "suilend", name = "suilend" },
 ]
 
 [[move.package]]
 id = "suilend"
-source = { git = "https://github.com/solendprotocol/suilend.git", rev = "mainnet", subdir = "contracts/suilend" }
+source = { git = "https://github.com/solendprotocol/suilend.git", rev = "06dc051391967ddd6c3aa6eabefc2e66147ac071", subdir = "contracts/suilend" }
 
 dependencies = [
   { id = "Pyth", name = "Pyth" },

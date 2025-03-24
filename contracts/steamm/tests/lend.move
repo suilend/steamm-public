@@ -1783,6 +1783,8 @@ public fun test_no_op_below_min_deploy_amount() {
         registry,
         meta_b_usdc,
         meta_b_sui,
+        meta_usdc,
+        meta_sui,
         meta_lp_usdc_sui,
         treasury_cap_lp,
     ) = base_setup(some(reserve_args), &mut scenario);
@@ -1791,6 +1793,8 @@ public fun test_no_op_below_min_deploy_amount() {
     destroy(meta_lp_usdc_sui);
     destroy(meta_b_sui);
     destroy(meta_b_usdc);
+    destroy(meta_usdc);
+    destroy(meta_sui);
 
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
     bank_sui.mock_min_token_block_size(10);

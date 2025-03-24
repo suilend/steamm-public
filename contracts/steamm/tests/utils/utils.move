@@ -196,6 +196,8 @@ public fun base_setup(
     Registry,
     CoinMetadata<B_TEST_USDC>,
     CoinMetadata<B_TEST_SUI>,
+    CoinMetadata<TEST_USDC>,
+    CoinMetadata<TEST_SUI>,
     CoinMetadata<LP_USDC_SUI>,
     TreasuryCap<LP_USDC_SUI>,
 ) {
@@ -237,9 +239,6 @@ public fun base_setup(
         scenario.ctx(),
     );
 
-    destroy(meta_sui);
-    destroy(meta_usdc);
-
     (
         bank_a,
         bank_b,
@@ -251,6 +250,8 @@ public fun base_setup(
         registry,
         meta_b_usdc,
         meta_b_sui,
+        meta_usdc,
+        meta_sui,
         meta_lp_usdc_sui,
         treasury_cap_lp,
     )
@@ -282,6 +283,8 @@ public fun test_setup_cpmm(
         mut registry,
         meta_b_usdc,
         meta_b_sui,
+        meta_usdc,
+        meta_sui,
         mut meta_lp_usdc_sui,
         treasury_cap_lp,
     ) = base_setup(none(), scenario);
@@ -302,6 +305,8 @@ public fun test_setup_cpmm(
     destroy(meta_lp_usdc_sui);
     destroy(meta_b_sui);
     destroy(meta_b_usdc);
+    destroy(meta_usdc);
+    destroy(meta_sui);
 
     (pool, bank_a, bank_b, lending_market, lend_cap, prices, bag, clock)
 }
@@ -331,6 +336,8 @@ public fun test_setup_dummy(
         mut registry,
         meta_b_usdc,
         meta_b_sui,
+        meta_usdc,
+        meta_sui,
         mut meta_lp_usdc_sui,
         treasury_cap_lp,
     ) = base_setup(none(), scenario);
@@ -358,6 +365,8 @@ public fun test_setup_dummy(
     destroy(meta_lp_usdc_sui);
     destroy(meta_b_sui);
     destroy(meta_b_usdc);
+    destroy(meta_usdc);
+    destroy(meta_sui);
 
     (pool, bank_a, bank_b, lending_market, lend_cap, prices, bag, clock)
 }

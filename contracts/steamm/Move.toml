@@ -5,7 +5,8 @@ published-at = "0x80e6e13fa97030984f871dcadbec36bcfe02a51225fca97ba60d32ea24c6f0
 
 [dependencies]
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet" }
-suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/suilend", rev = "mainnet" }
+suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/suilend", rev = "06dc051391967ddd6c3aa6eabefc2e66147ac071" }
+oracles = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/oracles", rev = "3abbc6c4c8e4c74e40e9128db0388416878a64d6" }
 
 
 # v1 = 0x4fb1cf45dffd6230305f1d269dd1816678cc8e3ba0b747a813a556921219f261
