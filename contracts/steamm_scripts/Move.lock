@@ -2,7 +2,7 @@
 
 [move]
 version = 3
-manifest_digest = "5CCF719FFDC04A0C7BF174C011E92FF70409E8E22555370920B947B06761D7A6"
+manifest_digest = "721B25BB4CDCD4218F498ADC29C1531627B203E49104F8C2190A52C4FBEE0E27"
 deps_digest = "F9B494B64F0615AED0E98FC12A85B85ECD2BC5185C22D30E7F67786BB52E507C"
 dependencies = [
   { id = "Sui", name = "Sui" },
@@ -43,7 +43,7 @@ dependencies = [
 
 [[move.package]]
 id = "Switchboard"
-source = { git = "https://github.com/switchboard-xyz/sui.git", rev = "mainnet", subdir = "on_demand/" }
+source = { git = "https://github.com/suilend/switchboard.git", rev = "mainnet", subdir = "on_demand/" }
 
 dependencies = [
   { id = "Sui", name = "Sui" },
@@ -68,7 +68,7 @@ dependencies = [
 
 [[move.package]]
 id = "oracles"
-source = { git = "https://github.com/solendprotocol/suilend.git", rev = "3abbc6c4c8e4c74e40e9128db0388416878a64d6", subdir = "contracts/oracles" }
+source = { git = "https://github.com/solendprotocol/suilend.git", rev = "027f9f2dd9630d3661377d2c48d6f30b3a5b3ac9", subdir = "contracts/oracles" }
 
 dependencies = [
   { id = "Pyth", name = "Pyth" },
@@ -78,7 +78,7 @@ dependencies = [
 
 [[move.package]]
 id = "sprungsui"
-source = { git = "https://github.com/solendprotocol/suilend.git", rev = "06dc051391967ddd6c3aa6eabefc2e66147ac071", subdir = "contracts/sprungsui" }
+source = { git = "https://github.com/solendprotocol/suilend.git", rev = "027f9f2dd9630d3661377d2c48d6f30b3a5b3ac9", subdir = "contracts/sprungsui" }
 
 dependencies = [
   { id = "Sui", name = "Sui" },
@@ -96,7 +96,7 @@ dependencies = [
 
 [[move.package]]
 id = "suilend"
-source = { git = "https://github.com/solendprotocol/suilend.git", rev = "06dc051391967ddd6c3aa6eabefc2e66147ac071", subdir = "contracts/suilend" }
+source = { git = "https://github.com/solendprotocol/suilend.git", rev = "027f9f2dd9630d3661377d2c48d6f30b3a5b3ac9", subdir = "contracts/suilend" }
 
 dependencies = [
   { id = "Pyth", name = "Pyth" },
@@ -106,6 +106,6 @@ dependencies = [
 ]
 
 [move.toolchain-version]
-compiler-version = "1.44.2"
+compiler-version = "1.44.3"
 edition = "2024.beta"
 flavor = "sui"

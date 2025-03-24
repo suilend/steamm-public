@@ -1,14 +1,14 @@
 [package]
 name = "steamm_scripts"
 edition = "2024.beta"
-published-at = "0xaf8a9d331fa0c2362506803825bcb6092f8f7fbe553bad4423724159c5160a77"
+published-at = "0xf61844d7e3313e920825308d2ce5e783e0a77b14d5c6f0f56170451c6e8c9088"
 # license = ""           # e.g., "MIT", "GPL", "Apache 2.0"
 # authors = ["..."]      # e.g., ["Joe Smith (joesmith@noemail.com)", "John Snow (johnsnow@noemail.com)"]
 
 [dependencies]
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet", override = true }
-suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/suilend", rev = "06dc051391967ddd6c3aa6eabefc2e66147ac071", override = true }
-oracles = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/oracles", rev = "3abbc6c4c8e4c74e40e9128db0388416878a64d6" }
+suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/suilend", rev = "027f9f2dd9630d3661377d2c48d6f30b3a5b3ac9", override = true }
+oracles = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/oracles", rev = "027f9f2dd9630d3661377d2c48d6f30b3a5b3ac9" }
 steamm = { local = "../steamm" }
 
 
@@ -16,6 +16,7 @@ steamm = { local = "../steamm" }
 # v2 = 0x043ca0fb6dd5a60f20513d76aa49cb007b4554083ef8a5765b15e01ce1642036
 # v3 = 0xcaad7e0571b0bd9695b5dafde08ee190885e530442895f2378c26ad4243d6009
 # v4 = 0xaf8a9d331fa0c2362506803825bcb6092f8f7fbe553bad4423724159c5160a77
+# v5 = 0xf61844d7e3313e920825308d2ce5e783e0a77b14d5c6f0f56170451c6e8c9088
 
 [addresses]
-steamm_scripts = "0x0"
+steamm_scripts = "0x13bfc09cfc1bd922d3aa53fcf7b2cd510727ee65068ce136e2ebd5f3b213fdd2"
