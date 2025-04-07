@@ -6,9 +6,8 @@ published-at = "0xf61844d7e3313e920825308d2ce5e783e0a77b14d5c6f0f56170451c6e8c90
 # authors = ["..."]      # e.g., ["Joe Smith (joesmith@noemail.com)", "John Snow (johnsnow@noemail.com)"]
 
 [dependencies]
-Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet", override = true }
-suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/suilend", rev = "027f9f2dd9630d3661377d2c48d6f30b3a5b3ac9", override = true }
-oracles = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/oracles", rev = "027f9f2dd9630d3661377d2c48d6f30b3a5b3ac9" }
+MoveStdlib = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/move-stdlib", rev = "mainnet-v1.42.2", override = true }
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "mainnet-v1.42.2" }
 steamm = { local = "../steamm" }
 
 
