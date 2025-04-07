@@ -2,9 +2,10 @@
 
 [move]
 version = 3
-manifest_digest = "267656031CE848F764B8913875DD1B0E1761D117C4395472C6F5C8E68E344C15"
-deps_digest = "060AD7E57DFB13104F21BE5F5C3759D03F0553FC3229247D9A7A6B45F50D03A3"
+manifest_digest = "8698B902EF2DB6DF5267F88D00688401572DE75BA37F98E470ECDC66023E69A2"
+deps_digest = "F9B494B64F0615AED0E98FC12A85B85ECD2BC5185C22D30E7F67786BB52E507C"
 dependencies = [
+  { id = "MoveStdlib", name = "MoveStdlib" },
   { id = "Sui", name = "Sui" },
   { id = "oracles", name = "oracles" },
   { id = "suilend", name = "suilend" },
@@ -12,7 +13,7 @@ dependencies = [
 
 [[move.package]]
 id = "MoveStdlib"
-source = { git = "https://github.com/MystenLabs/sui.git", rev = "framework/mainnet", subdir = "crates/sui-framework/packages/move-stdlib" }
+source = { git = "https://github.com/MystenLabs/sui.git", rev = "mainnet-v1.42.2", subdir = "crates/sui-framework/packages/move-stdlib" }
 
 [[move.package]]
 id = "Pyth"
@@ -25,7 +26,7 @@ dependencies = [
 
 [[move.package]]
 id = "Sui"
-source = { git = "https://github.com/MystenLabs/sui.git", rev = "framework/mainnet", subdir = "crates/sui-framework/packages/sui-framework" }
+source = { git = "https://github.com/MystenLabs/sui.git", rev = "mainnet-v1.42.2", subdir = "crates/sui-framework/packages/sui-framework" }
 
 dependencies = [
   { id = "MoveStdlib", name = "MoveStdlib" },
@@ -67,9 +68,10 @@ dependencies = [
 
 [[move.package]]
 id = "oracles"
-source = { git = "https://github.com/solendprotocol/suilend.git", rev = "027f9f2dd9630d3661377d2c48d6f30b3a5b3ac9", subdir = "contracts/oracles" }
+source = { git = "https://github.com/solendprotocol/suilend.git", rev = "hotfix-sui-version", subdir = "contracts/oracles" }
 
 dependencies = [
+  { id = "MoveStdlib", name = "MoveStdlib" },
   { id = "Pyth", name = "Pyth" },
   { id = "Sui", name = "Sui" },
   { id = "Switchboard", name = "Switchboard" },
@@ -77,7 +79,7 @@ dependencies = [
 
 [[move.package]]
 id = "sprungsui"
-source = { git = "https://github.com/solendprotocol/suilend.git", rev = "027f9f2dd9630d3661377d2c48d6f30b3a5b3ac9", subdir = "contracts/sprungsui" }
+source = { git = "https://github.com/solendprotocol/suilend.git", rev = "hotfix-sui-version", subdir = "contracts/sprungsui" }
 
 dependencies = [
   { id = "Sui", name = "Sui" },
@@ -85,9 +87,10 @@ dependencies = [
 
 [[move.package]]
 id = "suilend"
-source = { git = "https://github.com/solendprotocol/suilend.git", rev = "027f9f2dd9630d3661377d2c48d6f30b3a5b3ac9", subdir = "contracts/suilend" }
+source = { git = "https://github.com/solendprotocol/suilend.git", rev = "hotfix-sui-version", subdir = "contracts/suilend" }
 
 dependencies = [
+  { id = "MoveStdlib", name = "MoveStdlib" },
   { id = "Pyth", name = "Pyth" },
   { id = "Sui", name = "Sui" },
   { id = "liquid_staking", name = "liquid_staking" },
@@ -95,7 +98,7 @@ dependencies = [
 ]
 
 [move.toolchain-version]
-compiler-version = "1.44.3"
+compiler-version = "1.45.3"
 edition = "2024.beta"
 flavor = "sui"
 
