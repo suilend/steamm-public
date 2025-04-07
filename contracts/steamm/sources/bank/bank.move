@@ -273,7 +273,15 @@ public fun burn_btoken<P, T, BToken>(
         burned_amount: btoken_amount,
     });
 
-    coin::from_balance(bank.funds_available.split(tokens_to_withdraw), ctx)
+    let funds = coin::from_balance(bank.funds_available.split(tokens_to_withdraw), ctx);
+
+    emit_event(BankLiquidityEvent {
+        bank_id: object::id(bank),
+        funds_available: bank.funds_available.value(),
+        funds_deployed: bank.funds_deployed_(lending_market).floor(),
+    });
+
+    funds
 }
 
 public fun burn_btokens<P, T, BToken>(
@@ -348,7 +356,15 @@ public fun mint_btoken<P, T, BToken>(
     });
 
     bank.funds_available.join(coin_input.into_balance());
-    coin::from_balance(bank.btoken_supply.increase_supply(new_btokens), ctx)
+    let btoken = coin::from_balance(bank.btoken_supply.increase_supply(new_btokens), ctx);
+
+    emit_event(BankLiquidityEvent {
+        bank_id: object::id(bank),
+        funds_available: bank.funds_available.value(),
+        funds_deployed: bank.funds_deployed_(lending_market).floor(),
+    });
+
+    btoken
 }
 
 /// Rebalances the bank's funds between available balance and deployed funds in the lending market
@@ -603,6 +619,22 @@ public(package) fun funds_deployed<P, T, BToken>(
     }
 }
 
+fun funds_deployed_<P, T, BToken>(
+    bank: &Bank<P, T, BToken>,
+    lending_market: &LendingMarket<P>,
+): Decimal {
+    // FundsDeployed =  cTokens * Total Supply of Funds / cToken Supply
+    if (bank.lending.is_some()) {
+        let lending = bank.lending.borrow();
+        let reserves = lending_market.reserves();
+        let reserve = reserves.borrow(lending.reserve_array_index);
+        let ctoken_ratio = reserve.ctoken_ratio();
+        decimal::from(bank.lending.borrow().ctokens).mul(ctoken_ratio)
+    } else {
+        decimal::from(0)
+    }
+}
+
 // ====== Private Functions =====
 
 fun deploy<P, T, BToken>(
@@ -639,6 +671,16 @@ fun deploy<P, T, BToken>(
 
     let lending = bank.lending.borrow_mut();
     lending.ctokens = lending.ctokens + ctoken_amount;
+
+    let reserves = lending_market.reserves();
+    let reserve = reserves.borrow(lending.reserve_array_index);
+    let ctoken_ratio = reserve.ctoken_ratio();
+
+    emit_event(BankLiquidityEvent {
+        bank_id: object::id(bank),
+        funds_available: bank.funds_available.value(),
+        funds_deployed: bank.funds_deployed(some(ctoken_ratio)).floor(),
+    });
 
     emit_event(DeployEvent {
         bank_id: object::id(bank),
@@ -699,6 +741,12 @@ fun recall<P, T, BToken>(
         ECTokenRatioTooLow,
     );
 
+    emit_event(BankLiquidityEvent {
+        bank_id: object::id(bank),
+        funds_available: bank.funds_available.value(),
+        funds_deployed: bank.funds_deployed(some(ctoken_ratio)).floor(),
+    });
+    
     emit_event(RecallEvent {
         bank_id: object::id(bank),
         lending_market_id: object::id(lending_market),
@@ -890,6 +938,13 @@ public struct RecallEvent has copy, drop, store {
     recalled_amount: u64,
     ctokens_burned: u64,
 }
+
+public struct BankLiquidityEvent has copy, drop, store {
+    bank_id: ID,
+    funds_available: u64,
+    funds_deployed: u64,
+}
+
 
 public struct NeedsRebalance has copy, drop, store {
     needs_rebalance: bool,
