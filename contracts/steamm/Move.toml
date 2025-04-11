@@ -4,8 +4,6 @@ edition = "2024.beta"
 published-at = "0xf0e2245d9351b94a6aca77c91a9a4b310508fee953a97667b4dee5f9d59ad025"
 
 [dependencies]
-MoveStdlib = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/move-stdlib", rev = "mainnet-v1.42.2", override = true }
-Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "mainnet-v1.42.2" }
 suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/suilend", rev = "hotfix-sui-version" }
 oracles = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/oracles", rev = "hotfix-sui-version" }
 
