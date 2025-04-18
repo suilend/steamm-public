@@ -4,9 +4,9 @@ edition = "2024.beta"
 published-at = "0x67e4835cbe51818ce79af790f25ee7d8dfb03fc1556094ca5531cc399c687444"
 
 [dependencies]
-Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet" }
-suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/suilend", rev = "027f9f2dd9630d3661377d2c48d6f30b3a5b3ac9" }
-oracles = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/oracles", rev = "027f9f2dd9630d3661377d2c48d6f30b3a5b3ac9" }
+#Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet" }
+suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/suilend", rev = "hotfix-sui-version" }
+oracles = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/oracles", rev = "hotfix-sui-version" }
 
 
 # v1 = 0x4fb1cf45dffd6230305f1d269dd1816678cc8e3ba0b747a813a556921219f261

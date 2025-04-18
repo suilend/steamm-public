@@ -76,7 +76,7 @@ fun test_steamm_deposit_redeem_swap() {
 
     let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     let mut pool = test_setup_dummy_no_banks(100, &mut scenario);
@@ -199,7 +199,7 @@ fun test_full_amm_cycle() {
 
     let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     let mut pool = test_setup_dummy_no_banks(100, &mut scenario);
@@ -365,7 +365,7 @@ fun test_fail_swap_slippage() {
 
     let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     let mut pool = test_setup_dummy_no_banks(100, &mut scenario);
@@ -440,7 +440,7 @@ fun test_fail_swap_insufficient_funds() {
 
     let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     let mut pool = test_setup_dummy_no_banks(100, &mut scenario);
@@ -509,7 +509,7 @@ fun test_fail_redeem_slippage_a() {
 
     let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     let mut pool = test_setup_dummy_no_banks(100, &mut scenario);
@@ -601,7 +601,7 @@ fun test_fail_redeem_slippage_b() {
 
     let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     let mut pool = test_setup_dummy_no_banks(100, &mut scenario);
@@ -693,7 +693,7 @@ fun test_fail_fee_above_100() {
 
     let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     let pool = test_setup_dummy_no_banks(10_000 + 1, &mut scenario);
@@ -717,7 +717,7 @@ fun test_fail_invalid_fee_type() {
 
     let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     let pool = test_setup_dummy_no_banks(31, &mut scenario);
@@ -740,7 +740,7 @@ fun test_valid_fee_types() {
 
     let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     destroy(test_setup_dummy_no_banks(1, &mut scenario));
@@ -766,7 +766,7 @@ fun test_steamm_fees() {
 
     let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     let mut pool = test_setup_dummy_no_banks(100, &mut scenario);
@@ -899,7 +899,7 @@ fun test_output_exceeds_liquidity() {
 
     let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
     // Create amm bank
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
@@ -967,7 +967,7 @@ fun test_one_sided_deposit() {
 
     let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     let mut pool = test_setup_cpmm_no_banks(100, 20, &mut scenario);
@@ -1013,7 +1013,7 @@ fun test_one_sided_deposit_twice() {
 
     let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     let mut pool = test_setup_cpmm_no_banks(100, 20, &mut scenario);
@@ -1073,7 +1073,7 @@ fun test_one_sided_deposit_redeem() {
 
     let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     let mut pool = test_setup_cpmm_no_banks(100, 20, &mut scenario);
@@ -1135,7 +1135,7 @@ fun test_fail_create_pool_duplicated_type() {
 
     let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     let ctx = ctx(&mut scenario);

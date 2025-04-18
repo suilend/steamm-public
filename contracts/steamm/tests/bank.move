@@ -53,7 +53,7 @@ fun test_init_lending() {
 
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     // Create bank
@@ -85,7 +85,7 @@ fun test_fail_init_lending_twice() {
 
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     // Create bank
@@ -125,7 +125,7 @@ fun test_invalid_utilisation_liquidity_above_100() {
 
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
     // Create amm bank
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
@@ -157,7 +157,7 @@ fun test_invalid_target_liquidity_below_100() {
 
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
     // Create amm bank
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
@@ -189,7 +189,7 @@ fun test_fail_assert_empty_bank() {
 
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
     // Create amm bank
     let global_admin = global_admin::init_for_testing(ctx(&mut scenario));
@@ -226,7 +226,7 @@ fun test_bank_rebalance_deploy() {
 
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     // Create bank
@@ -282,7 +282,7 @@ fun test_bank_rebalance_recall() {
 
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     // Create bank
@@ -344,7 +344,7 @@ fun test_bank_prepare_bank_for_pending_withdraw() {
 
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     // Create bank
@@ -406,7 +406,7 @@ fun test_bank_withdraw_except_minimum_liquidity() {
 
     let (clock, lend_cap, mut lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     // Create bank

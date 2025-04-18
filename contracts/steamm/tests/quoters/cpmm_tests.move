@@ -33,7 +33,7 @@ public fun setup(
 ) {
     let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
         reserve_args(scenario),
-        scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     let pool = setup_pool(fee, offset, scenario);
