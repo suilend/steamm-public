@@ -1,14 +1,16 @@
 [package]
 name = "steamm"
 edition = "2024.beta"
-published-at = "0xddaa7c8c1e74d4b0448c5a11fdbee779eaca26c40183d8791e315c8f62530d51"
+published-at = "0xb41402e33ca9c00b610ae96a0780de7ba0caaa10f50b11b8d54ad6f1f4e50ce5"
 
 [dependencies]
-Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet" }
-suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/suilend", rev = "mainnet" }
+suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/suilend", rev = "beta-v5" }
+oracles = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/oracles", rev = "beta-v5" }
 
 
-# v1 = 0xddaa7c8c1e74d4b0448c5a11fdbee779eaca26c40183d8791e315c8f62530d51
+# Upgrade Cap
+# v1 = 0xb41402e33ca9c00b610ae96a0780de7ba0caaa10f50b11b8d54ad6f1f4e50ce5
 
 [addresses]
-steamm = "0xddaa7c8c1e74d4b0448c5a11fdbee779eaca26c40183d8791e315c8f62530d51"
+# steamm = "0x0"
+steamm = "0xb41402e33ca9c00b610ae96a0780de7ba0caaa10f50b11b8d54ad6f1f4e50ce5"
