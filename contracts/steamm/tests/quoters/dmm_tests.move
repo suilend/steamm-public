@@ -1,5 +1,5 @@
 #[test_only]
-module steamm::dmm_tests;
+module steamm::oracle_v2_tests;
 
 use std::debug::print;
 use std::string::utf8;
@@ -10,7 +10,7 @@ use steamm::b_test_usdc::B_TEST_USDC;
 use steamm::bank::{Bank};
 use steamm::lp_sui_usdc::LP_SUI_USDC;
 use steamm::dummy_omm::{Self, OracleQuoter};
-use steamm::stable::{Self as dmm, StableQuoter as DynQuoter};
+use steamm::omm_v2::{Self, OracleQuoterV2};
 use steamm::pool::{Pool};
 use steamm::test_utils::{base_setup_2};
 use steamm::global_admin;
@@ -34,7 +34,7 @@ fun setup(
     scenario: &mut Scenario,
 ): (
     Pool<B_TEST_SUI, B_TEST_USDC, OracleQuoter, LP_SUI_USDC>,
-    Pool<B_TEST_SUI, B_TEST_USDC, DynQuoter, LP_SUI_USDC>,
+    Pool<B_TEST_SUI, B_TEST_USDC, OracleQuoterV2, LP_SUI_USDC>,
     OracleRegistry,
     PriceState,
     LendingMarket<LENDING_MARKET>,
@@ -106,7 +106,7 @@ fun setup(
 
     let treasury_cap_lp = coin::create_treasury_cap_for_testing(scenario.ctx());
     
-    let dyn_pool = dmm::new<
+    let dyn_pool = omm_v2::new<
         LENDING_MARKET,
         TEST_SUI,
         TEST_USDC,
@@ -149,11 +149,11 @@ fun setup_all(
     scenario: &mut Scenario,
 ): (
     Pool<B_TEST_SUI, B_TEST_USDC, OracleQuoter, LP_SUI_USDC>,
-    Pool<B_TEST_SUI, B_TEST_USDC, DynQuoter, LP_SUI_USDC>,
-    Pool<B_TEST_SUI, B_TEST_USDC, DynQuoter, LP_SUI_USDC>,
-    Pool<B_TEST_SUI, B_TEST_USDC, DynQuoter, LP_SUI_USDC>,
-    Pool<B_TEST_SUI, B_TEST_USDC, DynQuoter, LP_SUI_USDC>,
-    Pool<B_TEST_SUI, B_TEST_USDC, DynQuoter, LP_SUI_USDC>,
+    Pool<B_TEST_SUI, B_TEST_USDC, OracleQuoterV2, LP_SUI_USDC>,
+    Pool<B_TEST_SUI, B_TEST_USDC, OracleQuoterV2, LP_SUI_USDC>,
+    Pool<B_TEST_SUI, B_TEST_USDC, OracleQuoterV2, LP_SUI_USDC>,
+    Pool<B_TEST_SUI, B_TEST_USDC, OracleQuoterV2, LP_SUI_USDC>,
+    Pool<B_TEST_SUI, B_TEST_USDC, OracleQuoterV2, LP_SUI_USDC>,
     OracleRegistry,
     PriceState,
     LendingMarket<LENDING_MARKET>,
@@ -225,7 +225,7 @@ fun setup_all(
 
     let treasury_cap_lp = coin::create_treasury_cap_for_testing(scenario.ctx());
     
-    let dyn_pool1 = dmm::new<
+    let dyn_pool1 = omm_v2::new<
         LENDING_MARKET,
         TEST_SUI,
         TEST_USDC,
@@ -251,7 +251,7 @@ fun setup_all(
     
     let treasury_cap_lp = coin::create_treasury_cap_for_testing(scenario.ctx());
     
-    let dyn_pool10 = dmm::new<
+    let dyn_pool10 = omm_v2::new<
         LENDING_MARKET,
         TEST_SUI,
         TEST_USDC,
@@ -277,7 +277,7 @@ fun setup_all(
     
     let treasury_cap_lp = coin::create_treasury_cap_for_testing(scenario.ctx());
     
-    let dyn_pool100 = dmm::new<
+    let dyn_pool100 = omm_v2::new<
         LENDING_MARKET,
         TEST_SUI,
         TEST_USDC,
@@ -303,7 +303,7 @@ fun setup_all(
     
     let treasury_cap_lp = coin::create_treasury_cap_for_testing(scenario.ctx());
     
-    let dyn_pool1000 = dmm::new<
+    let dyn_pool1000 = omm_v2::new<
         LENDING_MARKET,
         TEST_SUI,
         TEST_USDC,
@@ -329,7 +329,7 @@ fun setup_all(
     
     let treasury_cap_lp = coin::create_treasury_cap_for_testing(scenario.ctx());
     
-    let dyn_pool8000 = dmm::new<
+    let dyn_pool8000 = omm_v2::new<
         LENDING_MARKET,
         TEST_SUI,
         TEST_USDC,
@@ -455,7 +455,7 @@ fun test_dmm_positive_slippage_y2x() {
         &clock,
     );
 
-    let swap_result_2 = dmm::swap(
+    let swap_result_2 = omm_v2::swap(
         &mut dyn_pool,
         &bank_sui,
         &bank_usdc,
@@ -578,7 +578,7 @@ fun test_dmm_positive_slippage_x2y() {
         &clock,
     );
 
-    let swap_result_2 = dmm::swap(
+    let swap_result_2 = omm_v2::swap(
         &mut dyn_pool,
         &bank_sui,
         &bank_usdc,
@@ -668,7 +668,7 @@ fun test_a2b_consecutive_price_decrease_amp_1() {
             &clock,
         );
 
-        let quote_result = dmm::quote_swap(
+        let quote_result = omm_v2::quote_swap(
             &dyn_pool,
             &bank_sui,
             &bank_usdc,
@@ -719,7 +719,7 @@ fun test_a2b_consecutive_price_decrease_amp_1() {
         scenario.ctx(),
     );
 
-    dmm::swap(
+    omm_v2::swap(
         &mut dyn_pool,
         &bank_sui,
         &bank_usdc,
@@ -806,7 +806,7 @@ fun test_b2a_consecutive_price_increase_amp_1() {
             &clock,
         );
 
-        let quote_result = dmm::quote_swap(
+        let quote_result = omm_v2::quote_swap(
             &dyn_pool,
             &bank_sui,
             &bank_usdc,
@@ -857,7 +857,7 @@ fun test_b2a_consecutive_price_increase_amp_1() {
         scenario.ctx(),
     );
 
-    dmm::swap(
+    omm_v2::swap(
         &mut dyn_pool,
         &bank_sui,
         &bank_usdc,
@@ -944,7 +944,7 @@ fun test_a2b_consecutive_price_decrease_amp_10() {
             &clock,
         );
 
-        let quote_result = dmm::quote_swap(
+        let quote_result = omm_v2::quote_swap(
             &dyn_pool,
             &bank_sui,
             &bank_usdc,
@@ -995,7 +995,7 @@ fun test_a2b_consecutive_price_decrease_amp_10() {
         scenario.ctx(),
     );
 
-    dmm::swap(
+    omm_v2::swap(
         &mut dyn_pool,
         &bank_sui,
         &bank_usdc,
@@ -1082,7 +1082,7 @@ fun test_b2a_consecutive_price_increase_amp_10() {
             &clock,
         );
 
-        let quote_result = dmm::quote_swap(
+        let quote_result = omm_v2::quote_swap(
             &dyn_pool,
             &bank_sui,
             &bank_usdc,
@@ -1133,7 +1133,7 @@ fun test_b2a_consecutive_price_increase_amp_10() {
         scenario.ctx(),
     );
 
-    dmm::swap(
+    omm_v2::swap(
         &mut dyn_pool,
         &bank_sui,
         &bank_usdc,
@@ -1220,7 +1220,7 @@ fun test_a2b_consecutive_price_decrease_amp_100() {
             &clock,
         );
 
-        let quote_result = dmm::quote_swap(
+        let quote_result = omm_v2::quote_swap(
             &dyn_pool,
             &bank_sui,
             &bank_usdc,
@@ -1271,7 +1271,7 @@ fun test_a2b_consecutive_price_decrease_amp_100() {
         scenario.ctx(),
     );
 
-    dmm::swap(
+    omm_v2::swap(
         &mut dyn_pool,
         &bank_sui,
         &bank_usdc,
@@ -1358,7 +1358,7 @@ fun test_b2a_consecutive_price_increase_amp_100() {
             &clock,
         );
 
-        let quote_result = dmm::quote_swap(
+        let quote_result = omm_v2::quote_swap(
             &dyn_pool,
             &bank_sui,
             &bank_usdc,
@@ -1409,7 +1409,7 @@ fun test_b2a_consecutive_price_increase_amp_100() {
         scenario.ctx(),
     );
 
-    dmm::swap(
+    omm_v2::swap(
         &mut dyn_pool,
         &bank_sui,
         &bank_usdc,
@@ -1496,7 +1496,7 @@ fun test_a2b_consecutive_price_decrease_amp_1000() {
             &clock,
         );
 
-        let quote_result = dmm::quote_swap(
+        let quote_result = omm_v2::quote_swap(
             &dyn_pool,
             &bank_sui,
             &bank_usdc,
@@ -1547,7 +1547,7 @@ fun test_a2b_consecutive_price_decrease_amp_1000() {
         scenario.ctx(),
     );
 
-    dmm::swap(
+    omm_v2::swap(
         &mut dyn_pool,
         &bank_sui,
         &bank_usdc,
@@ -1634,7 +1634,7 @@ fun test_b2a_consecutive_price_increase_amp_1000() {
             &clock,
         );
 
-        let quote_result = dmm::quote_swap(
+        let quote_result = omm_v2::quote_swap(
             &dyn_pool,
             &bank_sui,
             &bank_usdc,
@@ -1685,7 +1685,7 @@ fun test_b2a_consecutive_price_increase_amp_1000() {
         scenario.ctx(),
     );
 
-    dmm::swap(
+    omm_v2::swap(
         &mut dyn_pool,
         &bank_sui,
         &bank_usdc,
@@ -1772,7 +1772,7 @@ fun test_a2b_consecutive_price_decrease_amp_8000() {
             &clock,
         );
 
-        let quote_result = dmm::quote_swap(
+        let quote_result = omm_v2::quote_swap(
             &dyn_pool,
             &bank_sui,
             &bank_usdc,
@@ -1823,7 +1823,7 @@ fun test_a2b_consecutive_price_decrease_amp_8000() {
         scenario.ctx(),
     );
 
-    dmm::swap(
+    omm_v2::swap(
         &mut dyn_pool,
         &bank_sui,
         &bank_usdc,
@@ -1910,7 +1910,7 @@ fun test_b2a_consecutive_price_increase_amp_8000() {
             &clock,
         );
 
-        let quote_result = dmm::quote_swap(
+        let quote_result = omm_v2::quote_swap(
             &dyn_pool,
             &bank_sui,
             &bank_usdc,
@@ -1961,7 +1961,7 @@ fun test_b2a_consecutive_price_increase_amp_8000() {
         scenario.ctx(),
     );
 
-    dmm::swap(
+    omm_v2::swap(
         &mut dyn_pool,
         &bank_sui,
         &bank_usdc,
@@ -2117,7 +2117,7 @@ fun test_a2b_price_slippage_comparison() {
             1,
             &clock,
         );
-        let res1 = dmm::quote_swap(
+        let res1 = omm_v2::quote_swap(
             &dyn_pool1,
             &bank_sui,
             &bank_usdc,
@@ -2144,7 +2144,7 @@ fun test_a2b_price_slippage_comparison() {
             1,
             &clock,
         );
-        let res10 = dmm::quote_swap(
+        let res10 = omm_v2::quote_swap(
             &dyn_pool10,
             &bank_sui,
             &bank_usdc,
@@ -2171,7 +2171,7 @@ fun test_a2b_price_slippage_comparison() {
             1,
             &clock,
         );
-        let res100 = dmm::quote_swap(
+        let res100 = omm_v2::quote_swap(
             &dyn_pool100,
             &bank_sui,
             &bank_usdc,
@@ -2198,7 +2198,7 @@ fun test_a2b_price_slippage_comparison() {
             1,
             &clock,
         );
-        let res1000 = dmm::quote_swap(
+        let res1000 = omm_v2::quote_swap(
             &dyn_pool1000,
             &bank_sui,
             &bank_usdc,
@@ -2225,7 +2225,7 @@ fun test_a2b_price_slippage_comparison() {
             1,
             &clock,
         );
-        let res8000 = dmm::quote_swap(
+        let res8000 = omm_v2::quote_swap(
             &dyn_pool8000,
             &bank_sui,
             &bank_usdc,
@@ -2391,7 +2391,7 @@ fun test_b2a_price_slippage_comparison() {
             1,
             &clock,
         );
-        let res1 = dmm::quote_swap(
+        let res1 = omm_v2::quote_swap(
             &dyn_pool1,
             &bank_sui,
             &bank_usdc,
@@ -2418,7 +2418,7 @@ fun test_b2a_price_slippage_comparison() {
             1,
             &clock,
         );
-        let res10 = dmm::quote_swap(
+        let res10 = omm_v2::quote_swap(
             &dyn_pool10,
             &bank_sui,
             &bank_usdc,
@@ -2445,7 +2445,7 @@ fun test_b2a_price_slippage_comparison() {
             1,
             &clock,
         );
-        let res100 = dmm::quote_swap(
+        let res100 = omm_v2::quote_swap(
             &dyn_pool100,
             &bank_sui,
             &bank_usdc,
@@ -2472,7 +2472,7 @@ fun test_b2a_price_slippage_comparison() {
             1,
             &clock,
         );
-        let res1000 = dmm::quote_swap(
+        let res1000 = omm_v2::quote_swap(
             &dyn_pool1000,
             &bank_sui,
             &bank_usdc,
@@ -2499,7 +2499,7 @@ fun test_b2a_price_slippage_comparison() {
             1,
             &clock,
         );
-        let res8000 = dmm::quote_swap(
+        let res8000 = omm_v2::quote_swap(
             &dyn_pool8000,
             &bank_sui,
             &bank_usdc,
@@ -2588,7 +2588,7 @@ fun test_dmm_input_btoken_ratio_lower_b2a_no_slippage_impact() {
 
     let amount_in = e6(10);
     
-    let res_b2a_dyn_prior = dmm::quote_swap(
+    let res_b2a_dyn_prior = omm_v2::quote_swap(
         &dyn_pool,
         &bank_sui,
         &bank_usdc,
@@ -2636,7 +2636,7 @@ fun test_dmm_input_btoken_ratio_lower_b2a_no_slippage_impact() {
 
     let btoken_amount_in = decimal::from(amount_in).div(btoken_ratio_usdc_after).floor();
     
-    let res_b2a_dyn_post = dmm::quote_swap(
+    let res_b2a_dyn_post = omm_v2::quote_swap(
         &dyn_pool,
         &bank_sui,
         &bank_usdc,
@@ -2728,7 +2728,7 @@ fun test_dmm_input_btoken_ratio_higher_b2a_no_slippage_impact() {
 
     let amount_in = e6(10);
     
-    let res_b2a_dyn_prior = dmm::quote_swap(
+    let res_b2a_dyn_prior = omm_v2::quote_swap(
         &dyn_pool,
         &bank_sui,
         &bank_usdc,
@@ -2776,7 +2776,7 @@ fun test_dmm_input_btoken_ratio_higher_b2a_no_slippage_impact() {
 
     let btoken_amount_in = decimal::from(amount_in).div(btoken_ratio_usdc_after).floor();
     
-    let res_b2a_dyn_post = dmm::quote_swap(
+    let res_b2a_dyn_post = omm_v2::quote_swap(
         &dyn_pool,
         &bank_sui,
         &bank_usdc,
@@ -2870,7 +2870,7 @@ fun test_dmm_output_btoken_ratio_lower_b2a_higher_slippage() {
 
     let amount_in = e6(10);
     
-    let res_b2a_dyn_prior = dmm::quote_swap(
+    let res_b2a_dyn_prior = omm_v2::quote_swap(
         &dyn_pool,
         &bank_sui,
         &bank_usdc,
@@ -2918,7 +2918,7 @@ fun test_dmm_output_btoken_ratio_lower_b2a_higher_slippage() {
 
     let btoken_amount_in = decimal::from(amount_in).div(btoken_ratio_usdc_after).floor();
     
-    let res_b2a_dyn_post = dmm::quote_swap(
+    let res_b2a_dyn_post = omm_v2::quote_swap(
         &dyn_pool,
         &bank_sui,
         &bank_usdc,
@@ -3016,7 +3016,7 @@ fun test_dmm_output_btoken_ratio_higher_b2a_lower_slippage() {
 
     let amount_in = e6(10);
     
-    let res_b2a_dyn_prior = dmm::quote_swap(
+    let res_b2a_dyn_prior = omm_v2::quote_swap(
         &dyn_pool,
         &bank_sui,
         &bank_usdc,
@@ -3064,7 +3064,7 @@ fun test_dmm_output_btoken_ratio_higher_b2a_lower_slippage() {
 
     let btoken_amount_in = decimal::from(amount_in).div(btoken_ratio_usdc_after).floor();
     
-    let res_b2a_dyn_post = dmm::quote_swap(
+    let res_b2a_dyn_post = omm_v2::quote_swap(
         &dyn_pool,
         &bank_sui,
         &bank_usdc,

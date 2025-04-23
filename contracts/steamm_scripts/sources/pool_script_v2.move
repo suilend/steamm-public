@@ -12,7 +12,7 @@ use steamm::quote;
 use steamm::pool::Pool;
 use steamm::cpmm::CpQuoter;
 use steamm::omm::OracleQuoter;
-use steamm::stable::StableQuoter;
+use steamm::omm_v2::OracleQuoterV2;
 use steamm::quote::{SwapQuote, DepositQuote, RedeemQuote};
 use suilend::lending_market::{LendingMarket};
 
@@ -117,8 +117,8 @@ public fun omm_swap<P, A, B, BTokenA, BTokenB, LpType: drop>(
     );
 }
 
-public fun stable_swap<P, A, B, BTokenA, BTokenB, LpType: drop>(
-    pool: &mut Pool<BTokenA, BTokenB, StableQuoter, LpType>,
+public fun omm_v2_swap<P, A, B, BTokenA, BTokenB, LpType: drop>(
+    pool: &mut Pool<BTokenA, BTokenB, OracleQuoterV2, LpType>,
     bank_a: &mut Bank<P, A, BTokenA>,
     bank_b: &mut Bank<P, B, BTokenB>,
     lending_market: &LendingMarket<P>,
@@ -144,7 +144,7 @@ public fun stable_swap<P, A, B, BTokenA, BTokenB, LpType: drop>(
         ctx,
     );
 
-    pool.stable_swap(
+    pool.omm_v2_swap(
         bank_a,
         bank_b,
         lending_market,
@@ -247,8 +247,8 @@ public fun quote_omm_swap<P, A, B, BTokenA, BTokenB, LpType: drop>(
     )
 }
 
-public fun quote_stable_swap<P, A, B, BTokenA, BTokenB, LpType: drop>(
-    pool: &Pool<BTokenA, BTokenB, StableQuoter, LpType>,
+public fun quote_omm_v2_swap<P, A, B, BTokenA, BTokenB, LpType: drop>(
+    pool: &Pool<BTokenA, BTokenB, OracleQuoterV2, LpType>,
     bank_a: &Bank<P, A, BTokenA>,
     bank_b: &Bank<P, B, BTokenB>,
     lending_market: &LendingMarket<P>,
@@ -267,7 +267,7 @@ public fun quote_stable_swap<P, A, B, BTokenA, BTokenB, LpType: drop>(
         clock,
     );
 
-    let btoken_quote = pool.stable_quote_swap(
+    let btoken_quote = pool.omm_v2_quote_swap(
         bank_a,
         bank_b,
         lending_market,

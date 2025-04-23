@@ -1,8 +1,7 @@
-/// Stable AMM Hook implementation. This quoter can only be initialized with btoken types.
-module steamm::stable;
+/// OracleV2 AMM Hook implementation. This quoter can only be initialized with btoken types.
+module steamm::omm_v2;
 
 use oracles::oracles::{OracleRegistry, OraclePriceUpdate};
-use oracles::oracle_decimal::{OracleDecimal};
 use steamm::pool::{Self, Pool, SwapResult};
 use steamm::quote::SwapQuote;
 use steamm::registry::Registry;
@@ -26,7 +25,7 @@ const EInvalidBankType: u64 = 0;
 const EInvalidOracleIndex: u64 = 1;
 const EInvalidOracleRegistry: u64 = 2;
 
-public struct StableQuoter has store {
+public struct OracleQuoterV2 has store {
     version: Version,
 
     // oracle params
@@ -59,7 +58,7 @@ public fun new<P, A, B, B_A, B_B, LpType: drop>(
     amplifier: u64,
     swap_fee_bps: u64,
     ctx: &mut TxContext,
-): Pool<B_A, B_B, StableQuoter, LpType> {
+): Pool<B_A, B_B, OracleQuoterV2, LpType> {
     // ensure that this quoter can only be initialized with btoken types
     let bank_data_a = registry.get_bank_data<A>(object::id(lending_market));
     assert!(type_name::get<B_A>() == bank_data_a.btoken_type(), EInvalidBankType);
@@ -67,7 +66,7 @@ public fun new<P, A, B, B_A, B_B, LpType: drop>(
     let bank_data_b = registry.get_bank_data<B>(object::id(lending_market));
     assert!(type_name::get<B_B>() == bank_data_b.btoken_type(), EInvalidBankType);
 
-    let quoter = StableQuoter {
+    let quoter = OracleQuoterV2 {
         version: version::new(CURRENT_VERSION),
         oracle_registry_id: object::id(oracle_registry),
         oracle_index_a,
@@ -77,7 +76,7 @@ public fun new<P, A, B, B_A, B_B, LpType: drop>(
         amp: amplifier,
     };
 
-    let pool = pool::new<B_A, B_B, StableQuoter, LpType>(
+    let pool = pool::new<B_A, B_B, OracleQuoterV2, LpType>(
         registry,
         swap_fee_bps,
         quoter,
@@ -88,7 +87,7 @@ public fun new<P, A, B, B_A, B_B, LpType: drop>(
         ctx,
     );
 
-    let result = NewStableQuoter {
+    let result = NewOracleQuoterV2 {
         pool_id: object::id(&pool),
         oracle_registry_id: object::id(oracle_registry),
         oracle_index_a,
@@ -102,7 +101,7 @@ public fun new<P, A, B, B_A, B_B, LpType: drop>(
 }
 
 public fun swap<P, A, B, B_A, B_B, LpType: drop>(
-    pool: &mut Pool<B_A, B_B, StableQuoter, LpType>,
+    pool: &mut Pool<B_A, B_B, OracleQuoterV2, LpType>,
     bank_a: &Bank<P, A, B_A>,
     bank_b: &Bank<P, B, B_B>,
     lending_market: &LendingMarket<P>,
@@ -150,7 +149,7 @@ public fun swap<P, A, B, B_A, B_B, LpType: drop>(
 }
 
 public fun quote_swap<P, A, B, B_A, B_B, LpType: drop>(
-    pool: &Pool<B_A, B_B, StableQuoter, LpType>,
+    pool: &Pool<B_A, B_B, OracleQuoterV2, LpType>,
     bank_a: &Bank<P, A, B_A>,
     bank_b: &Bank<P, B, B_B>,
     lending_market: &LendingMarket<P>,
@@ -281,7 +280,7 @@ fun quote_swap_impl(
 
 // ===== Events =====
 
-public struct NewStableQuoter has copy, drop, store {
+public struct NewOracleQuoterV2 has copy, drop, store {
     pool_id: ID,
     oracle_registry_id: ID,
     oracle_index_a: u64,
