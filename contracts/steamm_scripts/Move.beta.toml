@@ -1,7 +1,7 @@
 [package]
 name = "steamm_scripts"
 edition = "2024.beta"
-published-at = "0xa4544b52b40e44e41d3ec2d13a9b112b6d0b199641ba98b4664da2f841168ce5"
+# published-at = "0x50301c7ec20f9bf5be0ddf92c2f2a27a2c81f693308b6b2c358dda499d1691dd"
 
 [dependencies]
 # Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet", override = true }
@@ -9,7 +9,7 @@ suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "con
 steamm = { local = "../steamm" }
 
 # Upgrade Cap
-# v1 = 0xa4544b52b40e44e41d3ec2d13a9b112b6d0b199641ba98b4664da2f841168ce5
+# v1 = 0xa0407d76aad8f22638285bf13be348283418ed37a92b194aaae66e5f203473ab
 
 [addresses]
-steamm_scripts = "0xa4544b52b40e44e41d3ec2d13a9b112b6d0b199641ba98b4664da2f841168ce5"
+steamm_scripts = "0x50301c7ec20f9bf5be0ddf92c2f2a27a2c81f693308b6b2c358dda499d1691dd"
