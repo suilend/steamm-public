@@ -5,6 +5,8 @@ use suilend::decimal::Decimal;
 use steamm::fixed_point64::{Self, FixedPoint64};
 use steamm::utils::decimal_to_fixedpoint64;
 
+const EInvalidZ: u64 = 1;
+
 public(package) fun swap(
     // Amount in (underlying)
     amount_in: Decimal,
@@ -58,6 +60,8 @@ public(package) fun swap(
     let z_upper_bound = max_bound.min(k);
 
     let z = newton_raphson(k, amp, z_upper_bound);
+
+    assert!(z.lt(fixed_point64::one()), EInvalidZ);
 
     // `z` is defined as Δout / ReserveOut. Therefore depending on the
     // direction of the trade we pick the corresponding ouput reserve
