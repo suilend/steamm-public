@@ -110,7 +110,7 @@ fun newton_raphson(
     let one = fixed_point64::one();
     let z_min = fixed_point64::from_rational(1, 100000); // 1e-5 // todo: increase scale?
     let z_max = fixed_point64::from_rational(999999999999999999, 1000000000000000000); // 0.999999999999999999
-    let tol = fixed_point64::from_rational(1, 1000000000_00000); // 1e-10
+    let tol = fixed_point64::from_rational(1, 1000000000_00000); // 1e-14
     let max_iter = 20;
     
     // Improve initial guess
