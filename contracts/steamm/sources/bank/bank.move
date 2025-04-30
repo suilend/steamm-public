@@ -944,7 +944,6 @@ public struct BankLiquidityEvent has copy, drop, store {
     funds_deployed: u64,
 }
 
-
 public struct NeedsRebalance has copy, drop, store {
     needs_rebalance: bool,
 }

@@ -185,13 +185,13 @@ public fun quote_swap<P, A, B, B_A, B_B, LpType: drop>(
     let btoken_ratio_b = bank_total_funds_b.div(total_btoken_supply_b);
 
 
-    let amount_out_underlying = if (a2b) {
+    let amount_out = if (a2b) {
         let underlying_amount_in = decimal::from(amount_in).mul(btoken_ratio_a);
         let underlying_reserve_in = decimal::from(pool.balance_amount_a()).mul(btoken_ratio_a);
         let underlying_reserve_out = decimal::from(pool.balance_amount_b()).mul(btoken_ratio_b);
 
         // quote_swap_impl uses the underlying values instead of btoken values
-        quote_swap_impl(
+        let amount_out_underlying = quote_swap_impl(
             underlying_amount_in,
             underlying_reserve_in,
             underlying_reserve_out,
@@ -201,14 +201,22 @@ public fun quote_swap<P, A, B, B_A, B_B, LpType: drop>(
             price_b,
             quoter.amp,
             a2b,
-        )
+        );
+
+        let mut amount_out = decimal::from(amount_out_underlying).div(btoken_ratio_b).floor();
+
+        if (amount_out >= pool.balance_amount_b()) {
+            amount_out = 0
+        };
+
+        amount_out
     } else {
         let underlying_amount_in = decimal::from(amount_in).mul(btoken_ratio_b);
         let underlying_reserve_in = decimal::from(pool.balance_amount_b()).mul(btoken_ratio_b);
         let underlying_reserve_out = decimal::from(pool.balance_amount_a()).mul(btoken_ratio_a);
 
         // quote_swap_impl uses the underlying values instead of btoken values
-        quote_swap_impl(
+        let amount_out_underlying = quote_swap_impl(
             underlying_amount_in,
             underlying_reserve_in,
             underlying_reserve_out,
@@ -218,27 +226,15 @@ public fun quote_swap<P, A, B, B_A, B_B, LpType: drop>(
             price_a,
             quoter.amp,
             a2b,
-        )
-    };
+        );
 
-    let mut amount_out = if (a2b) {
-        decimal::from(amount_out_underlying).div(btoken_ratio_b).floor()
-    } else {
-        decimal::from(amount_out_underlying).div(btoken_ratio_a).floor()
-    };
+        let mut amount_out = decimal::from(amount_out_underlying).div(btoken_ratio_a).floor();
 
-    amount_out = if (a2b) {
-        if (amount_out >= pool.balance_amount_b()) {
-            0
-        } else {
-            amount_out
-        }
-    } else {
         if (amount_out >= pool.balance_amount_a()) {
-            0
-        } else {
-            amount_out
-        }
+            amount_out = 0;
+        };
+
+        amount_out
     };
 
     pool.get_quote(amount_in, amount_out, a2b)
