@@ -334,6 +334,10 @@ public fun checked_div(x: FixedPoint64, y: FixedPoint64): Option<FixedPoint64> {
     if (y.value == 0) {
         return none()
     };
+    
+    if (x.value == 0) {
+        return some(from(0))
+    };
 
     // Compute division, exactly as in div
     let result = math256::div_down((x.value as u256) << 64, (y.value as u256));
@@ -587,7 +591,7 @@ fun pow_raw(mut x: u256, mut n: u128): u256 {
 * Computes (n1 * n2 * ... * nk) / (d1 * d2 * ... * dm) with checks for overflow, zero division, and precision loss.
 * It schedules the computation in a way that maximizes precision while reducing risk of overflow:
 *   1. Sorts numerators and denominators in descending order.
-*   2. Proceeds to multiply the numerators; if it hits an overflow, it will divide by the current largest denominator
+*   2. Proceeds to multiply the numerators; if it hits an overflow, it will divide by the current smallest denominator
 *   3. Proceeds until all numerators are multiplied, then proceeds y dividing by the remaining denominators.
 */
 public(package) fun multiply_divide(
@@ -596,7 +600,7 @@ public(package) fun multiply_divide(
 ): FixedPoint64 {
     assert!(vector::length(numerators) > 0, ENoNumerators);
     // Initialize result to 1.0 (2^64 in FixedPoint64)
-    let mut result = FixedPoint64 { value: (1_u128 << 64) };
+    let mut result = one();
     
     // Sort numerators and denominators in descending order
     sort_descending(numerators);
@@ -981,4 +985,13 @@ fun test_multiply_divide_precision_loss() {
     let mut numerators = vector::singleton(from_rational(1, 10));
     let mut denominators = vector::singleton(from(10000000000000000000));
     let _result = multiply_divide(&mut numerators, &mut denominators);
+}
+
+#[test]
+fun test_checked_div_num_zero() {
+    let numerator = from(0);
+    let denominator = one();
+    let res = checked_div(numerator, denominator);
+
+    assert!(res == some(from(0)), 0);
 }
