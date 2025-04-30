@@ -278,7 +278,7 @@ public fun burn_btoken<P, T, BToken>(
     emit_event(BankLiquidityEvent {
         bank_id: object::id(bank),
         funds_available: bank.funds_available.value(),
-        funds_deployed: bank.funds_deployed_(lending_market).floor(),
+        funds_deployed: bank.funds_deployed_(lending_market, clock).floor(),
     });
 
     funds
@@ -361,7 +361,7 @@ public fun mint_btoken<P, T, BToken>(
     emit_event(BankLiquidityEvent {
         bank_id: object::id(bank),
         funds_available: bank.funds_available.value(),
-        funds_deployed: bank.funds_deployed_(lending_market).floor(),
+        funds_deployed: bank.funds_deployed_(lending_market, clock).floor(),
     });
 
     btoken
@@ -622,13 +622,12 @@ public(package) fun funds_deployed<P, T, BToken>(
 fun funds_deployed_<P, T, BToken>(
     bank: &Bank<P, T, BToken>,
     lending_market: &LendingMarket<P>,
+    clock: &Clock,
 ): Decimal {
     // FundsDeployed =  cTokens * Total Supply of Funds / cToken Supply
     if (bank.lending.is_some()) {
-        let lending = bank.lending.borrow();
-        let reserves = lending_market.reserves();
-        let reserve = reserves.borrow(lending.reserve_array_index);
-        let ctoken_ratio = reserve.ctoken_ratio();
+        let ctoken_ratio = bank.ctoken_ratio(lending_market, clock);
+
         decimal::from(bank.lending.borrow().ctokens).mul(ctoken_ratio)
     } else {
         decimal::from(0)
