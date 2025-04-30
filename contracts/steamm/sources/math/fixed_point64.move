@@ -7,8 +7,10 @@
  * @dev All credits to Aptos - https://github.com/aptos-labs/aptos-core/blob/main/aptos-move/framework/aptos-stdlib/sources/fixed_point64.move
  */
 module steamm::fixed_point64;
+
 // === Imports ===
 
+use std::option::{some, none};
 use steamm::math128;
 use steamm::math256;
 
@@ -33,6 +35,8 @@ const EZeroDivision: u64 = 3;
 const EDivisionOverflow: u64 = 4;
 // @dev Abort code on overflow.
 const EOverflowExp: u64 = 5;
+const EFailedDivision: u64 = 6;
+const ENoNumerators: u64 = 7;
 
 // === Structs ===
 
@@ -293,6 +297,20 @@ public fun mul(x: FixedPoint64, y: FixedPoint64): FixedPoint64 {
     FixedPoint64 {value: ((((x.value as u256) * (y.value as u256)) >> 64) as u128)}
 }
 
+// Computes x * y with overflow checking, returning None if the result doesn't fit in u128.
+public fun checked_mul(x: FixedPoint64, y: FixedPoint64): Option<FixedPoint64> {
+    // Compute product and shift, exactly as in mul
+    let product = ((x.value as u256) * (y.value as u256)) >> 64;
+    
+    // Check if the result fits in u128
+    if (product > (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF_u256)) {
+        return none() // Overflow
+    };
+    
+    // Cast to u128 and return as FixedPoint64
+    some(FixedPoint64 { value: (product as u128) })
+}
+
 /*
 * @notice It returns `x` / `y`.
 *
@@ -308,6 +326,32 @@ public fun div(x: FixedPoint64, y: FixedPoint64): FixedPoint64 {
     FixedPoint64 {
         value: (math256::div_down((x.value as u256) << 64, (y.value as u256)) as u128),
     }
+}
+
+// Computes x / y with overflow and zero-division checking, returning None if invalid.
+public fun checked_div(x: FixedPoint64, y: FixedPoint64): Option<FixedPoint64> {
+    // Check for division by zero
+    if (y.value == 0) {
+        return none()
+    };
+
+    // Compute division, exactly as in div
+    let result = math256::div_down((x.value as u256) << 64, (y.value as u256));
+
+    // Check if the result fits in u128
+    if (result > (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF_u256)) {
+        return none() // Overflow
+    };
+
+    // Check for complete precision loss (result == 0)
+    if (result == 0) {
+        return none() // Precision loss
+    };
+
+    // Cast to u128 and return as FixedPoint64
+    some(FixedPoint64 {
+        value: (result as u128)
+    })
 }
 
 /*
@@ -539,6 +583,85 @@ fun pow_raw(mut x: u256, mut n: u128): u256 {
     res
 }
 
+/*
+* Computes (n1 * n2 * ... * nk) / (d1 * d2 * ... * dm) with checks for overflow, zero division, and precision loss.
+* It schedules the computation in a way that maximizes precision while reducing risk of overflow:
+*   1. Sorts numerators and denominators in descending order.
+*   2. Proceeds to multiply the numerators; if it hits an overflow, it will divide by the current largest denominator
+*   3. Proceeds until all numerators are multiplied, then proceeds y dividing by the remaining denominators.
+*/
+public(package) fun multiply_divide(
+    numerators: &mut vector<FixedPoint64>,
+    denominators: &mut vector<FixedPoint64>
+): FixedPoint64 {
+    assert!(vector::length(numerators) > 0, ENoNumerators);
+    // Initialize result to 1.0 (2^64 in FixedPoint64)
+    let mut result = FixedPoint64 { value: (1_u128 << 64) };
+    
+    // Sort numerators and denominators in descending order
+    sort_descending(numerators);
+    sort_descending(denominators);
+
+    // Process numerators
+    while (vector::length(numerators) > 0) {
+        // Get the last (smallest) numerator
+        let numerator = vector::borrow(numerators, vector::length(numerators) - 1);
+
+        // Try to multiply
+        let mut product_opt = checked_mul(result, *numerator);
+        if (option::is_some(&product_opt)) {
+            // Multiplication successful, update result and pop numerator
+            result = option::extract(&mut product_opt);
+            vector::pop_back(numerators);
+        } else {
+            // Multiplication failed (overflow), try to divide
+            if (vector::length(denominators) == 0) {
+                abort EMultiplicationOverflow
+            };
+            // Pop the last (largest) denominator
+            let denominator = vector::pop_back(denominators);
+            let mut division_opt = checked_div(result, denominator);
+            if (option::is_some(&division_opt)) {
+                // Division successful, update result
+                result = division_opt.extract();
+            } else {
+                abort EMultiplicationOverflow
+            }
+        }
+    };
+
+    // Process remaining denominators
+    while (vector::length(denominators) > 0) {
+        let denominator = vector::pop_back(denominators);
+        let mut division_opt = checked_div(result, denominator);
+        if (option::is_some(&division_opt)) {
+            result = option::extract(&mut division_opt);
+        } else {
+            abort EFailedDivision
+        }
+    };
+
+    result
+}
+
+// Sorts a vector of FixedPoint64 in descending order based on value using Insertion Sort.
+// Efficient for small vectors. In the current case, this means vector length of 3
+fun sort_descending(v: &mut vector<FixedPoint64>) {
+    let len = vector::length(v);
+    if (len <= 1) return;
+
+    let mut i = 1;
+    while (i < len) {
+        let mut j = i;
+        // Shift elements left while v[j-1] < v[j] (for descending order)
+        while (j > 0 && vector::borrow(v, j - 1).value < vector::borrow(v, j).value) {
+            vector::swap(v, j - 1, j);
+            j = j - 1;
+        };
+        i = i + 1;
+    }
+}
+
 #[test_only]
 use std::string::{String, utf8};
 
@@ -611,6 +734,22 @@ fun u64_to_bytes(num: u64): vector<u8> {
     bytes
 }
 
+// Helper to check if a vector is sorted in descending order.
+#[test_only]
+fun is_sorted_descending(v: &vector<FixedPoint64>): bool {
+    let len = vector::length(v);
+    if (len <= 1) return true;
+
+    let mut i = 0;
+    while (i < len - 1) {
+        if (vector::borrow(v, i).value < vector::borrow(v, i + 1).value) {
+            return false;
+        };
+        i = i + 1;
+    };
+    true
+}
+
 #[test_only]
 fun u64_to_bytes_padded(num: u64, digits: u64): vector<u8> {
     let bytes = u64_to_bytes(num);
@@ -680,4 +819,166 @@ fun test_ln() {
     let z = from_rational(9999999, 10000000); // z = 0.9999999
     let result = ln_plus_64ln2(one().sub(z)); // 28.243323904878204
     assert!(result.mul(from(1000000000000000)).to_u128() == 28243323904878204, 0);
+}
+
+#[test]
+// Tests the sort_descending function with various inputs.
+fun test_sort_descending() {
+
+    // Test 1: Empty vector
+    let mut v = vector::empty<FixedPoint64>();
+    sort_descending(&mut v);
+    assert!(vector::length(&v) == 0, 0x1);
+
+    // Test 2: Single element (1.0)
+    v = vector::singleton(one());
+    sort_descending(&mut v);
+    assert!(vector::length(&v) == 1, 0x1);
+    assert!(vector::borrow(&v, 0).value == (1_u128 << 64), 0x1);
+    assert!(is_sorted_descending(&v), 0x1);
+
+    // Test 3: Three elements, already sorted (3.0, 2.0, 1.0)
+    v = vector::empty();
+    vector::push_back(&mut v, from(3_u128));
+    vector::push_back(&mut v, from(2_u128));
+    vector::push_back(&mut v, from(1_u128));
+    sort_descending(&mut v);
+    assert!(vector::length(&v) == 3, 0x1);
+    assert!(vector::borrow(&v, 0).value == (3_u128 << 64), 0x1);
+    assert!(vector::borrow(&v, 1).value == (2_u128 << 64), 0x1);
+    assert!(vector::borrow(&v, 2).value == (1_u128 << 64), 0x1);
+    assert!(is_sorted_descending(&v), 0x1);
+
+    // Test 4: Three elements, reverse order (1.0, 2.0, 3.0)
+    v = vector::empty();
+    vector::push_back(&mut v, from(1));
+    vector::push_back(&mut v, from(2));
+    vector::push_back(&mut v, from(3));
+    sort_descending(&mut v);
+    assert!(vector::length(&v) == 3, 0x1);
+    assert!(vector::borrow(&v, 0).value == (3_u128 << 64), 0x1);
+    assert!(vector::borrow(&v, 1).value == (2_u128 << 64), 0x1);
+    assert!(vector::borrow(&v, 2).value == (1_u128 << 64), 0x1);
+    assert!(is_sorted_descending(&v), 0x1);
+
+    // Test 5: Three elements with duplicates (2.0, 3.0, 2.0)
+    v = vector::empty();
+    vector::push_back(&mut v, from(2));
+    vector::push_back(&mut v, from(3));
+    vector::push_back(&mut v, from(2));
+    sort_descending(&mut v);
+    assert!(vector::length(&v) == 3, 0x1);
+    assert!(vector::borrow(&v, 0).value == (3_u128 << 64), 0x1);
+    assert!(vector::borrow(&v, 1).value == (2_u128 << 64), 0x1);
+    assert!(vector::borrow(&v, 2).value == (2_u128 << 64), 0x1);
+    assert!(is_sorted_descending(&v), 0x1);
+
+    // Test 6: Three elements, all equal (2.0, 2.0, 2.0)
+    v = vector::empty();
+    vector::push_back(&mut v, from(2));
+    vector::push_back(&mut v, from(2));
+    vector::push_back(&mut v, from(2));
+    sort_descending(&mut v);
+    assert!(vector::length(&v) == 3, 0x1);
+    assert!(vector::borrow(&v, 0).value == (2_u128 << 64), 0x1);
+    assert!(vector::borrow(&v, 1).value == (2_u128 << 64), 0x1);
+    assert!(vector::borrow(&v, 2).value == (2_u128 << 64), 0x1);
+    assert!(is_sorted_descending(&v), 0x1);
+
+    // Test 7: Four elements, unsorted (4.0, 2.0, 3.0, 1.0)
+    v = vector::empty();
+    vector::push_back(&mut v, from(4));
+    vector::push_back(&mut v, from(2));
+    vector::push_back(&mut v, from(3));
+    vector::push_back(&mut v, from(1));
+    sort_descending(&mut v);
+    assert!(vector::length(&v) == 4, 0x1);
+    assert!(vector::borrow(&v, 0).value == (4_u128 << 64), 0x1);
+    assert!(vector::borrow(&v, 1).value == (3_u128 << 64), 0x1);
+    assert!(vector::borrow(&v, 2).value == (2_u128 << 64), 0x1);
+    assert!(vector::borrow(&v, 3).value == (1_u128 << 64), 0x1);
+    assert!(is_sorted_descending(&v), 0x1);
+}
+
+#[test]
+// Tests the multiply_divide function with various inputs.
+fun test_multiply_divide() {
+    let mut numerators = vector::empty<FixedPoint64>();
+    let mut denominators = vector::empty<FixedPoint64>();
+
+    // Test 1: Three numerators, three denominators (2.0, 3.0, 4.0) / (2.0, 2.0, 1.0)
+    vector::push_back(&mut numerators, from(2));
+    vector::push_back(&mut numerators, from(3));
+    vector::push_back(&mut numerators, from(4));
+    vector::push_back(&mut denominators, from(2));
+    vector::push_back(&mut denominators, from(2));
+    vector::push_back(&mut denominators, from(1));
+    let mut result = multiply_divide(&mut numerators, &mut denominators);
+    assert!(result.value == (6_u128 << 64), 0x1); // (2.0 * 3.0 * 4.0) / (2.0 * 2.0 * 1.0) = 6.0
+    assert!(vector::length(&numerators) == 0, 0x1);
+    assert!(vector::length(&denominators) == 0, 0x1);
+
+    // Test 2: Fractional values (0.5, 2.0, 1.0) / (0.25, 1.0, 2.0)
+    numerators = vector::empty();
+    vector::push_back(&mut numerators, from_rational(1, 2)); // 0.5
+    vector::push_back(&mut numerators, from(2));
+    vector::push_back(&mut numerators, from(1));
+    denominators = vector::empty();
+    vector::push_back(&mut denominators, from_rational(1, 4)); // 0.25
+    vector::push_back(&mut denominators, from(1));
+    vector::push_back(&mut denominators, from(2));
+    result = multiply_divide(&mut numerators, &mut denominators);
+    assert!(result.value == (2_u128 << 64), 0x1); // (0.5 * 2.0 * 1.0) / (0.25 * 1.0 * 2.0) = 2.0
+    assert!(vector::length(&numerators) == 0, 0x1);
+    assert!(vector::length(&denominators) == 0, 0x1);
+
+    // Test 3: Four numerators, four denominators (4.0, 3.0, 2.0, 1.0) / (2.0, 1.0, 1.0, 1.0)
+    numerators = vector::empty();
+    vector::push_back(&mut numerators, from(4));
+    vector::push_back(&mut numerators, from(3));
+    vector::push_back(&mut numerators, from(2));
+    vector::push_back(&mut numerators, from(1));
+    denominators = vector::empty();
+    vector::push_back(&mut denominators, from(2));
+    vector::push_back(&mut denominators, from(1));
+    vector::push_back(&mut denominators, from(1));
+    vector::push_back(&mut denominators, from(1));
+    result = multiply_divide(&mut numerators, &mut denominators);
+    assert!(result.value == (12_u128 << 64), 0x1); // (4.0 * 3.0 * 2.0 * 1.0) / (2.0 * 1.0 * 1.0 * 1.0) = 12.0
+    assert!(vector::length(&numerators) == 0, 0x1);
+    assert!(vector::length(&denominators) == 0, 0x1);
+}
+
+#[test]
+#[expected_failure(abort_code = EMultiplicationOverflow)]
+// Tests the multiply_divide function with various inputs.
+fun test_multiply_divide_overflow() {
+    // Test: Overflow with large numerators (2^32, 2^32, 2^32)
+    let mut numerators = vector::empty();
+    let large = (1_u128 << 32);
+    vector::push_back(&mut numerators, from(large));
+    vector::push_back(&mut numerators, from(large));
+    vector::push_back(&mut numerators, from(large));
+    let mut denominators = vector::singleton(from(1));
+    let _result = multiply_divide(&mut numerators, &mut denominators);
+}
+
+#[test]
+#[expected_failure(abort_code = EFailedDivision)]
+// Tests the multiply_divide function with various inputs.
+fun test_multiply_divide_by_zero() {
+    // Test: Division by zero
+    let mut numerators = vector::singleton(from(1));
+    let mut denominators = vector::singleton(FixedPoint64 { value: 0 }); // 0.0
+    let _result = multiply_divide(&mut numerators, &mut denominators);
+}
+
+#[test]
+#[expected_failure(abort_code = EFailedDivision)]
+// Tests the multiply_divide function with various inputs.
+fun test_multiply_divide_precision_loss() {
+    // Test: Precision loss (0.1 / 10000000000000000000.0)
+    let mut numerators = vector::singleton(from_rational(1, 10));
+    let mut denominators = vector::singleton(from(10000000000000000000));
+    let _result = multiply_divide(&mut numerators, &mut denominators);
 }

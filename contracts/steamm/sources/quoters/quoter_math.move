@@ -30,8 +30,6 @@ public(package) fun swap(
     let amp = fixed_point64::from(amplifier as u128);
     let delta_in = decimal_to_fixedpoint64(amount_in);
 
-    let price_raw = p_x.div(p_y);
-
     let dec_pow = if (decimals_x >= decimals_y) {
         fixed_point64::from(10).pow(decimals_x - decimals_y)
     } else {
@@ -46,9 +44,17 @@ public(package) fun swap(
     // x2y: k = ΔX * Price / (Reserve Y * DecPow)
     // y2x: k = ΔY * DecPow / (Reserve X * Price)
     let k = if (x2y) {
-        delta_in.mul(price_raw).div(r_y.mul(dec_pow))
+        // k = [ΔX * PriceX] / [ReserveY * PriceY * DecPow]
+        fixed_point64::multiply_divide(
+            &mut vector[delta_in, p_x],
+            &mut vector[r_y, p_y, dec_pow],
+        )
     } else {
-        delta_in.mul(dec_pow).div(r_x.mul(price_raw))
+        // k = [ΔY * PriceY * DecPow] / [ReserveX * PriceX]
+        fixed_point64::multiply_divide(
+            &mut vector[delta_in, dec_pow, p_y],
+            &mut vector[r_x, p_x],
+        )
     };
 
     // z can be interpreted as the effective utilisation. Since k is the trade utilisation
