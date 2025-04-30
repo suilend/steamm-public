@@ -24,6 +24,7 @@ const CURRENT_VERSION: u16 = 1;
 const EInvalidBankType: u64 = 0;
 const EInvalidOracleIndex: u64 = 1;
 const EInvalidOracleRegistry: u64 = 2;
+const EInvalidDecimalsDifference: u64 = 3;
 
 public struct OracleQuoterV2 has store {
     version: Version,
@@ -65,6 +66,15 @@ public fun new<P, A, B, B_A, B_B, LpType: drop>(
 
     let bank_data_b = registry.get_bank_data<B>(object::id(lending_market));
     assert!(type_name::get<B_B>() == bank_data_b.btoken_type(), EInvalidBankType);
+
+    let decimals_a = meta_a.get_decimals();
+    let decimals_b = meta_b.get_decimals();
+
+    if (decimals_a >= decimals_b) {
+        assert!(decimals_a - decimals_b <= 10, EInvalidDecimalsDifference);
+    } else {
+        assert!(decimals_b - decimals_a <= 10, EInvalidDecimalsDifference);
+    };
 
     let quoter = OracleQuoterV2 {
         version: version::new(CURRENT_VERSION),
