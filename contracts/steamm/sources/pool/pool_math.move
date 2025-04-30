@@ -100,11 +100,7 @@ fun tokens_to_deposit(reserve_a: u64, reserve_b: u64, max_a: u64, max_b: u64): (
         
         let b_star = checked_mul_div_up(max_a, reserve_b, reserve_a);
 
-        let use_a_star = {
-            if (b_star.is_none()) { true } else {
-                if ( *b_star.borrow() <= max_b ) { false } else { true }
-            }
-        };
+        let use_a_star = b_star.is_none() || *b_star.borrow() > max_b;
 
         if (!use_a_star) { (max_a, *b_star.borrow()) } else {
             let a_star = safe_mul_div_up(max_b, reserve_a, reserve_b);
