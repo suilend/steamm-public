@@ -5,6 +5,8 @@ use suilend::decimal::Decimal;
 use steamm::fixed_point64::{Self, FixedPoint64};
 use steamm::utils::decimal_to_fixedpoint64;
 
+const EInvalidZ: u64 = 1;
+
 public(package) fun swap(
     // Amount in (underlying)
     amount_in: Decimal,
@@ -28,8 +30,6 @@ public(package) fun swap(
     let amp = fixed_point64::from(amplifier as u128);
     let delta_in = decimal_to_fixedpoint64(amount_in);
 
-    let price_raw = p_x.div(p_y);
-
     let dec_pow = if (decimals_x >= decimals_y) {
         fixed_point64::from(10).pow(decimals_x - decimals_y)
     } else {
@@ -44,9 +44,17 @@ public(package) fun swap(
     // x2y: k = ΔX * Price / (Reserve Y * DecPow)
     // y2x: k = ΔY * DecPow / (Reserve X * Price)
     let k = if (x2y) {
-        delta_in.mul(price_raw).div(r_y.mul(dec_pow))
+        // k = [ΔX * PriceX] / [ReserveY * PriceY * DecPow]
+        fixed_point64::multiply_divide(
+            &mut vector[delta_in, p_x],
+            &mut vector[r_y, p_y, dec_pow],
+        )
     } else {
-        delta_in.mul(dec_pow).div(r_x.mul(price_raw))
+        // k = [ΔY * PriceY * DecPow] / [ReserveX * PriceX]
+        fixed_point64::multiply_divide(
+            &mut vector[delta_in, dec_pow, p_y],
+            &mut vector[r_x, p_x],
+        )
     };
 
     // z can be interpreted as the effective utilisation. Since k is the trade utilisation
@@ -58,6 +66,8 @@ public(package) fun swap(
     let z_upper_bound = max_bound.min(k);
 
     let z = newton_raphson(k, amp, z_upper_bound);
+
+    assert!(z.lt(fixed_point64::one()), EInvalidZ);
 
     // `z` is defined as Δout / ReserveOut. Therefore depending on the
     // direction of the trade we pick the corresponding ouput reserve
@@ -106,7 +116,7 @@ fun newton_raphson(
     let one = fixed_point64::one();
     let z_min = fixed_point64::from_rational(1, 100000); // 1e-5 // todo: increase scale?
     let z_max = fixed_point64::from_rational(999999999999999999, 1000000000000000000); // 0.999999999999999999
-    let tol = fixed_point64::from_rational(1, 1000000000_00000); // 1e-10
+    let tol = fixed_point64::from_rational(1, 1000000000_00000); // 1e-14
     let max_iter = 20;
     
     // Improve initial guess
