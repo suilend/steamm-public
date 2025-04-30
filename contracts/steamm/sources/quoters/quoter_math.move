@@ -113,12 +113,22 @@ fun newton_raphson(
     a: FixedPoint64,
     z_initial: FixedPoint64
 ): FixedPoint64 {
+    let max_iter = 20;
+    newton_raphson_(k, a, z_initial, max_iter)
+}
+
+/// See [`newton_raphson`] for details.
+fun newton_raphson_(
+    k: FixedPoint64,
+    a: FixedPoint64,
+    z_initial: FixedPoint64,
+    max_iter: u64,
+): FixedPoint64 {
     let one = fixed_point64::one();
     let z_min = fixed_point64::from_rational(1, 100000); // 1e-5 // todo: increase scale?
     let z_max = fixed_point64::from_rational(999999999999999999, 1000000000000000000); // 0.999999999999999999
     let tol = fixed_point64::from_rational(1, 1000000000_00000); // 1e-14
-    let max_iter = 20;
-    
+
     // Improve initial guess
     let mut z = if (z_initial.gte(one)) {
         z_max
@@ -425,4 +435,83 @@ fun test_ln() {
     let result = fixed_point64::ln_plus_64ln2(fixed_point64::one().sub(z)); // 28.243323904878204
     // print(&result.mul(fixed_point64::from(1000000000000000)).to_u128());
     assert!(result.mul(fixed_point64::from(1000000000000000)).to_u128() == 28243323904878204, 0);
+}
+
+#[test_only]
+use std::debug::print;
+#[test_only]
+use sui::random::RandomGenerator;
+#[test_only]
+use std::string::utf8;
+
+/// If the test fails then the fail code is the iteration number.
+#[test]
+fun test_newton_raphson_with_random_values() {
+    let iterations = 10_000;
+    let debug = false;
+
+    let mut rng = sui::random::new_generator_from_seed_for_testing(b"newton");
+
+    let mut i = 0u64;
+    while (i < iterations) {
+        let k = generate_fixed_point64(&mut rng);
+        let a = generate_amplifier(&mut rng);
+        let z_initial = generate_normalized_fixed_point64(&mut rng);
+
+        if (debug) {
+            print(&{
+                let mut s = utf8(b"Iteration #");
+                s.append(i.to_string());
+                s.append_utf8(b"\nk: ");
+                s.append(k.to_string());
+                s.append_utf8(b"\na: ");
+                s.append(a.to_string());
+                s.append_utf8(b"\nz_initial: ");
+                s.append(z_initial.to_string());
+                s
+            });
+        };
+
+        let z = newton_raphson(k, a, z_initial);
+        
+        // the result is in the expected range of (0; 1]
+        assert!(z.lte(fixed_point64::one()), i);
+        assert!(z.gt(fixed_point64::zero()), i);
+
+        // increasing iterations doesn't change the result
+        let z_with_more_iterations = newton_raphson_(k, a, z, 100);
+        assert!(z_with_more_iterations.eq(z), i);
+
+        i = i + 1;
+    };
+}
+
+#[test_only]
+fun generate_fixed_point64(rng: &mut RandomGenerator): FixedPoint64 {
+    let max = 100 * 10_u128.pow(rng.generate_u8_in_range(1, 15));
+    let a = rng.generate_u128_in_range(1, max);
+
+    let max = 100 * 10_u128.pow(rng.generate_u8_in_range(1, 15));
+    let b = rng.generate_u128_in_range(1, max);
+    
+    fixed_point64::from_rational(a, b)
+}
+
+#[test_only]
+fun generate_normalized_fixed_point64(rng: &mut RandomGenerator): FixedPoint64 {
+    let n = generate_fixed_point64(rng);
+
+    if (n.lt(fixed_point64::one())) {
+        n
+    } else {
+        fixed_point64::one().div(n)
+    }
+}
+
+#[test_only]
+fun generate_amplifier(rng: &mut RandomGenerator): FixedPoint64 {
+    fixed_point64::from_rational(
+        rng.generate_u128_in_range(1, 1_000),
+        1,
+    )
 }
