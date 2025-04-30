@@ -1,9 +1,13 @@
 #[test_only]
 module steamm::oracle_v2_tests;
 
-use std::debug::print;
 use std::string::utf8;
-use suilend::decimal;
+use sui::clock::{Self};
+use sui::coin;
+use sui::balance;
+use sui::test_scenario::{Self, Scenario};
+use sui::test_utils::{destroy, assert_eq};
+
 use oracles::oracles::{Self, OracleRegistry};
 use steamm::b_test_sui::B_TEST_SUI;
 use steamm::b_test_usdc::B_TEST_USDC;
@@ -15,18 +19,14 @@ use steamm::pool::{Pool};
 use steamm::test_utils::{base_setup_2};
 use steamm::global_admin;
 use steamm::utils::decimal_to_fixedpoint64;
-use sui::clock::{Self};
-use sui::coin;
-use sui::balance;
-use sui::test_scenario::{Self, Scenario};
-use sui::test_utils::{destroy, assert_eq};
+use steamm::test_utils::{e9, e6};
+use steamm::fixed_point64::{Self as fp64};
+use suilend::decimal;
 use suilend::lending_market::{LendingMarket};
 use suilend::lending_market_tests::{LENDING_MARKET};
 use suilend::mock_pyth::{Self, PriceState};
 use suilend::test_sui::{TEST_SUI};
 use suilend::test_usdc::{TEST_USDC};
-use steamm::test_utils::{e9, e6};
-use steamm::fixed_point64::{Self as fp64};
 
 fun setup(
     fee_bps: u64,
@@ -130,16 +130,16 @@ fun setup(
         scenario.ctx(),
     );
 
-    sui::test_utils::destroy(admin_cap);
-    sui::test_utils::destroy(meta_lp_sui_usdc);
-    sui::test_utils::destroy(meta_b_usdc);
-    sui::test_utils::destroy(meta_b_sui);
-    sui::test_utils::destroy(meta_usdc);
-    sui::test_utils::destroy(meta_sui);
-    sui::test_utils::destroy(registry);
-    sui::test_utils::destroy(lend_cap);
-    sui::test_utils::destroy(clock);
-    sui::test_utils::destroy(bag);
+    destroy(admin_cap);
+    destroy(meta_lp_sui_usdc);
+    destroy(meta_b_usdc);
+    destroy(meta_b_sui);
+    destroy(meta_usdc);
+    destroy(meta_sui);
+    destroy(registry);
+    destroy(lend_cap);
+    destroy(clock);
+    destroy(bag);
 
     (pool, dyn_pool, oracle_registry, price_state, lending_market, bank_sui, bank_usdc)
 }
@@ -353,16 +353,16 @@ fun setup_all(
         scenario.ctx(),
     );
 
-    sui::test_utils::destroy(admin_cap);
-    sui::test_utils::destroy(meta_lp_sui_usdc);
-    sui::test_utils::destroy(meta_b_usdc);
-    sui::test_utils::destroy(meta_b_sui);
-    sui::test_utils::destroy(meta_usdc);
-    sui::test_utils::destroy(meta_sui);
-    sui::test_utils::destroy(registry);
-    sui::test_utils::destroy(lend_cap);
-    sui::test_utils::destroy(clock);
-    sui::test_utils::destroy(bag);
+    destroy(admin_cap);
+    destroy(meta_lp_sui_usdc);
+    destroy(meta_b_usdc);
+    destroy(meta_b_sui);
+    destroy(meta_usdc);
+    destroy(meta_sui);
+    destroy(registry);
+    destroy(lend_cap);
+    destroy(clock);
+    destroy(bag);
 
     (pool, dyn_pool1, dyn_pool10, dyn_pool100, dyn_pool1000, dyn_pool8000, oracle_registry, price_state, lending_market, bank_sui, bank_usdc)
 }
