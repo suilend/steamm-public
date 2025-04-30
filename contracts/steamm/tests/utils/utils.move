@@ -16,6 +16,7 @@ use steamm::bank::{Self, Bank};
 use steamm::cpmm::{Self, CpQuoter};
 use steamm::dummy_quoter::{Self, DummyQuoter};
 use steamm::lp_usdc_sui::LP_USDC_SUI;
+use steamm::lp_sui_usdc::LP_SUI_USDC;
 use steamm::pool::Pool;
 use steamm::registry::{Self, Registry};
 use sui::bag::{Self, Bag};
@@ -32,6 +33,9 @@ use suilend::test_usdc::{Self, TEST_USDC};
 
 public fun e9(amt: u64): u64 {
     1_000_000_000 * amt
+}
+public fun e6(amt: u64): u64 {
+    1_000_000 * amt
 }
 
 #[test_only]
@@ -162,6 +166,41 @@ public fun setup_currencies(
 }
 
 #[test_only]
+public fun setup_currencies_2(
+    scenario: &mut Scenario,
+): (
+    CoinMetadata<TEST_USDC>,
+    CoinMetadata<TEST_SUI>,
+    CoinMetadata<LP_SUI_USDC>,
+    CoinMetadata<B_TEST_USDC>,
+    CoinMetadata<B_TEST_SUI>,
+    TreasuryCap<LP_SUI_USDC>,
+    TreasuryCap<B_TEST_USDC>,
+    TreasuryCap<B_TEST_SUI>,
+) {
+    let (treasury_cap_sui, meta_sui, treasury_cap_usdc, meta_usdc) = init_currencies(scenario);
+
+    let ctx = ctx(scenario);
+    let (treasury_cap_lp, meta_lp_sui_usdc) = steamm::lp_sui_usdc::create_currency(ctx);
+    let (treasury_cap_b_usdc, meta_b_usdc) = steamm::b_test_usdc::create_currency(ctx);
+    let (treasury_cap_b_sui, meta_b_sui) = steamm::b_test_sui::create_currency(ctx);
+
+    destroy(treasury_cap_sui);
+    destroy(treasury_cap_usdc);
+
+    (
+        meta_usdc,
+        meta_sui,
+        meta_lp_sui_usdc,
+        meta_b_usdc,
+        meta_b_sui,
+        treasury_cap_lp,
+        treasury_cap_b_usdc,
+        treasury_cap_b_sui,
+    )
+}
+
+#[test_only]
 public fun setup_lending_market(
     reserve_args_opt: Option<Bag>,
     scenario: &mut Scenario,
@@ -212,6 +251,82 @@ public fun base_setup(
         treasury_cap_b_usdc,
         treasury_cap_b_sui,
     ) = setup_currencies(scenario);
+
+    let mut registry = registry::init_for_testing(scenario.ctx());
+
+    // Lending market
+    // Create lending market
+    let (clock, lend_cap, lending_market, prices, bag) = setup_lending_market(
+        reserve_args_opt,
+        scenario,
+    );
+
+    // Create banks
+    let bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC, B_TEST_USDC>(
+        &mut registry,
+        &meta_usdc,
+        &mut meta_b_usdc,
+        treasury_cap_b_usdc,
+        &lending_market,
+        scenario.ctx(),
+    );
+    let bank_b = bank::create_bank<LENDING_MARKET, TEST_SUI, B_TEST_SUI>(
+        &mut registry,
+        &meta_sui,
+        &mut meta_b_sui,
+        treasury_cap_b_sui,
+        &lending_market,
+        scenario.ctx(),
+    );
+
+    (
+        bank_a,
+        bank_b,
+        lending_market,
+        lend_cap,
+        prices,
+        bag,
+        clock,
+        registry,
+        meta_b_usdc,
+        meta_b_sui,
+        meta_usdc,
+        meta_sui,
+        meta_lp_usdc_sui,
+        treasury_cap_lp,
+    )
+}
+
+#[test_only]
+public fun base_setup_2(
+    reserve_args_opt: Option<Bag>,
+    scenario: &mut Scenario,
+): (
+    Bank<LENDING_MARKET, TEST_USDC, B_TEST_USDC>,
+    Bank<LENDING_MARKET, TEST_SUI, B_TEST_SUI>,
+    LendingMarket<LENDING_MARKET>,
+    LendingMarketOwnerCap<LENDING_MARKET>,
+    PriceState,
+    Bag,
+    Clock,
+    Registry,
+    CoinMetadata<B_TEST_USDC>,
+    CoinMetadata<B_TEST_SUI>,
+    CoinMetadata<TEST_USDC>,
+    CoinMetadata<TEST_SUI>,
+    CoinMetadata<LP_SUI_USDC>,
+    TreasuryCap<LP_SUI_USDC>,
+) {
+    let (
+        meta_usdc,
+        meta_sui,
+        meta_lp_usdc_sui,
+        mut meta_b_usdc,
+        mut meta_b_sui,
+        treasury_cap_lp,
+        treasury_cap_b_usdc,
+        treasury_cap_b_sui,
+    ) = setup_currencies_2(scenario);
 
     let mut registry = registry::init_for_testing(scenario.ctx());
 
