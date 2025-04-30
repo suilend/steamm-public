@@ -1,14 +1,21 @@
 [package]
 name = "steamm_scripts"
 edition = "2024.beta"
-published-at = "0x7e69a01e9d856fdbfa315a3b0835d828ce632d3dd2fdc3d80de256895fca9e0a"
+published-at = "0x93ebee2837c208631bd49eb0ee16af9381ae3175589302a5183175540b9e4cc3"
 # license = ""           # e.g., "MIT", "GPL", "Apache 2.0"
 # authors = ["..."]      # e.g., ["Joe Smith (joesmith@noemail.com)", "John Snow (johnsnow@noemail.com)"]
 
 [dependencies]
-Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet", override = true }
-suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/suilend", rev = "devel", override = true }
 steamm = { local = "../steamm" }
 
+
+# v1 = 0x13bfc09cfc1bd922d3aa53fcf7b2cd510727ee65068ce136e2ebd5f3b213fdd2
+# v2 = 0x043ca0fb6dd5a60f20513d76aa49cb007b4554083ef8a5765b15e01ce1642036
+# v3 = 0xcaad7e0571b0bd9695b5dafde08ee190885e530442895f2378c26ad4243d6009
+# v4 = 0xaf8a9d331fa0c2362506803825bcb6092f8f7fbe553bad4423724159c5160a77
+# v5 = 0xf61844d7e3313e920825308d2ce5e783e0a77b14d5c6f0f56170451c6e8c9088
+# v6 = 0x93ebee2837c208631bd49eb0ee16af9381ae3175589302a5183175540b9e4cc3
+
 [addresses]
-steamm_scripts = "0x7e69a01e9d856fdbfa315a3b0835d828ce632d3dd2fdc3d80de256895fca9e0a"
+# steamm_scripts = "0x0"
+steamm_scripts = "0x13bfc09cfc1bd922d3aa53fcf7b2cd510727ee65068ce136e2ebd5f3b213fdd2"

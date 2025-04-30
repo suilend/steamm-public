@@ -23,6 +23,10 @@ use sui::tx_context::sender;
 public use fun steamm::cpmm::swap as Pool.cpmm_swap;
 public use fun steamm::cpmm::quote_swap as Pool.cpmm_quote_swap;
 public use fun steamm::cpmm::k as Pool.cpmm_k;
+public use fun steamm::omm::swap as Pool.omm_swap;
+public use fun steamm::omm::quote_swap as Pool.omm_quote_swap;
+public use fun steamm::omm_v2::swap as Pool.omm_v2_swap;
+public use fun steamm::omm_v2::quote_swap as Pool.omm_v2_quote_swap;
 
 // ===== Constants =====
 

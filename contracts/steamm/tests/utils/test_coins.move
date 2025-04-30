@@ -24,6 +24,31 @@ module steamm::lp_usdc_sui {
 }
 
 #[test_only]
+module steamm::lp_sui_usdc {
+    use sui::coin::{Self, TreasuryCap, CoinMetadata};
+    use sui::url;
+
+    public struct LP_SUI_USDC has drop {}
+
+    #[test_only]
+    public fun create_currency(ctx: &mut TxContext): (
+        TreasuryCap<LP_SUI_USDC>, 
+        CoinMetadata<LP_SUI_USDC>, 
+    ) {
+
+        coin::create_currency(
+            LP_SUI_USDC {}, 
+            9, 
+            b"steammLP bSUI-bUSDC",
+            b"Steamm LP Token bSUI-bUSDC",
+            vector::empty(),
+            option::some(url::new_unsafe_from_bytes(b"NONE")),
+            ctx
+        )
+    }
+}
+
+#[test_only]
 module steamm::b_test_usdc {
     use sui::coin::{Self, TreasuryCap, CoinMetadata};
     use sui::url;

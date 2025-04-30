@@ -35,7 +35,7 @@ public(package) fun compute_recall_for_pending_withdraw(
 
 public(package) fun compute_utilisation_bps(funds_available: u64, funds_deployed: u64): u64 {
     assert!(funds_available + funds_deployed > 0, EEmptyBank);
-    (funds_deployed * 10_000) / (funds_available + funds_deployed)
+    (((funds_deployed as u128) * 10_000_u128) / ((funds_available + funds_deployed) as u128)) as u64
 }
 
 // (1 - utilisation ratio) * (R + Lent - Out) + (Out * 10_000) - (R * 10_000)
@@ -135,4 +135,7 @@ fun test_compute_utilisation_bps() {
     assert_eq(compute_utilisation_bps(5_000, 5_000), 5_000); // 50%
     assert_eq(compute_utilisation_bps(3_000, 7_000), 7_000); // 30%
     assert_eq(compute_utilisation_bps(0, 10_000), 10_000); // 0%
+
+    // Test prevent arithmetic overflow
+    compute_utilisation_bps(641044251416544, 2519527157308804);
 }

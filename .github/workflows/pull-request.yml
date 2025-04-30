@@ -9,7 +9,7 @@ jobs:
   move-test:
     runs-on: ubuntu-latest
     container: 
-      image: mysten/sui-tools:mainnet 
+      image: mysten/sui-tools:mainnet
       ports:
         - 80
     steps:

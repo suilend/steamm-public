@@ -83,7 +83,7 @@ fun test_quote_lateral_price_increase_with_increasing_offset() {
 
     let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     let mut pow_n = 0;
@@ -143,7 +143,7 @@ fun test_quote_lateral_price_decrease_with_increasing_initial_coin_supply() {
 
     let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
         reserve_args(&mut scenario),
-        &mut scenario,
+        scenario.ctx(),
     ).destruct_state();
 
     let mut pow_n = 0;

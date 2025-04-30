@@ -16,6 +16,7 @@ use steamm::bank::{Self, Bank};
 use steamm::cpmm::{Self, CpQuoter};
 use steamm::dummy_quoter::{Self, DummyQuoter};
 use steamm::lp_usdc_sui::LP_USDC_SUI;
+use steamm::lp_sui_usdc::LP_SUI_USDC;
 use steamm::pool::Pool;
 use steamm::registry::{Self, Registry};
 use sui::bag::{Self, Bag};
@@ -33,6 +34,9 @@ use suilend::test_usdc::{Self, TEST_USDC};
 public fun e9(amt: u64): u64 {
     1_000_000_000 * amt
 }
+public fun e6(amt: u64): u64 {
+    1_000_000 * amt
+}
 
 #[test_only]
 public macro fun assert_eq_approx($a: u64, $b: u64, $tolerance_bps: u64) {
@@ -47,7 +51,7 @@ public fun reserve_args(scenario: &mut Scenario): Bag {
     let ctx = test_scenario::ctx(scenario);
 
     let usdc_config = {
-        let config = reserve_config::default_reserve_config();
+        let config = reserve_config::default_reserve_config(ctx);
         let mut builder = reserve_config::from(&config, ctx);
         reserve_config::set_open_ltv_pct(&mut builder, 50);
         reserve_config::set_close_ltv_pct(&mut builder, 50);
@@ -58,7 +62,7 @@ public fun reserve_args(scenario: &mut Scenario): Bag {
     };
 
     let sui_config = {
-        let config = reserve_config::default_reserve_config();
+        let config = reserve_config::default_reserve_config(ctx);
         let mut builder = reserve_config::from(
             &config,
             ctx,
@@ -91,16 +95,17 @@ public fun reserve_args(scenario: &mut Scenario): Bag {
 
 #[test_only]
 public fun reserve_args_2(scenario: &mut Scenario): Bag {
-    let mut bag = bag::new(test_scenario::ctx(scenario));
+    let ctx = test_scenario::ctx(scenario);
+    let mut bag = bag::new(ctx);
 
     let reserve_args = {
-        let config = reserve_config::default_reserve_config();
-        let mut builder = reserve_config::from(&config, test_scenario::ctx(scenario));
+        let config = reserve_config::default_reserve_config(ctx);
+        let mut builder = reserve_config::from(&config, ctx);
         reserve_config::set_open_ltv_pct(&mut builder, 50);
         reserve_config::set_close_ltv_pct(&mut builder, 50);
         reserve_config::set_max_close_ltv_pct(&mut builder, 50);
         sui::test_utils::destroy(config);
-        let config = reserve_config::build(builder, test_scenario::ctx(scenario));
+        let config = reserve_config::build(builder, ctx);
 
         lending_market_tests::new_args(100 * 1_000_000, config)
     };
@@ -112,7 +117,7 @@ public fun reserve_args_2(scenario: &mut Scenario): Bag {
     );
 
     let reserve_args = {
-        let config = reserve_config::default_reserve_config();
+        let config = reserve_config::default_reserve_config(ctx);
         lending_market_tests::new_args(100 * 1_000_000_000, config)
     };
 
@@ -161,6 +166,41 @@ public fun setup_currencies(
 }
 
 #[test_only]
+public fun setup_currencies_2(
+    scenario: &mut Scenario,
+): (
+    CoinMetadata<TEST_USDC>,
+    CoinMetadata<TEST_SUI>,
+    CoinMetadata<LP_SUI_USDC>,
+    CoinMetadata<B_TEST_USDC>,
+    CoinMetadata<B_TEST_SUI>,
+    TreasuryCap<LP_SUI_USDC>,
+    TreasuryCap<B_TEST_USDC>,
+    TreasuryCap<B_TEST_SUI>,
+) {
+    let (treasury_cap_sui, meta_sui, treasury_cap_usdc, meta_usdc) = init_currencies(scenario);
+
+    let ctx = ctx(scenario);
+    let (treasury_cap_lp, meta_lp_sui_usdc) = steamm::lp_sui_usdc::create_currency(ctx);
+    let (treasury_cap_b_usdc, meta_b_usdc) = steamm::b_test_usdc::create_currency(ctx);
+    let (treasury_cap_b_sui, meta_b_sui) = steamm::b_test_sui::create_currency(ctx);
+
+    destroy(treasury_cap_sui);
+    destroy(treasury_cap_usdc);
+
+    (
+        meta_usdc,
+        meta_sui,
+        meta_lp_sui_usdc,
+        meta_b_usdc,
+        meta_b_sui,
+        treasury_cap_lp,
+        treasury_cap_b_usdc,
+        treasury_cap_b_sui,
+    )
+}
+
+#[test_only]
 public fun setup_lending_market(
     reserve_args_opt: Option<Bag>,
     scenario: &mut Scenario,
@@ -170,13 +210,13 @@ public fun setup_lending_market(
 
         suilend_setup(
             reserve_args(scenario),
-            scenario,
+            scenario.ctx(),
         ).destruct_state()
     } else {
         let reserve_args = reserve_args_opt.destroy_some();
         suilend_setup(
             reserve_args,
-            scenario,
+            scenario.ctx(),
         ).destruct_state()
     }
 }
@@ -196,6 +236,8 @@ public fun base_setup(
     Registry,
     CoinMetadata<B_TEST_USDC>,
     CoinMetadata<B_TEST_SUI>,
+    CoinMetadata<TEST_USDC>,
+    CoinMetadata<TEST_SUI>,
     CoinMetadata<LP_USDC_SUI>,
     TreasuryCap<LP_USDC_SUI>,
 ) {
@@ -237,8 +279,81 @@ public fun base_setup(
         scenario.ctx(),
     );
 
-    destroy(meta_sui);
-    destroy(meta_usdc);
+    (
+        bank_a,
+        bank_b,
+        lending_market,
+        lend_cap,
+        prices,
+        bag,
+        clock,
+        registry,
+        meta_b_usdc,
+        meta_b_sui,
+        meta_usdc,
+        meta_sui,
+        meta_lp_usdc_sui,
+        treasury_cap_lp,
+    )
+}
+
+#[test_only]
+public fun base_setup_2(
+    reserve_args_opt: Option<Bag>,
+    scenario: &mut Scenario,
+): (
+    Bank<LENDING_MARKET, TEST_USDC, B_TEST_USDC>,
+    Bank<LENDING_MARKET, TEST_SUI, B_TEST_SUI>,
+    LendingMarket<LENDING_MARKET>,
+    LendingMarketOwnerCap<LENDING_MARKET>,
+    PriceState,
+    Bag,
+    Clock,
+    Registry,
+    CoinMetadata<B_TEST_USDC>,
+    CoinMetadata<B_TEST_SUI>,
+    CoinMetadata<TEST_USDC>,
+    CoinMetadata<TEST_SUI>,
+    CoinMetadata<LP_SUI_USDC>,
+    TreasuryCap<LP_SUI_USDC>,
+) {
+    let (
+        meta_usdc,
+        meta_sui,
+        meta_lp_usdc_sui,
+        mut meta_b_usdc,
+        mut meta_b_sui,
+        treasury_cap_lp,
+        treasury_cap_b_usdc,
+        treasury_cap_b_sui,
+    ) = setup_currencies_2(scenario);
+
+    let mut registry = registry::init_for_testing(scenario.ctx());
+
+    // Lending market
+    // Create lending market
+    let (clock, lend_cap, lending_market, prices, bag) = setup_lending_market(
+        reserve_args_opt,
+        scenario,
+    );
+
+    // Create banks
+    let bank_a = bank::create_bank<LENDING_MARKET, TEST_USDC, B_TEST_USDC>(
+        &mut registry,
+        &meta_usdc,
+        &mut meta_b_usdc,
+        treasury_cap_b_usdc,
+        &lending_market,
+        scenario.ctx(),
+    );
+    let bank_b = bank::create_bank<LENDING_MARKET, TEST_SUI, B_TEST_SUI>(
+        &mut registry,
+        &meta_sui,
+        &mut meta_b_sui,
+        treasury_cap_b_sui,
+        &lending_market,
+        scenario.ctx(),
+    );
 
     (
         bank_a,
@@ -251,6 +366,8 @@ public fun base_setup(
         registry,
         meta_b_usdc,
         meta_b_sui,
+        meta_usdc,
+        meta_sui,
         meta_lp_usdc_sui,
         treasury_cap_lp,
     )
@@ -282,6 +399,8 @@ public fun test_setup_cpmm(
         mut registry,
         meta_b_usdc,
         meta_b_sui,
+        meta_usdc,
+        meta_sui,
         mut meta_lp_usdc_sui,
         treasury_cap_lp,
     ) = base_setup(none(), scenario);
@@ -302,6 +421,8 @@ public fun test_setup_cpmm(
     destroy(meta_lp_usdc_sui);
     destroy(meta_b_sui);
     destroy(meta_b_usdc);
+    destroy(meta_usdc);
+    destroy(meta_sui);
 
     (pool, bank_a, bank_b, lending_market, lend_cap, prices, bag, clock)
 }
@@ -331,6 +452,8 @@ public fun test_setup_dummy(
         mut registry,
         meta_b_usdc,
         meta_b_sui,
+        meta_usdc,
+        meta_sui,
         mut meta_lp_usdc_sui,
         treasury_cap_lp,
     ) = base_setup(none(), scenario);
@@ -358,6 +481,8 @@ public fun test_setup_dummy(
     destroy(meta_lp_usdc_sui);
     destroy(meta_b_sui);
     destroy(meta_b_usdc);
+    destroy(meta_usdc);
+    destroy(meta_sui);
 
     (pool, bank_a, bank_b, lending_market, lend_cap, prices, bag, clock)
 }
