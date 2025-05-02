@@ -1,7 +1,7 @@
 [package]
 name = "steamm_scripts"
 edition = "2024.beta"
-published-at = "0x93ebee2837c208631bd49eb0ee16af9381ae3175589302a5183175540b9e4cc3"
+published-at = "0xe861377e806547370a7d219cb0f0eb7fa1d497607f2722352a47ed825b2a1db4"
 # license = ""           # e.g., "MIT", "GPL", "Apache 2.0"
 # authors = ["..."]      # e.g., ["Joe Smith (joesmith@noemail.com)", "John Snow (johnsnow@noemail.com)"]
 
@@ -9,12 +9,14 @@ published-at = "0x93ebee2837c208631bd49eb0ee16af9381ae3175589302a5183175540b9e4c
 steamm = { local = "../steamm" }
 
 
+# Upgrade cap: 0xcded95d884efbd02d4824611ef4fa75e60d1c6d89b1cdbaaff431266fc23e81d
 # v1 = 0x13bfc09cfc1bd922d3aa53fcf7b2cd510727ee65068ce136e2ebd5f3b213fdd2
 # v2 = 0x043ca0fb6dd5a60f20513d76aa49cb007b4554083ef8a5765b15e01ce1642036
 # v3 = 0xcaad7e0571b0bd9695b5dafde08ee190885e530442895f2378c26ad4243d6009
 # v4 = 0xaf8a9d331fa0c2362506803825bcb6092f8f7fbe553bad4423724159c5160a77
 # v5 = 0xf61844d7e3313e920825308d2ce5e783e0a77b14d5c6f0f56170451c6e8c9088
 # v6 = 0x93ebee2837c208631bd49eb0ee16af9381ae3175589302a5183175540b9e4cc3
+# v7 = 0xe861377e806547370a7d219cb0f0eb7fa1d497607f2722352a47ed825b2a1db4
 
 [addresses]
 # steamm_scripts = "0x0"
