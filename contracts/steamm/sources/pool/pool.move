@@ -796,6 +796,7 @@ fun assert_swap_fee_bps(swap_fee_bps: u64) {
     assert!(
         swap_fee_bps == 1 || 
         swap_fee_bps == 5 || 
+        swap_fee_bps == 10 || 
         swap_fee_bps == 30 || 
         swap_fee_bps == 100 ||
         swap_fee_bps == 200,
