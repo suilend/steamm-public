@@ -802,7 +802,9 @@ fun assert_swap_fee_bps(swap_fee_bps: u64) {
         swap_fee_bps == 30 || 
         swap_fee_bps == 50 || 
         swap_fee_bps == 100 ||
-        swap_fee_bps == 200,
+        swap_fee_bps == 200 ||
+        swap_fee_bps == 1000 ||
+        swap_fee_bps == 5000,
         EInvalidSwapFeeBpsType,
     );
 }
