@@ -1,7 +1,7 @@
 [package]
 name = "steamm"
 edition = "2024.beta"
-published-at = "0xc765782a3e13ca6d89880433bcd7137bf368860038bc52513f4e4710a92b9d13"
+published-at = "0xcd79d7c2cdc9b3ed0ece47f1a5a9d8faa2f418328375c5cc00393ecfc1c67bbf"
 
 [dependencies]
 suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/suilend", rev = "beta-v5" }
@@ -10,6 +10,7 @@ oracles = { git = "https://github.com/solendprotocol/suilend.git", subdir = "con
 
 # Upgrade Cap: 0xb4e5c5ce1d69637afa69488a9f3c6edd1075a961ec8a9a9e48b40d6885ba5f2f
 # v1 = 0xc765782a3e13ca6d89880433bcd7137bf368860038bc52513f4e4710a92b9d13
+# v2 = 0xcd79d7c2cdc9b3ed0ece47f1a5a9d8faa2f418328375c5cc00393ecfc1c67bbf
 
 [addresses]
 # steamm = "0x0"
