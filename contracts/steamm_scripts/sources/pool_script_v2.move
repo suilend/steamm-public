@@ -303,7 +303,11 @@ public fun deposit_liquidity<P, A, B, BTokenA, BTokenB, Quoter: store, LpType: d
     ctx: &mut TxContext,
 ): Coin<LpType> {
     let mut btoken_a = bank_a.mint_btoken(lending_market, coin_a, max_a, clock, ctx);
-    let mut btoken_b = bank_b.mint_btoken(lending_market, coin_b, max_b, clock, ctx);
+    let mut btoken_b = if (coin_b.value() == 0) {
+        coin::zero(ctx)
+    } else {
+        bank_b.mint_btoken(lending_market, coin_b, max_b, clock, ctx)
+    };
 
     let max_ba = btoken_a.value();
     let max_bb = btoken_b.value();
