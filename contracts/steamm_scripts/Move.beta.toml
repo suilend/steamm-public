@@ -1,7 +1,7 @@
 [package]
 name = "steamm_scripts"
 edition = "2024.beta"
-published-at = "0xeb1cdce9f21401a0c49d67ce4391ef431054da51b51b2701528f1815eb787f51"
+published-at = "0xff4baf9ad56ff237fce801bff44e559e040e0f02fc7b1865f0df33c4ff4d0156"
 
 [dependencies]
 suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/suilend", rev = "beta-v5" }
@@ -9,6 +9,9 @@ steamm = { local = "../steamm" }
 
 # Upgrade Cap: 0xa3de6156898215523ae3cf4829584e1988ad38f66a6a990e1140a0475e5e5298
 # v1 = 0xeb1cdce9f21401a0c49d67ce4391ef431054da51b51b2701528f1815eb787f51
+# v2 = 0x93d2b8f81d1935938cfbc26590ec475ecaab8f80201dcf35019a6ae8d6ae5156
+# v3 = 0xff4baf9ad56ff237fce801bff44e559e040e0f02fc7b1865f0df33c4ff4d0156
 
 [addresses]
+# steamm_scripts = "0x0"
 steamm_scripts = "0xeb1cdce9f21401a0c49d67ce4391ef431054da51b51b2701528f1815eb787f51"
