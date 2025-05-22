@@ -16,10 +16,11 @@ use steamm::bank::Bank;
 use steamm::events::emit_event;
 use steamm::fixed_point64::{Self, FixedPoint64};
 use steamm::utils::decimal_to_fixedpoint64;
+use steamm::omm::{quote_swap_impl as quote_swap_with_no_slippage};
 
 // ===== Constants =====
 
-const CURRENT_VERSION: u16 = 1;
+const CURRENT_VERSION: u16 = 2;
 
 // ===== Errors =====
 const EInvalidBankType: u64 = 0;
@@ -27,6 +28,7 @@ const EInvalidOracleIndex: u64 = 1;
 const EInvalidOracleRegistry: u64 = 2;
 const EInvalidDecimalsDifference: u64 = 3;
 const EInvalidZ: u64 = 4;
+const EInvalidPrice: u64 = 5;
 
 public struct OracleQuoterV2 has store {
     version: Version,
@@ -239,6 +241,30 @@ public fun quote_swap<P, A, B, B_A, B_B, LpType: drop>(
         amount_out
     };
 
+    let amount_out_with_no_slippage = if (a2b) {
+        quote_swap_with_no_slippage(
+            amount_in,
+            decimals_a,
+            decimals_b,
+            price_a,
+            price_b,
+            btoken_ratio_a,
+            btoken_ratio_b,
+        )
+    } else {
+        quote_swap_with_no_slippage(
+            amount_in,
+            decimals_b,
+            decimals_a,
+            price_b,
+            price_a,
+            btoken_ratio_b,
+            btoken_ratio_a,
+        )
+    };
+
+    assert!(amount_out < amount_out_with_no_slippage, EInvalidPrice);
+
     pool.get_quote(amount_in, amount_out, a2b)
 }
 
@@ -347,6 +373,7 @@ fun get_swap_output(
     let z = newton_raphson(k, amp, z_upper_bound);
 
     assert!(z.lt(fixed_point64::one()), EInvalidZ);
+    let z = z.min(z_upper_bound);
 
     // `z` is defined as Δout / ReserveOut. Therefore depending on the
     // direction of the trade we pick the corresponding ouput reserve

@@ -202,8 +202,7 @@ public fun quote_swap<P, A, B, B_A, B_B, LpType: drop>(
 
     pool.get_quote(amount_in, amount_out, a2b)
 }
-
-fun quote_swap_impl(
+public(package) fun quote_swap_impl(
     btoken_amount_in: u64,
     decimals_in: u8,
     decimals_out: u8,
