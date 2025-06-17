@@ -13,3 +13,6 @@ default:
 
 # Commands for Sui contracts
 mod sui 'contracts/.just'
+
+sync:
+    git push public main:main
