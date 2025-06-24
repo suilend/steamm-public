@@ -1,7 +1,7 @@
 [package]
 name = "steamm_scripts"
 edition = "2024.beta"
-published-at = "0xbef015f8fe24f324cc4a7939a88c164e78d2d859aa925a75bd8f8472b6ae7d0e"
+published-at = "0x07e94a74f70d081c0839b0de957460cfad40d2502ee00825bcbb0ef23118cb10"
 # license = ""           # e.g., "MIT", "GPL", "Apache 2.0"
 # authors = ["..."]      # e.g., ["Joe Smith (joesmith@noemail.com)", "John Snow (johnsnow@noemail.com)"]
 
@@ -19,6 +19,7 @@ steamm = { local = "../steamm" }
 # v7 = 0xe861377e806547370a7d219cb0f0eb7fa1d497607f2722352a47ed825b2a1db4
 # v7 = 0xa5eda33c0829a546b55fdf0bb1ad88175df00e1c72690b79ac966c49082b9834
 # v8 = 0xbef015f8fe24f324cc4a7939a88c164e78d2d859aa925a75bd8f8472b6ae7d0e
+# v9 = 0x07e94a74f70d081c0839b0de957460cfad40d2502ee00825bcbb0ef23118cb10
 
 [addresses]
 # steamm_scripts = "0x0"
