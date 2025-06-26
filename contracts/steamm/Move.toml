@@ -4,8 +4,8 @@ edition = "2024.beta"
 published-at = "0x4454d95507deb17d5017db11105bd95027d434776af1d0049ce27a3510a9a1ba"
 
 [dependencies]
-suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/suilend", rev = "hotfix-sui-version" }
-oracles = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/oracles", rev = "hotfix-sui-version" }
+suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/suilend", rev = "mock-for-testing" }
+oracles = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/oracles", rev = "mock-for-testing" }
 
 
 # v1 = 0x4fb1cf45dffd6230305f1d269dd1816678cc8e3ba0b747a813a556921219f261

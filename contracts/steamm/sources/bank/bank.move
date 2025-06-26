@@ -16,8 +16,10 @@ use sui::clock::Clock;
 use sui::coin::{Self, Coin, TreasuryCap, CoinMetadata};
 use sui::transfer::share_object;
 use suilend::decimal::{Self, Decimal};
-use suilend::lending_market::{LendingMarket, ObligationOwnerCap};
+use suilend::lending_market::{Self, LendingMarket, ObligationOwnerCap};
 use suilend::reserve::CToken;
+use sui::sui::SUI;
+use sui_system::sui_system::SuiSystemState;
 
 // ===== Constants =====
 
@@ -426,9 +428,69 @@ public fun rebalance<P, T, BToken>(
             target_utilisation_bps,
         );
 
-        bank.recall(
+        recall!(
+            bank,
             lending_market,
             amount_to_recall,
+            clock,
+            ctx,
+        );
+    };
+}
+
+// NOTE: We could do the same technique as we're doing with the recall macro,
+// to remove the duplicate code with rebalance function
+// by having a rebalance_macro!() that takes in either recall! or recall_with_liquidity_request!
+public fun rebalance_sui<P, BToken>(
+    bank: &mut Bank<P, SUI, BToken>,
+    lending_market: &mut LendingMarket<P>,
+    system_state: &mut SuiSystemState,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    bank.version.assert_version_and_upgrade(CURRENT_VERSION);
+    bank.compound_interest_if_any(lending_market, clock);
+
+    if (bank.lending.is_none()) {
+        return
+    };
+
+    let ctoken_ratio = bank.ctoken_ratio(lending_market, clock);
+    let funds_deployed = bank.funds_deployed(some(ctoken_ratio)).floor();
+    let effective_utilisation_bps = bank_math::compute_utilisation_bps(
+        bank.funds_available.value(),
+        funds_deployed,
+    );
+
+    let target_utilisation_bps = bank.target_utilisation_bps_unchecked();
+    let buffer_bps = bank.utilisation_buffer_bps();
+
+    if (effective_utilisation_bps < target_utilisation_bps - buffer_bps) {
+        let amount_to_deploy = bank_math::compute_amount_to_deploy(
+            bank.funds_available.value(),
+            funds_deployed,
+            target_utilisation_bps,
+        );
+
+        bank.deploy(
+            lending_market,
+            amount_to_deploy,
+            clock,
+            ctx,
+        );
+    } else if (effective_utilisation_bps > target_utilisation_bps + buffer_bps) {
+        let amount_to_recall = bank_math::compute_amount_to_recall(
+            bank.funds_available.value(),
+            0,
+            funds_deployed,
+            target_utilisation_bps,
+        );
+
+        recall_with_liquidity_request!(
+            bank,
+            lending_market,
+            amount_to_recall,
+            system_state,
             clock,
             ctx,
         );
@@ -579,7 +641,8 @@ public(package) fun prepare_for_pending_withdraw<P, T, BToken>(
         )
     };
 
-    bank.recall(
+    recall!(
+        bank,
         lending_market,
         amount_to_recall,
         clock,
@@ -689,13 +752,26 @@ fun deploy<P, T, BToken>(
     });
 }
 
-fun recall<P, T, BToken>(
-    bank: &mut Bank<P, T, BToken>,
-    lending_market: &mut LendingMarket<P>,
-    amount_to_recall: u64,
-    clock: &Clock,
-    ctx: &mut TxContext,
+macro fun recall_macro<$P, $T, $BToken>(
+    $bank: &mut Bank<$P, $T, $BToken>,
+    $lending_market: &mut LendingMarket<$P>,
+    $amount_to_recall: u64,
+    $clock: &Clock,
+    $ctx: &mut TxContext,
+    $withdraw_from_suilend: |
+        &mut LendingMarket<$P>,
+        u64,
+        &Clock,
+        Coin<CToken<$P, $T>>,
+        &mut TxContext,
+    | -> Coin<$T>,
 ) {
+    let bank = $bank;
+    let lending_market = $lending_market;
+    let amount_to_recall = $amount_to_recall;
+    let clock = $clock;
+    let ctx = $ctx;
+
     let lending = bank.lending.borrow();
 
     if (amount_to_recall == 0) {
@@ -705,7 +781,7 @@ fun recall<P, T, BToken>(
     let amount_to_recall = amount_to_recall.max(bank.min_token_block_size);
     let ctoken_amount = bank.ctoken_amount(lending_market, amount_to_recall);
 
-    let ctokens: Coin<CToken<P, T>> = lending_market.withdraw_ctokens(
+    let ctokens: Coin<CToken<$P, $T>> = lending_market.withdraw_ctokens(
         lending.reserve_array_index,
         &lending.obligation_cap,
         clock,
@@ -715,12 +791,8 @@ fun recall<P, T, BToken>(
 
     let ctoken_amount = ctokens.value();
 
-    let coin_recalled = lending_market.redeem_ctokens_and_withdraw_liquidity(
-        bank.lending.borrow().reserve_array_index,
-        clock,
-        ctokens,
-        none(), // rate_limiter_exemption
-        ctx,
+    let coin_recalled = $withdraw_from_suilend(
+        lending_market, lending.reserve_array_index, clock, ctokens, ctx
     );
 
     let recalled_amount = coin_recalled.value();
@@ -753,6 +825,89 @@ fun recall<P, T, BToken>(
         ctokens_burned: ctoken_amount,
     });
 }
+
+// Recall without liquidity request
+// This macro is called for all banks except SUI
+macro fun recall<$P, $T, $BToken>(
+    $bank: &mut Bank<$P, $T, $BToken>,
+    $lending_market: &mut LendingMarket<$P>,
+    $amount_to_recall: u64,
+    $clock: &Clock,
+    $ctx: &mut TxContext,
+) {
+    let bank= $bank;
+    let lending_market= $lending_market;
+    let amount_to_recall= $amount_to_recall;
+    let clock= $clock;
+    let ctx= $ctx;
+
+    recall_macro!(
+        bank,
+        lending_market,
+        amount_to_recall,
+        clock,
+        ctx,
+        |lending_market, reserve_array_index, clock, ctokens, ctx| {
+            lending_market::redeem_ctokens_and_withdraw_liquidity(
+                lending_market,
+                reserve_array_index,
+                clock,
+                ctokens,
+                none(),
+                ctx,
+            )
+        },
+    );
+}
+
+// Recall with liquidity request
+// This macro is called only for SUI banks
+macro fun recall_with_liquidity_request<$P, $T, $BToken>(
+    $bank: &mut Bank<$P, $T, $BToken>,
+    $lending_market: &mut LendingMarket<$P>,
+    $amount_to_recall: u64,
+    $system_state: &mut SuiSystemState,
+    $clock: &Clock,
+    $ctx: &mut TxContext,
+) {
+    let bank= $bank;
+    let lending_market= $lending_market;
+    let amount_to_recall= $amount_to_recall;
+    let system_state= $system_state;
+    let clock= $clock;
+    let ctx= $ctx;
+
+    recall_macro!(
+        bank,
+        lending_market,
+        amount_to_recall,
+        clock,
+        ctx,
+        |lending_market, reserve_array_index, clock, ctokens, ctx| {
+            let liquidity_request = lending_market.redeem_ctokens_and_withdraw_liquidity_request(
+                reserve_array_index,
+                clock,
+                ctokens,
+                none(),
+                ctx,
+            );
+
+            lending_market.unstake_sui_from_staker(
+                reserve_array_index,
+                &liquidity_request,
+                system_state,
+                ctx,
+            );
+
+            lending_market.fulfill_liquidity_request(
+                reserve_array_index,
+                liquidity_request,
+                ctx,
+            )
+        },
+    );
+}
+
 
 public(package) fun ctoken_ratio<P, T, BToken>(
     bank: &Bank<P, T, BToken>,
@@ -1078,3 +1233,37 @@ public fun needs_rebalance_after_outflow<P, T, BToken>(
 
 #[test_only]
 public fun needs_rebalance_(needs_rebalance: NeedsRebalance): bool { needs_rebalance.needs_rebalance }
+
+
+#[test_only]
+public fun mock_for_testing<P, T, BToken: drop>(
+    funds_available: u64,
+    min_token_block_size: u64,
+    btoken_supply_val: u64,
+    ctokens: u64,
+    target_utilisation_bps: u16,
+    utilisation_buffer_bps: u16,
+    reserve_array_index: u64,
+    obligation_cap: ObligationOwnerCap<P>,
+    ctx: &mut TxContext,
+): (Bank<P, T, BToken>, Balance<BToken>) {
+    let mut btoken_supply = balance::create_supply_for_testing();
+    let btokens = btoken_supply.increase_supply(btoken_supply_val);
+
+    let bank = Bank<P, T, BToken> {
+        id: object::new(ctx),
+        funds_available: balance::create_for_testing(funds_available),
+        lending: some(Lending {
+            ctokens,
+            target_utilisation_bps,
+            utilisation_buffer_bps,
+            reserve_array_index,
+            obligation_cap,
+        }),
+        min_token_block_size,
+        btoken_supply: btoken_supply,
+        version: version::new(CURRENT_VERSION),
+    };
+
+    (bank, btokens)
+}
