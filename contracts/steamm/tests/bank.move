@@ -48,7 +48,7 @@ fun setup_sui_system(scenario: &mut Scenario) {
 }
 
 #[test_only]
-fun setup_bank(scenario: &mut Scenario): Bank<LENDING_MARKET, TEST_USDC, B_TEST_USDC> {
+public fun setup_bank(scenario: &mut Scenario): Bank<LENDING_MARKET, TEST_USDC, B_TEST_USDC> {
     let (
         pool,
         bank_a,

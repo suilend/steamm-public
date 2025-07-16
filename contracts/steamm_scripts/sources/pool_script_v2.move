@@ -14,6 +14,7 @@ use steamm::cpmm::CpQuoter;
 use steamm::omm::OracleQuoter;
 use steamm::omm_v2::OracleQuoterV2;
 use steamm::quote::{SwapQuote, DepositQuote, RedeemQuote};
+use steamm::fee_crank::crank_fees;
 use suilend::lending_market::{LendingMarket};
 
 const ESlippageExceeded: u64 = 0;
@@ -48,6 +49,7 @@ public fun cpmm_swap<P, A, B, BTokenA, BTokenB, LpType: drop>(
     pool.cpmm_swap(&mut btoken_a, &mut btoken_b, a2b, btoken_amount_in, 0, ctx);
 
     cleanup_swap(
+        pool,
         bank_a,
         bank_b,
         lending_market,
@@ -104,6 +106,7 @@ public fun omm_swap<P, A, B, BTokenA, BTokenB, LpType: drop>(
     );
 
     cleanup_swap(
+        pool,
         bank_a,
         bank_b,
         lending_market,
@@ -160,6 +163,7 @@ public fun omm_v2_swap<P, A, B, BTokenA, BTokenB, LpType: drop>(
     );
 
     cleanup_swap(
+        pool,
         bank_a,
         bank_b,
         lending_market,
@@ -491,7 +495,8 @@ fun to_btokens<P, A, B, BTokenA, BTokenB>(
     (btoken_a, btoken_b, btoken_amount_in)
 }
 
-fun cleanup_swap<P, A, B, BTokenA, BTokenB>(
+fun cleanup_swap<P, A, B, BTokenA, BTokenB, Quoter: store, LpType: drop>(
+    pool: &mut Pool<BTokenA, BTokenB, Quoter, LpType>,
     bank_a: &mut Bank<P, A, BTokenA>,
     bank_b: &mut Bank<P, B, BTokenB>,
     lending_market: &LendingMarket<P>,
@@ -519,4 +524,6 @@ fun cleanup_swap<P, A, B, BTokenA, BTokenB>(
 
     destroy_or_transfer(btoken_a, ctx);
     destroy_or_transfer(btoken_b, ctx);
+
+    crank_fees(pool, bank_a, bank_b);
 }

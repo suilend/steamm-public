@@ -43,6 +43,7 @@ const LP_ICON_URL: vector<u8> = b"https://suilend-assets.s3.us-east-2.amazonaws.
 
 // ===== Errors =====
 
+const EDeprecated: u64 = 999;
 /// Error when LP token decimals are not 9
 const EInvalidLpDecimals: u64 = 0;
 /// Error when trying to initialize a pool with non-zero LP supply
@@ -365,15 +366,21 @@ public fun quote_redeem<A, B, Quoter: store, LpType: drop>(
 // ===== Admin Functions =====
 
 public fun collect_protocol_fees<A, B, Quoter: store, LpType: drop>(
-    pool: &mut Pool<A, B, Quoter, LpType>,
+    _pool: &mut Pool<A, B, Quoter, LpType>,
     _global_admin: &GlobalAdmin,
-    ctx: &mut TxContext,
+    _ctx: &mut TxContext,
 ): (Coin<A>, Coin<B>) {
+    abort EDeprecated
+}
+
+public(package) fun collect_protocol_fees_<A, B, Quoter: store, LpType: drop>(
+    pool: &mut Pool<A, B, Quoter, LpType>,
+): (Balance<A>, Balance<B>) {
     pool.version.assert_version_and_upgrade(CURRENT_VERSION);
 
     let (fees_a, fees_b) = pool.protocol_fees.withdraw();
 
-    (coin::from_balance(fees_a, ctx), coin::from_balance(fees_b, ctx))
+    (fees_a, fees_b)
 }
 
 entry fun migrate<A, B, Quoter: store, LpType: drop>(

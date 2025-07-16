@@ -14,6 +14,7 @@ use steamm::version::{Self, Version};
 use sui::balance::{Self, Supply, Balance};
 use sui::clock::Clock;
 use sui::coin::{Self, Coin, TreasuryCap, CoinMetadata};
+use sui::dynamic_field;
 use sui::transfer::share_object;
 use suilend::decimal::{Self, Decimal};
 use suilend::lending_market::{Self, LendingMarket, ObligationOwnerCap};
@@ -65,6 +66,10 @@ const ENoBTokensToBurn: u64 = 14;
 const ENoTokensToWithdraw: u64 = 15;
 // First deposit must be greater than minimum liquidity
 const EInitialDepositBelowMinimumLiquidity: u64 = 16;
+
+// === Dynamic Fields ===
+
+public struct ProtocolFeeKey has copy, drop, store {}
 
 // ===== Structs =====
 
@@ -497,6 +502,83 @@ public fun rebalance_sui<P, BToken>(
     };
 }
 
+/// Claim a specific reward from the lending market and distribute it to the reward receivers.
+public fun claim_rewards<P, T, BToken, RToken>(
+    bank: &mut Bank<P, T, BToken>,
+    lending_market: &mut LendingMarket<P>,
+    registry: &Registry,
+    reward_index: u64,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    let lending = bank.lending.borrow_mut();
+
+    let is_deposit_reward = true; // with STEAMM we only deposit, never borrow
+    let reward_coin: Coin<RToken> = lending_market.claim_rewards(
+        &lending.obligation_cap,
+        clock,
+        lending.reserve_array_index,
+        reward_index,
+        is_deposit_reward,
+        ctx,
+    );
+    
+    distribute_coins(reward_coin, registry, ctx);
+}
+
+/// Claim a protocol fees from trading and distribute it to the fee receivers.
+public fun claim_fees<P, T, BToken>(
+    bank: &mut Bank<P, T, BToken>,
+    lending_market: &LendingMarket<P>,
+    registry: &Registry,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    let fee_balance: &mut Balance<BToken> = dynamic_field::borrow_mut(
+        &mut bank.id,
+        ProtocolFeeKey {},
+    );
+    let mut fee_btoken: Coin<BToken> = coin::from_balance(fee_balance.withdraw_all(), ctx);
+    let fee_amount = fee_btoken.value();
+    let fee_coin = bank.burn_btoken(lending_market, &mut fee_btoken, fee_amount, clock, ctx);
+
+    // Safe to destory since we burned the full amount
+    fee_btoken.destroy_zero();
+
+    distribute_coins(fee_coin, registry, ctx);
+}
+
+fun distribute_coins<T>(
+    coin: Coin<T>,
+    registry: &Registry,
+    ctx: &mut TxContext,
+) {
+    let mut rewards = coin.into_balance();
+    let total_rewards = rewards.value();
+
+    let reward_receivers = registry.get_fee_receivers();
+    let num_reward_receivers = vector::length(reward_receivers.weights());
+
+    num_reward_receivers.do!(|i| {
+        let reward = if (i == num_reward_receivers - 1) {
+            balance::withdraw_all(&mut rewards)
+        } else {
+            let reward_amount =
+            (total_rewards as u128) * (reward_receivers.weights()[i] as u128) / (reward_receivers.total_weight() as u128);
+
+            balance::split(&mut rewards, reward_amount as u64)
+        };
+
+        if (balance::value(&reward) > 0) {
+            transfer::public_transfer(coin::from_balance(reward, ctx), reward_receivers.receivers()[i]);
+        } else {
+            balance::destroy_zero(reward);
+        };
+    });
+
+    balance::destroy_zero(rewards);
+}
+
 public fun compound_interest_if_any<P, T, BToken>(
     bank: &Bank<P, T, BToken>,
     lending_market: &mut LendingMarket<P>,
@@ -695,6 +777,26 @@ fun funds_deployed_<P, T, BToken>(
     } else {
         decimal::from(0)
     }
+}
+
+public(package) fun move_fees<P, T, BToken>(
+    bank: &mut Bank<P, T, BToken>,
+    balance: Balance<BToken>,
+) {
+    if (!dynamic_field::exists_(&bank.id, ProtocolFeeKey {})) {
+        dynamic_field::add(
+            &mut bank.id,
+            ProtocolFeeKey {},
+            balance::zero<BToken>(),
+        );
+    };
+
+    let fee_balance: &mut Balance<BToken> = dynamic_field::borrow_mut(
+        &mut bank.id,
+        ProtocolFeeKey {},
+    );
+
+    fee_balance.join(balance);
 }
 
 // ====== Private Functions =====

@@ -7,6 +7,11 @@ use sui::vec_set::{Self, VecSet};
 use steamm::global_admin::GlobalAdmin;
 use steamm::version::{Self, Version};
 use sui::bag::{Self, Bag};
+use sui::dynamic_field;
+
+public use fun steamm::registry::fee_receivers as FeeReceivers.receivers;
+public use fun steamm::registry::fee_weights as FeeReceivers.weights;
+public use fun steamm::registry::fee_total_weight as FeeReceivers.total_weight;
 
 // ===== Constants =====
 
@@ -15,9 +20,22 @@ const CURRENT_VERSION: u16 = 1;
 public struct BankKey has copy, store, drop { lending_market_id: ID, coin_type: TypeName }
 public struct PoolKey has copy, store, drop { coin_type_a: TypeName, coin_type_b: TypeName }
 
+// === Dynamic Fields ===
+
+public struct FeeReceiversKey has copy, drop, store {}
+
+/// Determines how are deposit fees and rewards distributed.
+public struct FeeReceivers has store {
+    receivers: vector<address>,
+    weights: vector<u64>,
+    total_weight: u64,
+}
+
 // ===== Errors =====
 
 const EDuplicatedBankType: u64 = 1;
+// Invalid reward receivers configuration
+const EInvalidRewardReceivers: u64 = 2;
 
 public struct Registry has key {
     id: UID,
@@ -50,6 +68,38 @@ fun init(ctx: &mut TxContext) {
 
     transfer::share_object(registry);
 }
+
+// ===== Public Functions =====
+
+/// Admin can configure who can receive fees and rewards that the bank accrues from trading and lending.
+public fun set_fee_receivers(
+    registry: &mut Registry,
+    _: &GlobalAdmin,
+    receivers: vector<address>,
+    weights: vector<u64>,
+) {
+    registry.version.assert_version_and_upgrade(CURRENT_VERSION);
+
+    assert!(vector::length(&receivers) == vector::length(&weights), EInvalidRewardReceivers);
+    assert!(vector::length(&receivers) > 0, EInvalidRewardReceivers);
+
+    let total_weight = vector::fold!(weights, 0, |acc, weight| acc + weight);
+    assert!(total_weight > 0, EInvalidRewardReceivers);
+
+    if (dynamic_field::exists_(&registry.id, FeeReceiversKey {})) {
+        let FeeReceivers { .. } = dynamic_field::remove<FeeReceiversKey, FeeReceivers>(
+            &mut registry.id,
+            FeeReceiversKey {},
+        );
+    };
+
+    dynamic_field::add(
+        &mut registry.id,
+        FeeReceiversKey {},
+        FeeReceivers { receivers, weights, total_weight },
+    );
+}
+
 
 public(package) fun register_pool(
     registry: &mut Registry,
@@ -118,6 +168,25 @@ public(package) fun get_bank_data<T>(registry: &Registry, lending_market_id: ID)
 
 public(package) fun btoken_type(bank_data: &BankData): TypeName {
     bank_data.btoken_type
+}
+
+public fun get_fee_receivers(registry: &Registry): &FeeReceivers {
+    dynamic_field::borrow(
+        &registry.id,
+        FeeReceiversKey {},
+    )
+}
+
+public fun fee_receivers(fee_receivers: &FeeReceivers): &vector<address> {
+    &fee_receivers.receivers
+}
+
+public fun fee_weights(fee_receivers: &FeeReceivers): &vector<u64> {
+    &fee_receivers.weights
+}
+
+public fun fee_total_weight(fee_receivers: &FeeReceivers): u64 {
+    fee_receivers.total_weight
 }
 
 // ===== Versioning =====

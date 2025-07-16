@@ -11,17 +11,44 @@ use steamm::lp_usdc_sui::LP_USDC_SUI;
 use steamm::pool::{Self, Pool, minimum_liquidity};
 use steamm::pool_math;
 use steamm::quote;
+use steamm::bank::Bank;
+use steamm::fee_crank::crank_fees;
 use steamm::dummy_quoter;
 use steamm::test_utils::{test_setup_dummy, test_setup_cpmm, e9, reserve_args};
-use sui::coin;
+use sui::coin::{Self, Coin};
 use sui::test_scenario::{Self, Scenario, ctx};
 use sui::test_utils::{destroy, assert_eq};
-use suilend::lending_market_tests::setup as suilend_setup;
+use suilend::lending_market_tests::{LENDING_MARKET, setup as suilend_setup};
+use suilend::test_sui::TEST_SUI;
+use suilend::test_usdc::TEST_USDC;
 
 const ADMIN: address = @0x10;
 const POOL_CREATOR: address = @0x11;
 const LP_PROVIDER: address = @0x12;
 const TRADER: address = @0x13;
+
+#[test_only]
+fun test_setup_dummy_(
+    swap_fee_bps: u64,
+    scenario: &mut Scenario,
+): (
+    Pool<B_TEST_USDC, B_TEST_SUI, DummyQuoter, LP_USDC_SUI>,
+    Bank<LENDING_MARKET, TEST_USDC, B_TEST_USDC>,
+    Bank<LENDING_MARKET, TEST_SUI, B_TEST_SUI>,
+) {
+    let (pool, bank_a, bank_b, lending_market, lend_cap, prices, bag, clock) = test_setup_dummy(
+        swap_fee_bps,
+        scenario,
+    );
+
+    destroy(lending_market);
+    destroy(lend_cap);
+    destroy(prices);
+    destroy(bag);
+    destroy(clock);
+
+    (pool, bank_a, bank_b)
+}
 
 #[test_only]
 fun test_setup_dummy_no_banks(
@@ -327,12 +354,6 @@ fun test_full_amm_cycle() {
     destroy(coin_a);
     destroy(coin_b);
 
-    // Collect Protocol fees
-    let global_admin = global_admin::init_for_testing(ctx);
-    let (coin_a, coin_b) = pool.collect_protocol_fees(&global_admin, ctx);
-
-    assert_eq(coin_a.value(), 0);
-    assert_eq(coin_b.value(), 100);
     assert_eq(pool.trading_data().protocol_fees_a(), 0);
     assert_eq(pool.trading_data().protocol_fees_b(), 100);
     assert_eq(pool.trading_data().pool_fees_a(), 0);
@@ -343,15 +364,211 @@ fun test_full_amm_cycle() {
     assert_eq(pool.trading_data().total_swap_a_out_amount(), 0);
     assert_eq(pool.trading_data().total_swap_b_in_amount(), 0);
 
-    destroy(coin_a);
-    destroy(coin_b);
     destroy(pool);
-    destroy(global_admin);
     destroy(lend_cap);
     destroy(prices);
     destroy(clock);
     destroy(bag);
     destroy(lending_market);
+    test_scenario::end(scenario);
+}
+
+#[test]
+fun test_collect_protocol_fee_from_bank() {
+    let mut scenario = test_scenario::begin(ADMIN);
+
+    // Init Pool
+    test_scenario::next_tx(&mut scenario, POOL_CREATOR);
+
+    let (clock, lend_cap, lending_market, prices, bag) = suilend_setup(
+        reserve_args(&mut scenario),
+        scenario.ctx(),
+    ).destruct_state();
+
+    let (mut pool, mut bank_a, mut bank_b) = test_setup_dummy_(100, &mut scenario);
+    let mut registry = registry::init_for_testing(test_scenario::ctx(&mut scenario));
+    let global_admin = steamm::global_admin::init_for_testing(scenario.ctx());
+    let ctx = ctx(&mut scenario);
+
+    let mut coin_a_ = coin::mint_for_testing<TEST_USDC>(500_000, ctx);
+    let mut coin_b_ = coin::mint_for_testing<TEST_SUI>(500_000, ctx);
+
+    let coin_a_value = coin_a_.value();
+    let mut coin_a = bank_a.mint_btoken(&lending_market, &mut coin_a_, coin_a_value, &clock, ctx);
+    destroy(coin_a_);
+
+    let coin_b_value = coin_b_.value();
+    let mut coin_b = bank_b.mint_btoken(&lending_market, &mut coin_b_, coin_b_value, &clock, ctx);
+    destroy(coin_b_);
+
+    // let mut coin_a = coin::mint_for_testing<B_TEST_USDC>(500_000, ctx);
+    // let mut coin_b = coin::mint_for_testing<B_TEST_SUI>(500_000, ctx);
+
+    let (lp_coins, _) = pool.deposit_liquidity(
+        &mut coin_a,
+        &mut coin_b,
+        500_000,
+        500_000,
+        ctx,
+    );
+
+    let (reserve_a, reserve_b) = pool.balance_amounts();
+    let reserve_ratio_0 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
+
+    assert_eq(cpmm::k_external(&pool, 0), 500_000 * 500_000);
+    assert_eq(pool.lp_supply_val(), 500_000);
+    assert_eq(reserve_a, 500_000);
+    assert_eq(reserve_b, 500_000);
+    assert_eq(lp_coins.value(), 500_000 - minimum_liquidity());
+    assert_eq(pool.trading_data().pool_fees_a(), 0);
+    assert_eq(pool.trading_data().pool_fees_b(), 0);
+
+    destroy(coin_a);
+    destroy(coin_b);
+
+    // Deposit liquidity
+    test_scenario::next_tx(&mut scenario, LP_PROVIDER);
+    let ctx = ctx(&mut scenario);
+
+    let mut coin_a = coin::mint_for_testing<B_TEST_USDC>(500_000, ctx);
+    let mut coin_b = coin::mint_for_testing<B_TEST_SUI>(500_000, ctx);
+
+    let (lp_coins_2, _) = pool.deposit_liquidity(
+        &mut coin_a,
+        &mut coin_b,
+        500_000, // max_a
+        500_000, // max_b
+        ctx,
+    );
+
+    assert_eq(coin_a.value(), 0);
+    assert_eq(coin_b.value(), 0);
+    assert_eq(lp_coins_2.value(), 500_000);
+    assert_eq(pool.lp_supply_val(), 500_000 + 500_000);
+
+    let (reserve_a, reserve_b) = pool.balance_amounts();
+    let reserve_ratio_1 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
+    assert_eq(reserve_ratio_0, reserve_ratio_1);
+
+    destroy(coin_a);
+    destroy(coin_b);
+
+    // Redeem liquidity
+    test_scenario::next_tx(&mut scenario, LP_PROVIDER);
+    let ctx = ctx(&mut scenario);
+
+    let (coin_a, coin_b, _) = pool.redeem_liquidity(
+        lp_coins_2,
+        0,
+        0,
+        ctx,
+    );
+
+    // Guarantees that roundings are in favour of the pool
+    assert_eq(coin_a.value(), 500_000);
+    assert_eq(coin_b.value(), 500_000);
+
+    let (reserve_a, reserve_b) = pool.balance_amounts();
+    let reserve_ratio_2 = (reserve_a as u256) * (e9(1) as u256) / (reserve_b as u256);
+    assert_eq(reserve_ratio_0, reserve_ratio_2);
+
+    destroy(coin_a);
+    destroy(coin_b);
+
+    // Swap
+    test_scenario::next_tx(&mut scenario, TRADER);
+    let ctx = ctx(&mut scenario);
+
+    let mut coin_a = coin::mint_for_testing<B_TEST_USDC>(e9(200), ctx);
+    let mut coin_b = coin::mint_for_testing<B_TEST_SUI>(0, ctx);
+
+    let swap_result = dummy_swap(
+        &mut pool,
+        &mut coin_a,
+        &mut coin_b,
+        true, // a2b
+        50_000,
+        0,
+        ctx,
+    );
+
+    assert_eq(swap_result.a2b(), true);
+    assert_eq(swap_result.pool_fees(), 400);
+    assert_eq(swap_result.protocol_fees(), 100);
+    assert_eq(swap_result.amount_out(), 49_500);
+
+    destroy(coin_a);
+    destroy(coin_b);
+
+    // Redeem remaining liquidity
+    test_scenario::next_tx(&mut scenario, LP_PROVIDER);
+    let ctx = ctx(&mut scenario);
+
+    let (coin_a, coin_b, _) = pool.redeem_liquidity(
+        lp_coins,
+        0,
+        0,
+        ctx,
+    );
+
+    let (reserve_a, reserve_b) = pool.balance_amounts();
+
+    // Guarantees that roundings are in favour of the pool
+    assert_eq(coin_a.value(), 548_900);
+    assert_eq(coin_b.value(), 449_499);
+    assert_eq(reserve_a, 1_100);
+    assert_eq(reserve_b, 901);
+    assert_eq(pool.lp_supply_val(), minimum_liquidity());
+
+    destroy(coin_a);
+    destroy(coin_b);
+
+    // Collect Protocol fees
+    // set two reward receivers, 1/3 and 2/3
+    let receiver_1 = @0x1;
+    let receiver_2 = @0x2;
+    registry.set_fee_receivers(
+        &global_admin,
+        vector[receiver_1, receiver_2],
+        vector[1,          1],
+    );
+    
+    crank_fees(&mut pool, &mut bank_a, &mut bank_b);
+    bank_a.claim_fees(&lending_market, &registry, &clock, ctx);
+    bank_b.claim_fees(&lending_market, &registry, &clock, scenario.ctx());
+
+    scenario.next_tx(@0x0);
+
+    let reward_coin_for_receiver_1: Coin<TEST_SUI> = scenario.take_from_address(receiver_1);
+    assert_eq(reward_coin_for_receiver_1.value(), 50);
+
+    let reward_coin_for_receiver_2: Coin<TEST_SUI> = scenario.take_from_address(receiver_2);
+    assert_eq(reward_coin_for_receiver_2.value(), 50);
+
+    assert_eq(pool.trading_data().protocol_fees_a(), 0);
+    assert_eq(pool.trading_data().protocol_fees_b(), 100);
+    assert_eq(pool.trading_data().pool_fees_a(), 0);
+    assert_eq(pool.trading_data().pool_fees_b(), 400);
+
+    assert_eq(pool.trading_data().total_swap_a_in_amount(), 50_000);
+    assert_eq(pool.trading_data().total_swap_b_out_amount(), 49_500);
+    assert_eq(pool.trading_data().total_swap_a_out_amount(), 0);
+    assert_eq(pool.trading_data().total_swap_b_in_amount(), 0);
+
+    // destroy(coin_a);
+    // destroy(coin_b);
+    destroy(reward_coin_for_receiver_1);
+    destroy(reward_coin_for_receiver_2);
+    destroy(pool);
+    destroy(global_admin);
+    destroy(registry);
+    destroy(lend_cap);
+    destroy(prices);
+    destroy(clock);
+    destroy(bag);
+    destroy(lending_market);
+    destroy(bank_a);
+    destroy(bank_b);
     test_scenario::end(scenario);
 }
 

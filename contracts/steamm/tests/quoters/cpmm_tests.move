@@ -206,12 +206,6 @@ fun test_full_cpmm_cycle() {
     destroy(coin_a);
     destroy(coin_b);
 
-    // Collect Protocol fees
-    let global_admin = global_admin::init_for_testing(ctx);
-    let (coin_a, coin_b) = pool.collect_protocol_fees(&global_admin, ctx);
-
-    assert_eq(coin_a.value(), 0);
-    assert_eq(coin_b.value(), 91);
     assert_eq(pool.trading_data().protocol_fees_a(), 0);
     assert_eq(pool.trading_data().protocol_fees_b(), 91);
     assert_eq(pool.trading_data().pool_fees_a(), 0);
@@ -222,10 +216,7 @@ fun test_full_cpmm_cycle() {
     assert_eq(pool.trading_data().total_swap_a_out_amount(), 0);
     assert_eq(pool.trading_data().total_swap_b_in_amount(), 0);
 
-    destroy(coin_a);
-    destroy(coin_b);
     destroy(pool);
-    destroy(global_admin);
     destroy(lend_cap);
     // destroy(prices);
     destroy(clock);
