@@ -647,13 +647,14 @@ fun test_cpmm_fees() {
     let mut acc_pool_fees = 0;
 
     while (len > 0) {
+        scenario.next_tx(TRADER);
         let swap_result = pool_2.cpmm_swap(
             &mut coin_a,
             &mut coin_b,
             true, // a2b
             e9(10_00),
             0,
-            ctx,
+            scenario.ctx(),
         );
 
         acc_protocol_fees = acc_protocol_fees + swap_result.protocol_fees();

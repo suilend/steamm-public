@@ -45,23 +45,22 @@ fun proptest_swap() {
 
     // Swap
     test_scenario::next_tx(&mut scenario, TRADER);
-    let ctx = ctx(&mut scenario);
 
     let mut rng = random::new_generator_from_seed_for_testing(vector[0, 1, 2, 3]);
-
     let mut trades = 1_000;
 
     while (trades > 0) {
+        test_scenario::next_tx(&mut scenario, TRADER);
         let amount_in = rng.generate_u64_in_range(1_000, 100_000_000_000_000_000);
         let a2b = if (rng.generate_u8_in_range(1_u8, 2_u8) == 1) { true } else { false };
 
         let mut coin_a = coin::mint_for_testing<B_TEST_USDC>(
             if (a2b) { amount_in } else { 0 },
-            ctx,
+            scenario.ctx(),
         );
         let mut coin_b = coin::mint_for_testing<B_TEST_SUI>(
             if (a2b) { 0 } else { amount_in },
-            ctx,
+            scenario.ctx(),
         );
 
         pool.cpmm_swap(
@@ -70,7 +69,7 @@ fun proptest_swap() {
             a2b, // a2b
             amount_in,
             0,
-            ctx,
+            scenario.ctx(),
         );
 
         destroy(coin_a);

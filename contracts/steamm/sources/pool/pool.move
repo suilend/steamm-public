@@ -569,6 +569,23 @@ public(package) fun swap<A, B, Quoter: store, LpType: drop>(
 
     emit_event(result);
 
+    if (quote.a2b()) {
+        emit_event(TradingDataA2bEvent {
+            swap_a_in_amount: pool.trading_data.swap_a_in_amount,
+            swap_b_out_amount: pool.trading_data.swap_b_out_amount,
+            protocol_fees_b: pool.trading_data.protocol_fees_b,
+            pool_fees_b: pool.trading_data.pool_fees_b,
+        });
+    } else {
+        emit_event(TradingDataB2AEvent {
+            swap_a_out_amount: pool.trading_data.swap_a_out_amount,
+            swap_b_in_amount: pool.trading_data.swap_b_in_amount,
+            protocol_fees_a: pool.trading_data.protocol_fees_a,
+            pool_fees_a: pool.trading_data.pool_fees_a,
+        });
+
+    };
+
     result
 }
 
@@ -898,7 +915,6 @@ public struct SwapResult has copy, drop, store {
     amount_out: u64,
     output_fees: SwapFee,
     a2b: bool,
-
     balance_a: u64,
     balance_b: u64,
 }
@@ -909,7 +925,6 @@ public struct DepositResult has copy, drop, store {
     deposit_a: u64,
     deposit_b: u64,
     mint_lp: u64,
-
     balance_a: u64,
     balance_b: u64,
 }
@@ -920,9 +935,24 @@ public struct RedeemResult has copy, drop, store {
     withdraw_a: u64,
     withdraw_b: u64,
     burn_lp: u64,
-
     balance_a: u64,
     balance_b: u64,
+}
+
+public struct TradingDataA2bEvent has store, copy, drop {
+    // swap a2b
+    swap_a_in_amount: u128,
+    swap_b_out_amount: u128,
+    protocol_fees_b: u64,
+    pool_fees_b: u64,
+}
+
+public struct TradingDataB2AEvent has store, copy, drop {
+    // swap b2a
+    swap_a_out_amount: u128,
+    swap_b_in_amount: u128,
+    protocol_fees_a: u64,
+    pool_fees_a: u64,
 }
 
 public use fun swap_result_user as SwapResult.user;

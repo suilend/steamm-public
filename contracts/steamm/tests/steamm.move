@@ -1053,6 +1053,7 @@ fun test_steamm_fees() {
     let mut acc_pool_fees = 0;
 
     while (len > 0) {
+        test_scenario::next_tx(&mut scenario, TRADER);
         let swap_result = dummy_swap(
             &mut pool_2,
             &mut coin_a,
@@ -1060,7 +1061,7 @@ fun test_steamm_fees() {
             true, // a2b
             e9(10_00),
             0,
-            ctx,
+            scenario.ctx(),
         );
 
         acc_protocol_fees = acc_protocol_fees + swap_result.protocol_fees();

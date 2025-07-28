@@ -46,12 +46,12 @@ fun proptest_swap_offset() {
 
     // Swap
     test_scenario::next_tx(&mut scenario, TRADER);
-    let ctx = ctx(&mut scenario);
 
     let mut rng = random::new_generator_from_seed_for_testing(vector[1, 4, 2, 3]);
     let mut trades = 1_000;
 
     while (trades > 0) {
+        scenario.next_tx(TRADER);
         let a2b = if (rng.generate_u8_in_range(1_u8, 2_u8) == 1) { true } else { false };
 
         let amount_in = if (a2b) {
@@ -71,11 +71,11 @@ fun proptest_swap_offset() {
 
         let mut coin_a = coin::mint_for_testing<B_TEST_USDC>(
             if (a2b) { amount_in } else { 0 },
-            ctx,
+            scenario.ctx(),
         );
         let mut coin_b = coin::mint_for_testing<B_TEST_SUI>(
             if (a2b) { 0 } else { amount_in },
-            ctx,
+            scenario.ctx(),
         );
 
         let quote = pool.cpmm_quote_swap(
@@ -95,7 +95,7 @@ fun proptest_swap_offset() {
             a2b, // a2b
             amount_in,
             0,
-            ctx,
+            scenario.ctx(),
         );
 
         destroy(coin_a);
