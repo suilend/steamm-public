@@ -9,18 +9,28 @@ use steamm::version::{Self, Version};
 use steamm::utils::oracle_decimal_to_decimal;
 use sui::clock::Clock;
 use sui::coin::{Coin, TreasuryCap, CoinMetadata};
+use sui::dynamic_field as df;
 use suilend::decimal::{Decimal, Self};
 use suilend::lending_market::LendingMarket;
 use std::type_name::{Self};
+use std::option::{none, some};
 use steamm::bank::Bank;
 use steamm::events::emit_event;
 use steamm::fixed_point64::{Self, FixedPoint64};
 use steamm::utils::decimal_to_fixedpoint64;
 use steamm::omm::{quote_swap_impl as quote_swap_with_no_slippage};
+use pyth::i64::{Self};
 
 // ===== Constants =====
 
-const CURRENT_VERSION: u16 = 2;
+const CURRENT_VERSION: u16 = 3;
+
+/// 10^10, scales USD values to avoid precision loss.
+/// In the limit, pool balances can be less than 1$, therefore we scale the dollar
+/// amount to be be able to handle decimal values
+const SCALE: u256 = 10000000000;
+const A_PRECISION: u256 = 100; // Scales the Amplifier for better precision
+const LIMIT: u64 = 255; // Limit newton-raphson iterations
 
 // ===== Errors =====
 const EInvalidBankType: u64 = 0;
@@ -29,6 +39,9 @@ const EInvalidOracleRegistry: u64 = 2;
 const EInvalidDecimalsDifference: u64 = 3;
 const EInvalidZ: u64 = 4;
 const EInvalidPrice: u64 = 5;
+
+/// Flag to indicate that the pool has been updated
+public struct UpdateFlag has copy, drop, store {}
 
 public struct OracleQuoterV2 has store {
     version: Version,
@@ -90,7 +103,7 @@ public fun new<P, A, B, B_A, B_B, LpType: drop>(
         amp: amplifier,
     };
 
-    let pool = pool::new<B_A, B_B, OracleQuoterV2, LpType>(
+    let mut pool = pool::new<B_A, B_B, OracleQuoterV2, LpType>(
         registry,
         swap_fee_bps,
         quoter,
@@ -110,6 +123,9 @@ public fun new<P, A, B, B_A, B_B, LpType: drop>(
     };
 
     emit_event(result);
+
+    let pool_uid = pool.uid_mut();
+    df::add(pool_uid, UpdateFlag {}, 0);
 
     return pool
 }
@@ -139,16 +155,43 @@ public fun swap<P, A, B, B_A, B_B, LpType: drop>(
     assert!(oracle_price_update_b.oracle_registry_id() == pool.quoter().oracle_registry_id, EInvalidOracleRegistry);
     assert!(oracle_price_update_b.oracle_index() == pool.quoter().oracle_index_b, EInvalidOracleIndex);
 
-    let quote = quote_swap(
-        pool, 
-        bank_a,
-        bank_b,
-        lending_market,
-        oracle_price_update_a,
-        oracle_price_update_b,
+    let quoter = pool.quoter();
+
+    let decimals_a = quoter.decimals_a;
+    let decimals_b = quoter.decimals_b; 
+
+    let price_a = oracle_decimal_to_decimal(oracle_price_update_a.price());
+    let price_b = oracle_decimal_to_decimal(oracle_price_update_b.price());
+
+    let price_uncertainty_ratio_a = price_uncertainty_ratio(oracle_price_update_a);
+    let price_uncertainty_ratio_b = price_uncertainty_ratio(oracle_price_update_b);
+
+    let (bank_total_funds_a, total_btoken_supply_a) = bank_a.get_btoken_ratio(lending_market, clock);
+    let btoken_ratio_a = bank_total_funds_a.div(total_btoken_supply_a);
+
+    let (bank_total_funds_b, total_btoken_supply_b) = bank_b.get_btoken_ratio(lending_market, clock);
+    let btoken_ratio_b = bank_total_funds_b.div(total_btoken_supply_b);
+
+    let underlying_reserve_a = decimal::from(pool.balance_amount_a()).mul(btoken_ratio_a);
+    let underlying_reserve_b = decimal::from(pool.balance_amount_b()).mul(btoken_ratio_b);
+    
+    let usd_reserve_a = underlying_reserve_a.mul(price_a).div(decimal::from(10_u64.pow(decimals_a)));
+    let usd_reserve_b = underlying_reserve_b.mul(price_b).div(decimal::from(10_u64.pow(decimals_b)));
+
+    try_update_or_noop(pool, usd_reserve_a, usd_reserve_b);
+
+    let quote = quote_swap_(
+        pool,
+        price_a,
+        price_b,
+        price_uncertainty_ratio_a,
+        price_uncertainty_ratio_b,
+        btoken_ratio_a,
+        btoken_ratio_b,
+        underlying_reserve_a,
+        underlying_reserve_b,
         amount_in, 
         a2b,
-        clock,
     );
 
     let response = pool.swap(
@@ -174,13 +217,16 @@ public fun quote_swap<P, A, B, B_A, B_B, LpType: drop>(
     a2b: bool,
     clock: &Clock,
 ): SwapQuote {
-    let quoter = pool.quoter();
-
-    let decimals_a = quoter.decimals_a;
-    let decimals_b = quoter.decimals_b; 
+    assert!(oracle_price_update_a.oracle_registry_id() == pool.quoter().oracle_registry_id, EInvalidOracleRegistry);
+    assert!(oracle_price_update_a.oracle_index() == pool.quoter().oracle_index_a, EInvalidOracleIndex);
+    assert!(oracle_price_update_b.oracle_registry_id() == pool.quoter().oracle_registry_id, EInvalidOracleRegistry);
+    assert!(oracle_price_update_b.oracle_index() == pool.quoter().oracle_index_b, EInvalidOracleIndex);
 
     let price_a = oracle_decimal_to_decimal(oracle_price_update_a.price());
     let price_b = oracle_decimal_to_decimal(oracle_price_update_b.price());
+
+    let price_uncertainty_ratio_a = price_uncertainty_ratio(oracle_price_update_a);
+    let price_uncertainty_ratio_b = price_uncertainty_ratio(oracle_price_update_b);
 
     let (bank_total_funds_a, total_btoken_supply_a) = bank_a.get_btoken_ratio(lending_market, clock);
     let btoken_ratio_a = bank_total_funds_a.div(total_btoken_supply_a);
@@ -188,24 +234,72 @@ public fun quote_swap<P, A, B, B_A, B_B, LpType: drop>(
     let (bank_total_funds_b, total_btoken_supply_b) = bank_b.get_btoken_ratio(lending_market, clock);
     let btoken_ratio_b = bank_total_funds_b.div(total_btoken_supply_b);
 
+    let underlying_reserve_a = decimal::from(pool.balance_amount_a()).mul(btoken_ratio_a);
+    let underlying_reserve_b = decimal::from(pool.balance_amount_b()).mul(btoken_ratio_b);
+
+    quote_swap_(
+        pool, 
+        price_a,
+        price_b,
+        price_uncertainty_ratio_a,
+        price_uncertainty_ratio_b,
+        btoken_ratio_a,
+        btoken_ratio_b,
+        underlying_reserve_a,
+        underlying_reserve_b,
+        amount_in, 
+        a2b,
+    )
+}
+
+fun quote_swap_<B_A, B_B, LpType: drop>(
+    pool: &Pool<B_A, B_B, OracleQuoterV2, LpType>,
+    price_a: Decimal,
+    price_b: Decimal,
+    price_uncertainty_ratio_a: u64,
+    price_uncertainty_ratio_b: u64,
+    btoken_ratio_a: Decimal,
+    btoken_ratio_b: Decimal,
+    underlying_reserve_a: Decimal,
+    underlying_reserve_b: Decimal,
+    // Amount in (btoken)
+    amount_in: u64,
+    a2b: bool,
+): SwapQuote {
+    let quoter = pool.quoter();
+    let decimals_a = quoter.decimals_a;
+    let decimals_b = quoter.decimals_b;
 
     let amount_out = if (a2b) {
         let underlying_amount_in = decimal::from(amount_in).mul(btoken_ratio_a);
-        let underlying_reserve_in = decimal::from(pool.balance_amount_a()).mul(btoken_ratio_a);
-        let underlying_reserve_out = decimal::from(pool.balance_amount_b()).mul(btoken_ratio_b);
+        let underlying_reserve_in = underlying_reserve_a;
+        let underlying_reserve_out = underlying_reserve_b;
 
-        // quote_swap_impl uses the underlying values instead of btoken values
-        let amount_out_underlying = quote_swap_impl(
-            underlying_amount_in,
-            underlying_reserve_in,
-            underlying_reserve_out,
-            decimals_a,
-            decimals_b,
-            price_a,
-            price_b,
-            quoter.amp,
-            a2b,
-        );
+        let amount_out_underlying = if (!is_latest(pool.uid())) {
+            get_swap_output(
+                underlying_amount_in, // input_a
+                underlying_reserve_in, // reserve_a
+                underlying_reserve_out, // reserve_b
+                price_a, // price_a
+                price_b, // price_b
+                decimals_a as u64, // decimals_a
+                decimals_b as u64, // decimals_b
+                quoter.amp,
+                true, // a2b
+            )
+        } else {
+            get_swap_output_v2(
+                underlying_amount_in.floor(), // input_a
+                underlying_reserve_in.floor(), // reserve_a
+                underlying_reserve_out.floor(), // reserve_b
+                price_a, // price_a
+                price_b, // price_b
+                decimals_a, // decimals_a
+                decimals_b, // decimals_b
+                quoter.amp,
+                true, // a2b
+            )
+        };
 
         let mut amount_out = decimal::from(amount_out_underlying).div(btoken_ratio_b).floor();
 
@@ -216,21 +310,34 @@ public fun quote_swap<P, A, B, B_A, B_B, LpType: drop>(
         amount_out
     } else {
         let underlying_amount_in = decimal::from(amount_in).mul(btoken_ratio_b);
-        let underlying_reserve_in = decimal::from(pool.balance_amount_b()).mul(btoken_ratio_b);
-        let underlying_reserve_out = decimal::from(pool.balance_amount_a()).mul(btoken_ratio_a);
+        let underlying_reserve_in = underlying_reserve_b;
+        let underlying_reserve_out = underlying_reserve_a;
 
-        // quote_swap_impl uses the underlying values instead of btoken values
-        let amount_out_underlying = quote_swap_impl(
-            underlying_amount_in,
-            underlying_reserve_in,
-            underlying_reserve_out,
-            decimals_b,
-            decimals_a,
-            price_b,
-            price_a,
-            quoter.amp,
-            a2b,
-        );
+        let amount_out_underlying = if (!is_latest(pool.uid())) {
+            get_swap_output(
+                underlying_amount_in, // input_b
+                underlying_reserve_out, // reserve_a
+                underlying_reserve_in, // reserve_b
+                price_a, // price_a
+                price_b, // price_b
+                decimals_a as u64, // decimals_a
+                decimals_b as u64, // decimals_b
+                quoter.amp,
+                false, // a2b
+            )
+        } else {
+            get_swap_output_v2(
+                underlying_amount_in.floor(), // input_b
+                underlying_reserve_out.floor(), // reserve_a
+                underlying_reserve_in.floor(), // reserve_b
+                price_a, // price_a
+                price_b, // price_b
+                decimals_a, // decimals_a
+                decimals_b, // decimals_b
+                quoter.amp,
+                false, // a2b
+            )
+        };
 
         let mut amount_out = decimal::from(amount_out_underlying).div(btoken_ratio_a).floor();
 
@@ -241,75 +348,33 @@ public fun quote_swap<P, A, B, B_A, B_B, LpType: drop>(
         amount_out
     };
 
-    let amount_out_with_no_slippage = if (a2b) {
-        quote_swap_with_no_slippage(
-            amount_in,
-            decimals_a,
-            decimals_b,
-            price_a,
-            price_b,
-            btoken_ratio_a,
-            btoken_ratio_b,
-        )
-    } else {
-        quote_swap_with_no_slippage(
-            amount_in,
-            decimals_b,
-            decimals_a,
-            price_b,
-            price_a,
-            btoken_ratio_b,
-            btoken_ratio_a,
-        )
+    if (!is_latest(pool.uid())) {
+        let amount_out_with_no_slippage = if (a2b) {
+            quote_swap_with_no_slippage(
+                amount_in,
+                decimals_a,
+                decimals_b,
+                price_a,
+                price_b,
+                btoken_ratio_a,
+                btoken_ratio_b,
+            )
+        } else {
+            quote_swap_with_no_slippage(
+                amount_in,
+                decimals_b,
+                decimals_a,
+                price_b,
+                price_a,
+                btoken_ratio_b,
+                btoken_ratio_a,
+            )
+        };
+
+        assert!(amount_out < amount_out_with_no_slippage, EInvalidPrice);
     };
 
-    assert!(amount_out < amount_out_with_no_slippage, EInvalidPrice);
-
-    pool.get_quote(amount_in, amount_out, a2b)
-}
-
-fun quote_swap_impl(
-    // Amount in (underlying)
-    amount_in: Decimal,
-    // Reserve in (underlying)
-    reserve_in: Decimal,
-    // Reserve out (underlying)
-    reserve_out: Decimal,
-    decimals_in: u8,
-    decimals_out: u8,
-    // Price In (underlying)
-    price_in: Decimal,
-    // Price Out (underlying)
-    price_out: Decimal,
-    amplifier: u64,
-    a2b: bool,
-): u64 {
-    // quoter_math::swap uses the underlying values instead of btoken values
-    if (a2b) {
-        get_swap_output(
-            amount_in, // input_a
-            reserve_in, // reserve_a
-            reserve_out, // reserve_b
-            price_in, // price_a
-            price_out, // price_b
-            decimals_in as u64, // decimals_a
-            decimals_out as u64, // decimals_b
-            amplifier,
-            true, // a2b
-        )
-    } else {
-        get_swap_output(
-            amount_in, // input_b
-            reserve_out, // reserve_a
-            reserve_in, // reserve_b
-            price_out, // price_a
-            price_in, // price_b
-            decimals_out as u64, // decimals_a
-            decimals_in as u64, // decimals_b
-            amplifier,
-            false, // a2b
-        )
-    }
+    pool.get_quote(amount_in, amount_out, a2b, some(price_uncertainty_ratio_a.max(price_uncertainty_ratio_b)))
 }
 
 fun get_swap_output(
@@ -397,6 +462,129 @@ fun get_swap_output(
     delta_out
 }
 
+#[allow(unused_let_mut)] // false-positive
+fun get_swap_output_v2(
+    // Amount in (underlying)
+    amount_in: u64,
+    // Amount X (underlying)
+    reserve_x: u64,
+    // Amount Y (underlying)
+    reserve_y: u64,
+    // Price X (underlying)
+    price_x: Decimal,
+    // Price Y (underlying)
+    price_y: Decimal,
+    decimals_x: u8,
+    decimals_y: u8,
+    amplifier: u64,
+    x2y: bool,
+): u64 {
+    let (price_x_integer_part, price_x_decimal_part_inverted) = split_price(price_x);
+    let (price_y_integer_part, price_y_decimal_part_inverted) = split_price(price_y);
+    
+    // We avoid using Decimal and use u256 instead to increase the overflow limit
+    // Reserves are in USD value and scaled by 10^10
+    let scaled_usd_reserve_x = {
+        let scaled_reserve = (reserve_x as u256) * SCALE;
+        let scaled_reserve_usd = to_usd(scaled_reserve, price_x_integer_part, price_x_decimal_part_inverted);
+        scaled_reserve_usd / (10_u64.pow(decimals_x) as u256)
+    };
+    
+    let scaled_usd_reserve_y = {
+        let scaled_reserve = (reserve_y as u256) * SCALE;
+        let scaled_reserve_usd = to_usd(scaled_reserve, price_y_integer_part, price_y_decimal_part_inverted);
+
+        scaled_reserve_usd / (10_u64.pow(decimals_y) as u256)
+    };
+
+    // We follow the Curve convention where the amplifier is actually defined as
+    // A * n^(n-1) * A_PRECISION => A * 2^1 * A_PRECISION 
+    let scaled_amp = (amplifier * 2) as u256 * A_PRECISION;
+    let d = get_d(scaled_usd_reserve_x, scaled_usd_reserve_y, scaled_amp);
+
+    let scaled_amount_in = amount_in as u256 * SCALE;
+
+    let mut delta_out = if (x2y) {
+        let scaled_usd_amount_in = to_usd(scaled_amount_in, price_x_integer_part, price_x_decimal_part_inverted) / (10_u64.pow(decimals_x) as u256);
+        let scaled_usd_reserve_out_after_trade = get_y(scaled_usd_reserve_x + scaled_usd_amount_in, scaled_amp, d);
+        let scaled_reserve_out_after_trade = from_usd(scaled_usd_reserve_out_after_trade, price_y_integer_part, price_y_decimal_part_inverted);
+
+        let reserve_out_after_trade = (scaled_reserve_out_after_trade * (10_u64.pow(decimals_y) as u256) / (SCALE as u256)) as u64;
+
+        reserve_y - reserve_out_after_trade
+
+    } else {
+        let scaled_usd_amount_in = to_usd(scaled_amount_in, price_y_integer_part, price_y_decimal_part_inverted) / (10_u64.pow(decimals_y) as u256);
+        let scaled_usd_reserve_out_after_trade = get_y(scaled_usd_reserve_y + scaled_usd_amount_in, scaled_amp, d);
+        let scaled_reserve_out_after_trade = from_usd(scaled_usd_reserve_out_after_trade, price_x_integer_part, price_x_decimal_part_inverted);
+
+        let reserve_out_after_trade = (scaled_reserve_out_after_trade * (10_u64.pow(decimals_x) as u256) / (SCALE as u256)) as u64;
+
+        reserve_x - reserve_out_after_trade
+    };
+
+    // Protect against up roundings
+    if (delta_out > 0) {
+        delta_out = delta_out - 1;
+    };
+
+    delta_out
+}
+
+/// We split the price into integer and decimal part, instead of using Decimal type
+/// This allows us to operate with larger integer values. In order to deal with 
+/// the decimal part only using u256, we invert the decimal part
+/// 
+/// We return option for the decimal part because in cases where there is no decimal part
+/// inverting it would result in division by zero
+fun split_price(price: Decimal): (u256, Option<u256>) {
+    let price_integer_part = price.floor() as u256;
+    let price_decimal_part = price.sub(decimal::from(price.floor()));
+
+    if (price_decimal_part == decimal::from(0)) {
+        (price_integer_part, none())
+        
+    } else {
+        let price_decimal_part_inverted = decimal::from(1).div(price_decimal_part).floor() as u256;
+        (price_integer_part, some(price_decimal_part_inverted))
+    }
+}
+
+/// Converts a unit amount into a USD amount
+fun to_usd(amount: u256, price_integer_part: u256, price_decimal_part_inverted: Option<u256>): u256 {
+    // R * (p_int + p_dec);
+    // R * p_int + R * p_dec
+    // R * p_int + R / (1 / p_dec)
+    if (price_decimal_part_inverted.is_some()) {
+        (amount * price_integer_part) + (amount / price_decimal_part_inverted.destroy_some())
+    } else {
+        price_decimal_part_inverted.destroy_none();
+        (amount * price_integer_part)
+    }
+}
+
+/// Converts a USD amount into a unit amount
+fun from_usd(usd_amount: u256, price_integer_part: u256, price_decimal_part_inverted: Option<u256>): u256 {
+    // let q = 1 / p_dec
+    // R_usd = R * (p_int + p_dec)
+    // R_usd = R * (p_int + 1/q)
+    // R_usd = R * [ (p_int * q + 1) / q ]
+    // R = R_usd * q / (p_int * q + 1)
+    if (price_decimal_part_inverted.is_some()) {
+        let price_decimal_part_inverted = price_decimal_part_inverted.destroy_some();
+        usd_amount *  price_decimal_part_inverted / (price_integer_part * price_decimal_part_inverted + 1)
+    } else {
+        usd_amount / price_integer_part
+    }
+}
+
+fun price_uncertainty_ratio(oracle_price_update: OraclePriceUpdate): u64 {
+    let conf = oracle_price_update.metadata().pyth().get_price().get_conf();
+    let price_mag = i64::get_magnitude_if_positive(&oracle_price_update.metadata().pyth().get_price().get_price());
+
+    conf * 10_000 / price_mag
+}
+
 /// Implements the Newton-Raphson method for finding roots of a function in fixed-point arithmetic.
 /// This function iteratively refines an initial guess to approximate a root of the function f(z) = 0,
 /// where f(z) is defined by the parameters `k` and `a`.
@@ -424,6 +612,7 @@ fun newton_raphson(
 }
 
 /// See [`newton_raphson`] for details.
+#[allow(unused_assignment)] // false-positive
 fun newton_raphson_(
     k: FixedPoint64,
     a: FixedPoint64,
@@ -571,6 +760,138 @@ fun compute_f_prime(
     one.sub(one_div_a).add(term3)
 }
 
+fun get_d(
+    reserve_a: u256,
+    reserve_b: u256,
+    // This is the amplifier scaled by A_PRECISION
+    amp: u256,
+): u256 {
+    // D invariant calculation in non-overflowing integer operations
+    // iteratively
+    // A * sum(x_i) * n**n + D = A * D * n**n + D**(n+1) / (n**n * prod(x_i))
+    //
+    // Converging solution:
+    // D[j+1] = (A * n**n * sum(x_i) - D[j]**(n+1) / (n**n prod(x_i))) / (A * n**n - 1)
+
+    let sum = reserve_a + reserve_b;
+    let ann = amp * 2;
+
+    // initial guess
+    let mut d = sum;
+
+    let mut limit = LIMIT;
+
+    while(limit > 0) {
+        let mut d_p = d;
+        d_p = d_p * d / reserve_a;
+        d_p = d_p * d / reserve_b;
+        d_p = d_p / 4;
+
+        let d_prev = d;
+
+        // (Ann * S / A_PRECISION + D_P * _n_coins) * D / ((Ann - A_PRECISION) * D / A_PRECISION + (_n_coins + 1) * D_P)
+        d = (
+            ((ann * sum / A_PRECISION) + d_p * 2) *
+            d / (
+                ((ann - A_PRECISION) * d / A_PRECISION) + 
+                (3 * d_p)
+            )
+        );
+
+        if (d > d_prev) {
+            if (d - d_prev <= 1) {
+                return d
+            };
+        } else {
+            if (d_prev - d <= 1) {
+                return d
+            };
+        };
+
+        limit = limit - 1;
+    };
+
+
+    abort 0
+}
+
+// Output reserve after subtract swap output
+#[allow(unused_assignment)] // false-positive
+fun get_y(
+    reserve_in: u256,
+    amp: u256,
+    d: u256,
+): u256 {
+    let ann = amp * 2;
+
+    let sum = reserve_in; // Reserve out is outside the summation as it is the unknown var
+    let mut c = d.pow(2) / (2 * reserve_in);
+    c = c * d * A_PRECISION / (ann * 2);
+
+    let b = sum + d * A_PRECISION / ann;
+    let mut y_prev = 0;
+    let mut y = d;
+
+    let mut limit = LIMIT;
+
+    while (limit > 0) {
+        y_prev = y;
+        y = (y*y + c) / (2 * y + b - d);
+
+        if (y > y_prev) {
+            if (y - y_prev <= 1) {
+                return y
+            };
+        } else {
+            if (y_prev - y <= 1) {
+                return y
+            };
+        };
+
+        limit = limit - 1;
+    };
+
+    abort 0
+}
+
+fun try_update_or_noop<B_A, B_B, LpType: drop>(
+    pool: &mut Pool<B_A, B_B, OracleQuoterV2, LpType>,
+    reserve_a_usd: Decimal,
+    reserve_b_usd: Decimal
+) {
+    let pool_uid = pool.uid_mut();
+
+    if (is_latest(pool_uid)) {
+        return
+    };
+
+    // Calculate the ratio (using 100 as base for percentage)
+    let ratio_a = (reserve_a_usd.mul(decimal::from(100))).div(reserve_a_usd.add(reserve_b_usd));
+    
+    // Check if ratio is between 40:60 and 60:40
+    // This means ratio_a should be between 40 and 60
+    let update = ratio_a.ge(decimal::from(40)) && ratio_a.le(decimal::from(60));
+
+    if (update) {
+        df::add(pool_uid, UpdateFlag {}, 0);
+
+        let new_amp = match (pool.quoter().amp) {
+            20 => 50,
+            30 => 100,
+            1000 => 1000,
+            _ => pool.quoter().amp
+        };
+
+        pool.quoter_mut().amp = new_amp;
+    };
+}
+
+fun is_latest(
+    pool_uid: &UID,
+): bool {
+    df::exists_(pool_uid, UpdateFlag {})
+}
+
 
 // ===== Events =====
 
@@ -590,6 +911,13 @@ use std::debug::print;
 use sui::random::RandomGenerator;
 #[test_only]
 use std::string::utf8;
+
+#[test_only]
+public fun use_legacy_for_testing<B_A, B_B, LpType: drop>(pool: &mut Pool<B_A, B_B, OracleQuoterV2, LpType>) {
+    let pool_uid = pool.uid_mut();
+    
+    df::remove<UpdateFlag, u64>(pool_uid, UpdateFlag {});
+}
 
 
 #[test_only]
@@ -626,6 +954,223 @@ fun generate_amplifier(rng: &mut RandomGenerator): FixedPoint64 {
 // ===== Tests =====
 
 #[test]
+fun test_get_d_upper_threshold() {
+    let d = get_d(1_000_000_000_000_000_000_000, 1_000_000_000_000_000_000_000, 100_000); // 100 billion USD = 2000000000000000000000
+    assert!(d < 8740834812604276470692694_u256, 0);
+    let _ = get_y(1_000_000_000_000_000_000_000, 100_000 as u256, d);
+    
+    let d = get_d(1_00_00_00_000_000_000_000_000_000_000_000_000_000, 1_00_00_00_000_000_000_000_000_000_000_000_000_000, 100_000); // 100 septilion USD
+    let _ = get_y(1_00_00_00_000_000_000_000_000_000_000_000_000_000, 100_000 as u256, d);
+}
+
+#[test]
+fun test_scaled_d() {
+    // use std::debug::print;
+    use sui::test_utils::assert_eq;
+
+    // Tests that scaling the reserves leads to the linear scaling of the D value
+    let upscale = 10_u256.pow(10);
+
+    assert_eq(get_d(1000000 * upscale, 1000000 * upscale, 20000), 2000000 * upscale);
+    assert_eq(get_d(646604101554903 * upscale, 430825829860939 * upscale, 10000) / upscale, 1077207198258876);
+    assert_eq(get_d(208391493399283 * upscale, 381737267304454 * upscale, 6000) / upscale, 589673027554751);
+    assert_eq(get_d(357533698368810 * upscale, 292279113116023 * upscale, 200000) / upscale, 649811157409887);
+    assert_eq(get_d(640219149077469 * upscale, 749346581809482 * upscale, 6000) / upscale, 1389495058454884);
+    assert_eq(get_d(796587650933232 * upscale, 263696548289376 * upscale, 20000) / upscale, 1059395029204629);
+    assert_eq(get_d(645814702742123 * upscale, 941346843035970 * upscale, 6000) / upscale, 1586694700461120);
+    assert_eq(get_d(36731011531180 * upscale, 112244514819796 * upscale, 6000) / upscale, 148556820223757);
+    assert_eq(get_d(638355455638005 * upscale, 144419816425350 * upscale, 20000) / upscale, 781493318669443);
+    assert_eq(get_d(747070395683716 * upscale, 583370126767355 * upscale, 200000) / upscale, 1330435412150341);
+    assert_eq(get_d(222152880197132 * upscale, 503754962483370 * upscale, 10000) / upscale, 725272897710721);
+
+    assert_eq(get_d(30000000000000, 10000000000000, 200), 38041326932308);
+}
+
+// TODO: test max difference in y is 1
+#[test]
+fun test_scaled_y() {
+    // use std::debug::print;
+    use sui::test_utils::assert_eq;
+
+    // Tests that scaling the reserves leads to the linear scaling of the y value
+    let upscale = 10_u256.pow(10);
+
+    assert_eq(get_y(1010000 * upscale, 20000, 20000000000000000) / upscale, 990000);
+    assert_eq(get_y(1045311940606135 * upscale, 10000, 10772071982588769824152384) / upscale, 54125279774978);
+    assert_eq(get_y(628789391533719 * upscale, 6000, 5896730275547517949493925) / upscale, 12102396904252);
+    assert_eq(get_y(664497701537459 * upscale, 200000, 6498111574098870651550508) / upscale, 1571656363072);
+    assert_eq(get_y(1241196069415337 * upscale, 6000, 13894950584548846774266673) / upscale, 164151111358319);
+    assert_eq(get_y(1207464631415294 * upscale, 20000, 10593950292046298598329699) / upscale, 3978315032067);
+    assert_eq(get_y(1326030781815325 * upscale, 6000, 15866947004611206299166769) / upscale, 270631769558979);
+    assert_eq(get_y(596549235149733 * upscale, 6000, 1485568202237573366871425) / upscale, 25485695510);
+    assert_eq(get_y(1412549409240877 * upscale, 20000, 7814933186694435312564255) / upscale, 333436412241);
+    assert_eq(get_y(966973926501573 * upscale, 200000, 13304354121503417159337232) / upscale, 363547559872801);
+    assert_eq(get_y(468614952287735 * upscale, 10000, 7252728977107214865224066) / upscale, 256991438480111);
+
+    // simulating a trade buy sui sell 1000 usdc; 
+    // sui bought: 15.4696173902$ worth of sui
+    // sui bought in units: ~5.15653913006666666667
+    // This makes sense because the pool has more sui than usdc and the amplifier is 1
+    assert_eq(get_y((10000000000000 + 100000000000), 1 * 2 * A_PRECISION, 38041326932308), 29845303826098); // sui reserve after trade: 2984.5303826098
+    assert_eq(get_y((30000000000000 + 51565391310), 1 * 2 * A_PRECISION, 38041326932308), 9966843369867); // usdc reserve after trade: 996.
+}
+
+#[test]
+fun test_get_d() {
+    // use std::debug::print;
+    use sui::test_utils::assert_eq;
+
+    // Expected values generated from curve stable swap contract
+    assert_eq(get_d(1000000, 1000000, 20000), 2000000);
+    assert_eq(get_d(646604101554903, 430825829860939, 10000), 1077207198258876);
+    assert_eq(get_d(208391493399283, 381737267304454, 6000), 589673027554751);
+    assert_eq(get_d(357533698368810, 292279113116023, 200000), 649811157409887);
+    assert_eq(get_d(640219149077469, 749346581809482, 6000), 1389495058454884);
+    assert_eq(get_d(796587650933232, 263696548289376, 20000), 1059395029204629);
+    assert_eq(get_d(645814702742123, 941346843035970, 6000), 1586694700461120);
+    assert_eq(get_d(36731011531180, 112244514819796, 6000), 148556820223757);
+    assert_eq(get_d(638355455638005, 144419816425350, 20000), 781493318669443);
+    assert_eq(get_d(747070395683716, 583370126767355, 200000), 1330435412150341);
+    assert_eq(get_d(222152880197132, 503754962483370, 10000), 725272897710721);
+}
+
+#[test]
+fun test_get_y() {
+    // use std::debug::print;
+    use sui::test_utils::assert_eq;
+
+    // Expected values generated from curve stable swap contract
+    // D values are generated from the results of the previous test
+    assert_eq(get_y(1010000, 20000, 2000000), 990000);
+    assert_eq(get_y(1045311940606135, 10000, 1077207198258876), 54125279774978);
+    assert_eq(get_y(628789391533719, 6000, 589673027554751), 12102396904252);
+    assert_eq(get_y(664497701537459, 200000, 649811157409887), 1571656363072);
+    assert_eq(get_y(1241196069415337, 6000, 1389495058454884), 164151111358319);
+    assert_eq(get_y(1207464631415294, 20000, 1059395029204629), 3978315032067);
+    assert_eq(get_y(1326030781815325, 6000, 1586694700461120), 270631769558978);
+    assert_eq(get_y(596549235149733, 6000, 148556820223757), 25485695510);
+    assert_eq(get_y(1412549409240877, 20000, 781493318669443), 333436412241);
+    assert_eq(get_y(966973926501573, 200000, 1330435412150341), 363547559872801);
+    assert_eq(get_y(468614952287735, 10000, 725272897710721), 256991438480111);
+}
+
+#[test]
+fun test_get_y_path_indepencence_amp_20() {
+    let reserve = 1000000;
+    let amp = 20 * A_PRECISION;
+    let amount_in = 10000;
+
+    let balance_out = get_y(reserve + amount_in, amp, get_d(reserve, reserve, amp));
+    let delta = reserve - balance_out;
+
+    let split = 16;
+    let amount_in = amount_in / split;
+    let mut total_delta = 0;
+    let mut current_reserve_in = reserve;
+    let mut current_reserve_out = reserve;
+    let mut swaps = 0;
+
+    while (swaps < split) {
+        let balance_out = get_y(current_reserve_in + amount_in, amp, get_d(current_reserve_in, current_reserve_out, amp));
+        let delta = current_reserve_out - balance_out;
+        total_delta = total_delta + delta;
+        current_reserve_out = balance_out;
+        current_reserve_in = current_reserve_in + amount_in;
+
+        swaps = swaps + 1; 
+    };
+
+    sui::test_utils::assert_eq(delta, total_delta);
+}
+
+#[test]
+fun test_get_y_path_indepencence_amp_30() {
+    let reserve = 1000000;
+    let amp = 30 * A_PRECISION;
+    let amount_in = 10000;
+
+    let balance_out = get_y(reserve + amount_in, amp, get_d(reserve, reserve, amp));
+    let delta = reserve - balance_out;
+
+    let split = 16;
+    let amount_in = amount_in / split;
+    let mut total_delta = 0;
+    let mut current_reserve_in = reserve;
+    let mut current_reserve_out = reserve;
+    let mut swaps = 0;
+
+    while (swaps < split) {
+        let balance_out = get_y(current_reserve_in + amount_in, amp, get_d(current_reserve_in, current_reserve_out, amp));
+        let delta = current_reserve_out - balance_out - 1;
+        total_delta = total_delta + delta;
+        current_reserve_out = balance_out;
+        current_reserve_in = current_reserve_in + amount_in;
+
+        swaps = swaps + 1; 
+    };
+
+    assert!(delta >= total_delta, 0);
+}
+
+#[test]
+fun test_get_y_path_indepencence_amp_100() {
+    let reserve = 1000000;
+    let amp = 100 * A_PRECISION;
+    let amount_in = 10000;
+
+    let balance_out = get_y(reserve + amount_in, amp, get_d(reserve, reserve, amp));
+    let delta = reserve - balance_out;
+
+    let split = 16;
+    let amount_in = amount_in / split;
+    let mut total_delta = 0;
+    let mut current_reserve_in = reserve;
+    let mut current_reserve_out = reserve;
+    let mut swaps = 0;
+
+    while (swaps < split) {
+        let balance_out = get_y(current_reserve_in + amount_in, amp, get_d(current_reserve_in, current_reserve_out, amp));
+        let delta = current_reserve_out - balance_out - 1;
+        total_delta = total_delta + delta;
+        current_reserve_out = balance_out;
+        current_reserve_in = current_reserve_in + amount_in;
+
+        swaps = swaps + 1; 
+    };
+
+    assert!(delta >= total_delta, 0);
+}
+
+#[test]
+fun test_get_y_path_indepencence_amp_1000() {
+    let reserve = 1000000;
+    let amp = 1000 * A_PRECISION;
+    let amount_in = 10000;
+
+    let balance_out = get_y(reserve + amount_in, amp, get_d(reserve, reserve, amp));
+    let delta = reserve - balance_out;
+
+    let split = 16;
+    let amount_in = amount_in / split;
+    let mut total_delta = 0;
+    let mut current_reserve_in = reserve;
+    let mut current_reserve_out = reserve;
+    let mut swaps = 0;
+
+    while (swaps < split) {
+        let balance_out = get_y(current_reserve_in + amount_in, amp, get_d(current_reserve_in, current_reserve_out, amp));
+        let delta = current_reserve_out - balance_out - 1;
+        total_delta = total_delta + delta;
+        current_reserve_out = balance_out;
+        current_reserve_in = current_reserve_in + amount_in;
+
+        swaps = swaps + 1; 
+    };
+
+    assert!(delta >= total_delta, 0);
+}
+
+#[test]
 fun test_oracle_decimal_to_decimal() {
     use sui::test_utils::assert_eq;
     use oracles::oracle_decimal::{Self};
@@ -641,100 +1186,90 @@ fun test_oracle_decimal_to_decimal() {
 fun test_quote_swap_impl_amp_1() {
     use sui::test_utils::assert_eq;
 
-    let amount_out = quote_swap_impl(
-        decimal::from(1), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        1, // amplifier
+    let amount_out = get_swap_output(
+        decimal::from(1), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        1,
         true, // a2b
     );
 
     assert_eq(amount_out, 0); // Rounds down from 0.99 to 0
-    
-    let amount_out = quote_swap_impl(
-        decimal::from(10), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        1, // amplifier
+
+    let amount_out = get_swap_output(
+        decimal::from(10), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        1,
         true, // a2b
     );
-
-    // print(&amount_out);
-
+    
     assert_eq(amount_out, 9); // Rounds down from 9.99 to 9
     
-    
-    let amount_out = quote_swap_impl(
-        decimal::from(100), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
+    let amount_out = get_swap_output(
+        decimal::from(100), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
         1, // amplifier
         true, // a2b
     );
-
-    // print(&amount_out);
 
     assert_eq(amount_out, 99); // Rounds down from 9.99 to 9
     
-    
-    let amount_out = quote_swap_impl(
-        decimal::from(1_000), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
+    let amount_out = get_swap_output(
+        decimal::from(1_000), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
         1, // amplifier
         true, // a2b
     );
-
-    // print(&amount_out);
 
     assert_eq(amount_out, 951);
 
 
     // === Higher slippage ===
 
-    let amount_out = quote_swap_impl(
-        decimal::from(10_000), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        1, // amplifier
+    let amount_out = get_swap_output(
+        decimal::from(10_000), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        1,
         true, // a2b
     );
-
-    // print(&amount_out);
 
     assert_eq(amount_out, 6321);
 
     // === Even Higher slippage ===
 
-    let amount_out = quote_swap_impl(
-        decimal::from(100_000), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        1, // amplifier
+    let amount_out = get_swap_output(
+        decimal::from(100_000), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        1,
         true, // a2b
     );
 
@@ -742,15 +1277,15 @@ fun test_quote_swap_impl_amp_1() {
     
     // === Insane slippage ===
 
-    let amount_out = quote_swap_impl(
-        decimal::from(1_000_000), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        1, // amplifier
+    let amount_out = get_swap_output(
+        decimal::from(1_000_000), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        1,
         true, // a2b
     );
 
@@ -761,99 +1296,88 @@ fun test_quote_swap_impl_amp_1() {
 fun test_quote_swap_impl_amp_10() {
     use sui::test_utils::assert_eq;
 
-    let amount_out = quote_swap_impl(
-        decimal::from(1), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        10, // amplifier
+    let amount_out = get_swap_output(
+        decimal::from(1), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        10,
         true, // a2b
     );
 
     assert_eq(amount_out, 0); // Rounds down from 0.99 to 0
-    
-    let amount_out = quote_swap_impl(
-        decimal::from(10), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        10, // amplifier
+
+    let amount_out = get_swap_output(
+        decimal::from(10), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        10,
         true, // a2b
     );
-
-    // print(&amount_out);
 
     assert_eq(amount_out, 9); // Rounds down from 9.99 to 9
     
-    
-    let amount_out = quote_swap_impl(
-        decimal::from(100), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        10, // amplifier
+    let amount_out = get_swap_output(
+        decimal::from(100), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        10,
         true, // a2b
     );
-
-    // print(&amount_out);
 
     assert_eq(amount_out, 99); // Rounds down from 9.99 to 9
     
-    
-    let amount_out = quote_swap_impl(
-        decimal::from(1_000), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        10, // amplifier
+    let amount_out = get_swap_output(
+        decimal::from(1_000), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        10,
         true, // a2b
     );
-
-    // print(&amount_out);
 
     assert_eq(amount_out, 994);
 
-
     // === Higher slippage ===
 
-    let amount_out = quote_swap_impl(
-        decimal::from(10_000), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        10, // amplifier
+    let amount_out = get_swap_output(
+        decimal::from(10_000), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        10,
         true, // a2b
     );
-
-    // print(&amount_out);
 
     assert_eq(amount_out, 8776);
 
     // === Even Higher slippage ===
 
-    let amount_out = quote_swap_impl(
-        decimal::from(100_000), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
+    let amount_out = get_swap_output(
+        decimal::from(100_000), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
         10, // amplifier
         true, // a2b
     );
@@ -862,15 +1386,15 @@ fun test_quote_swap_impl_amp_10() {
     
     // === Insane slippage ===
 
-    let amount_out = quote_swap_impl(
-        decimal::from(1_000_000), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        10, // amplifier
+    let amount_out = get_swap_output(
+        decimal::from(1_000_000), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        10,
         true, // a2b
     );
 
@@ -881,100 +1405,89 @@ fun test_quote_swap_impl_amp_10() {
 fun test_quote_swap_impl_amp_100() {
     use sui::test_utils::assert_eq;
 
-    let amount_out = quote_swap_impl(
-        decimal::from(1), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        100, // amplifier
+    let amount_out = get_swap_output(
+        decimal::from(1), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        100,
         true, // a2b
     );
 
     assert_eq(amount_out, 0); // Rounds down from 0.99 to 0
-    
-    let amount_out = quote_swap_impl(
-        decimal::from(10), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        100, // amplifier
+
+    let amount_out = get_swap_output(
+        decimal::from(10), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        100,
         true, // a2b
     );
-
-    // print(&amount_out);
 
     assert_eq(amount_out, 9); // Rounds down from 9.99 to 9
     
-    
-    let amount_out = quote_swap_impl(
-        decimal::from(100), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        100, // amplifier
+    let amount_out = get_swap_output(
+        decimal::from(100), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        100,
         true, // a2b
     );
-
-    // print(&amount_out);
 
     assert_eq(amount_out, 99); // Rounds down from 9.99 to 9
     
-    
-    let amount_out = quote_swap_impl(
-        decimal::from(1_000), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        100, // amplifier
+    let amount_out = get_swap_output(
+        decimal::from(1_000), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        100,
         true, // a2b
     );
-
-    // print(&amount_out);
 
     assert_eq(amount_out, 999);
 
-
     // === Higher slippage ===
 
-    let amount_out = quote_swap_impl(
-        decimal::from(10_000), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        100, // amplifier
+    let amount_out = get_swap_output(
+        decimal::from(10_000), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        100,
         true, // a2b
     );
-
-    // print(&amount_out);
 
     assert_eq(amount_out, 9734);
 
     // === Even Higher slippage ===
 
-    let amount_out = quote_swap_impl(
-        decimal::from(100_000), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        100, // amplifier
+    let amount_out = get_swap_output(
+        decimal::from(100_000), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        100,
         true, // a2b
     );
 
@@ -982,15 +1495,15 @@ fun test_quote_swap_impl_amp_100() {
     
     // === Insane slippage ===
 
-    let amount_out = quote_swap_impl(
-        decimal::from(1_000_000), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        100, // amplifier
+    let amount_out = get_swap_output(
+        decimal::from(1_000_000), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        100,
         true, // a2b
     );
 
@@ -1001,81 +1514,74 @@ fun test_quote_swap_impl_amp_100() {
 fun test_quote_swap_impl_amp_1000() {
     use sui::test_utils::assert_eq;
 
-    let amount_out = quote_swap_impl(
-        decimal::from(1), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        100, // amplifier
+    let amount_out = get_swap_output(
+        decimal::from(1), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        1000,
         true, // a2b
     );
 
     assert_eq(amount_out, 0); // Rounds down from 0.99 to 0
-    
-    let amount_out = quote_swap_impl(
-        decimal::from(10), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        100, // amplifier
+
+    let amount_out = get_swap_output(
+        decimal::from(10), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        1000,
         true, // a2b
     );
-
-    // print(&amount_out);
 
     assert_eq(amount_out, 9); // Rounds down from 9.99 to 9
     
-    
-    let amount_out = quote_swap_impl(
-        decimal::from(100), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        100, // amplifier
+    let amount_out = get_swap_output(
+        decimal::from(100), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        1000,
         true, // a2b
     );
-
-    // print(&amount_out);
 
     assert_eq(amount_out, 99); // Rounds down from 9.99 to 9
 
-    let amount_out = quote_swap_impl(
-        decimal::from(1_000), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        1000, // amplifier
+    let amount_out = get_swap_output(
+        decimal::from(1_000), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        1000,
         true, // a2b
     );
-
-    // print(&amount_out);
 
     assert_eq(amount_out, 999);
 
 
     // === Higher slippage ===
 
-    let amount_out = quote_swap_impl(
-        decimal::from(10_000), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        1000, // amplifier
+    let amount_out = get_swap_output(
+        decimal::from(10_000), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        1000,
         true, // a2b
     );
 
@@ -1083,15 +1589,15 @@ fun test_quote_swap_impl_amp_1000() {
 
     // === Even Higher slippage ===
 
-    let amount_out = quote_swap_impl(
-        decimal::from(100_000), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        100, // amplifier
+    let amount_out = get_swap_output(
+        decimal::from(100_000), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        1000,
         true, // a2b
     );
 
@@ -1099,15 +1605,15 @@ fun test_quote_swap_impl_amp_1000() {
     
     // === Insane slippage ===
 
-    let amount_out = quote_swap_impl(
-        decimal::from(1_000_000), // amount in
-        decimal::from(10_000), // reserve in
-        decimal::from(10_000), // reserve out
-        9, // decimals in
-        9, // decimals out
-        decimal::from(1), // price_in
-        decimal::from(1), // price_out
-        100, // amplifier
+    let amount_out = get_swap_output(
+        decimal::from(1_000_000), // input_a
+        decimal::from(10_000), // reserve_a
+        decimal::from(10_000), // reserve_b
+        decimal::from(1), // price_a
+        decimal::from(1), // price_b
+        9, // decimals_a
+        9, // decimals_b
+        1000,
         true, // a2b
     );
 

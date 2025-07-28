@@ -1,6 +1,7 @@
 /// Oracle AMM Hook implementation. This quoter can only be initialized with btoken types.
 module steamm::dummy_omm;
 
+use std::option::none;
 use oracles::oracles::{OracleRegistry, OraclePriceUpdate};
 use oracles::oracle_decimal::{OracleDecimal};
 use steamm::pool::{Self, Pool, SwapResult};
@@ -201,7 +202,7 @@ public fun quote_swap<P, A, B, B_A, B_B, LpType: drop>(
         }
     };
 
-    pool.get_quote(amount_in, amount_out, a2b)
+    pool.get_quote(amount_in, amount_out, a2b, none())
 }
 
 fun quote_swap_impl(

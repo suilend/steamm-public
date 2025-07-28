@@ -581,8 +581,9 @@ public(package) fun get_quote<A, B, Quoter: store, LpType: drop>(
     amount_in: u64,
     amount_out: u64,
     a2b: bool,
+    swap_fee_override_numerator: Option<u64>,
 ): SwapQuote {
-    let (protocol_fees, pool_fees) = pool.compute_swap_fees_(amount_out);
+    let (protocol_fees, pool_fees) = pool.compute_swap_fees_(amount_out, swap_fee_override_numerator);
     let amount_out_net = amount_out - protocol_fees - pool_fees;
 
     quote::quote(
@@ -597,9 +598,29 @@ public(package) fun get_quote<A, B, Quoter: store, LpType: drop>(
 public(package) fun compute_swap_fees_<A, B, Quoter: store, LpType: drop>(
     pool: &Pool<A, B, Quoter, LpType>,
     amount: u64,
+    // Overrides if the swap fee rate is higher than the default fee rate
+    // Note: In the future we can expand this and allow two types of strategies:
+    // - Choose lowest
+    // - Choose highest
+    mut swap_fee_override_numerator: Option<u64>,
 ): (u64, u64) {
     let (protocol_fee_num, protocol_fee_denom) = pool.protocol_fees.fee_ratio();
-    let (pool_fee_num, pool_fee_denom) = pool.pool_fee_config.fee_ratio();
+    let (pool_fee_num, pool_fee_denom) = if (swap_fee_override_numerator.is_some()) {
+        let (pool_fee_num_default, pool_fee_denom_default) = pool.pool_fee_config.fee_ratio();
+
+        // swap_fee_override > default_swap_fee
+        // swap_fee_override_num / swap_fee_override_denom > pool_fee_num / pool_fee_denom
+        // swap_fee_override_num / BPS_DENOMINATOR > pool_fee_num / pool_fee_denom
+        // swap_fee_override_num * pool_fee_denom > pool_fee_num * BPS_DENOMINATOR
+        if (*swap_fee_override_numerator.borrow() * pool_fee_denom_default > pool_fee_num_default * BPS_DENOMINATOR) {
+            (swap_fee_override_numerator.extract(), BPS_DENOMINATOR)
+        } else {
+            // Otherwise we use the default fee ratio
+            (pool_fee_num_default, pool_fee_denom_default)
+        }
+    } else {
+        pool.pool_fee_config.fee_ratio()
+    };
 
     let total_fees = safe_mul_div_up(amount, pool_fee_num, pool_fee_denom);
     let protocol_fees = safe_mul_div_up(total_fees, protocol_fee_num, protocol_fee_denom);
@@ -612,6 +633,20 @@ public(package) fun quoter_mut<A, B, Quoter: store, LpType: drop>(
     pool: &mut Pool<A, B, Quoter, LpType>,
 ): &mut Quoter {
     &mut pool.quoter
+}
+
+// Note: Not safe to share!
+public(package) fun uid_mut<A, B, Quoter: store, LpType: drop>(
+    pool: &mut Pool<A, B, Quoter, LpType>,
+): &mut UID {
+    &mut pool.id
+}
+
+// Note: Not safe to share!
+public(package) fun uid<A, B, Quoter: store, LpType: drop>(
+    pool: &Pool<A, B, Quoter, LpType>,
+): &UID {
+    &pool.id
 }
 
 // ===== View & Getters =====

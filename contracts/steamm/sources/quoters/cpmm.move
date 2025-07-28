@@ -1,5 +1,7 @@
 /// Constant-Product AMM Quoter implementation
 module steamm::cpmm;
+
+use std::option::none;
 use steamm::global_admin::GlobalAdmin;
 use steamm::math::safe_mul_div;
 use steamm::pool::{Self, Pool, SwapResult, assert_liquidity};
@@ -160,7 +162,7 @@ public fun quote_swap<A, B, LpType: drop>(
         a2b,
     );
 
-    pool.get_quote(amount_in, amount_out, a2b)
+    pool.get_quote(amount_in, amount_out, a2b, none())
 }
 
 public(package) fun quote_swap_impl(
@@ -236,8 +238,6 @@ public(package) fun check_invariance<A, B, Quoter: store, LpType: drop>(
     assert!(k1 >= k0, EInvariantViolation);
 }
 
-#[test_only]
-use std::option::none;
 #[test_only]
 use steamm::math::checked_mul_div_up;
 

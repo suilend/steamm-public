@@ -341,6 +341,70 @@ fun test_cpmm_deposit_redeem_swap() {
 }
 
 #[test]
+fun test_cpmm_path_independence_with_no_fees() {
+    let mut scenario = test_scenario::begin(@0x26);
+
+    let (clock, lend_cap, lending_market, mut pool) = setup(100, 0, &mut scenario);
+    pool.no_swap_fees_for_testing();
+
+    let mut coin_sui = coin::mint_for_testing<B_TEST_USDC>(2_000 * 1_000_000_000, scenario.ctx());
+    let mut coin_usdc = coin::mint_for_testing<B_TEST_SUI>(2_000 * 1_000_000, scenario.ctx());
+    
+    let (lp_coins_2, _) = pool.deposit_liquidity(
+        &mut coin_sui,
+        &mut coin_usdc,
+        1_000 * 1_000_000_000,
+        1_000 * 1_000_000,
+        scenario.ctx(),
+    );
+
+    destroy(coin_sui);
+    destroy(coin_usdc);
+
+    let mut coin_sui = coin::mint_for_testing<B_TEST_SUI>(10 * 2_000_000, scenario.ctx());
+    let mut coin_usdc = coin::mint_for_testing<B_TEST_USDC>(10 * 2_000_000, scenario.ctx());
+
+    let swap_quote_1 = pool.cpmm_quote_swap(
+        10 * 2_000_000,
+        false, // a2b
+    );
+
+    
+    let mut total_amount_in = 0;
+    let mut total_amount_out = 0;
+
+    while (total_amount_in < 10 * 2_000_000) {
+        scenario.next_tx(@0x0);
+
+        let split = 10 * 1_000_000;
+
+        let swap_result = pool.cpmm_swap(
+            &mut coin_usdc,
+            &mut coin_sui,
+            false, // a2b
+            split,
+            0,
+            scenario.ctx(),
+        );
+
+        total_amount_in = total_amount_in +split;
+        total_amount_out = total_amount_out + swap_result.amount_out();
+    };
+
+    assert_eq(swap_quote_1.amount_out(), total_amount_out);
+
+    destroy(coin_sui);
+    destroy(coin_usdc);
+    destroy(pool);
+    destroy(lp_coins_2);
+    destroy(clock);
+    destroy(lending_market);
+    destroy(lend_cap);
+
+    test_scenario::end(scenario);
+}
+
+#[test]
 #[expected_failure(abort_code = pool::ESwapOutputAmountIsZero)]
 fun test_fail_handle_full_precision_loss_from_highly_imbalanced_pool() {
     let mut scenario = test_scenario::begin(ADMIN);

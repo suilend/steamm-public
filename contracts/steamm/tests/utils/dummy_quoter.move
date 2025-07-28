@@ -1,6 +1,7 @@
 #[test_only]
 module steamm::dummy_quoter;
 
+use std::option::none;
 use steamm::pool::{Self, Pool, SwapResult};
 use steamm::quote::SwapQuote;
 use steamm::registry::Registry;
@@ -62,5 +63,5 @@ public fun quote_swap<A, B, LpType: drop>(
 ): SwapQuote {
     let amount_out = amount_in;
 
-    pool.get_quote(amount_in, amount_out, a2b)
+    pool.get_quote(amount_in, amount_out, a2b, none())
 }
