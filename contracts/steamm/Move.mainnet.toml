@@ -1,21 +1,24 @@
 [package]
 name = "steamm"
 edition = "2024.beta"
-published-at = "0x4454d95507deb17d5017db11105bd95027d434776af1d0049ce27a3510a9a1ba"
+published-at = "0x4373f25b870b314128644116e11e8025d3d6cd57a84e36af82b74774cd08c84c"
 
 [dependencies]
-suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/suilend", rev = "hotfix-sui-version" }
-oracles = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/oracles", rev = "hotfix-sui-version" }
+suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/suilend", rev = "mock-for-testing" }
+oracles = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/oracles", rev = "mock-for-testing" }
 
 
-# v1 = 0x4fb1cf45dffd6230305f1d269dd1816678cc8e3ba0b747a813a556921219f261
-# v2 = 0x80e6e13fa97030984f871dcadbec36bcfe02a51225fca97ba60d32ea24c6f0fc
-# v3 = 0x67e4835cbe51818ce79af790f25ee7d8dfb03fc1556094ca5531cc399c687444
-# v4 = 0xf0e2245d9351b94a6aca77c91a9a4b310508fee953a97667b4dee5f9d59ad025
-# v5 = 0x90e18bdfa7206d5d19df0eed869203812b608e50d07e3a49b9e9044fdedac443
-# v6 = 0xf7338d805e8dd649bb2c183c4c4e928a0626ea3ee5171a1b35a5fc578f6b3159
-# v7 = 0x941d7bfb56d052d014659847f0c49b980e1d90242544aee9a88e5aec1a8e1ae1
-# v8 = 0x4454d95507deb17d5017db11105bd95027d434776af1d0049ce27a3510a9a1ba
+# v01 = 0x4fb1cf45dffd6230305f1d269dd1816678cc8e3ba0b747a813a556921219f261
+# v02 = 0x80e6e13fa97030984f871dcadbec36bcfe02a51225fca97ba60d32ea24c6f0fc
+# v03 = 0x67e4835cbe51818ce79af790f25ee7d8dfb03fc1556094ca5531cc399c687444
+# v04 = 0xf0e2245d9351b94a6aca77c91a9a4b310508fee953a97667b4dee5f9d59ad025
+# v05 = 0x90e18bdfa7206d5d19df0eed869203812b608e50d07e3a49b9e9044fdedac443
+# v06 = 0xf7338d805e8dd649bb2c183c4c4e928a0626ea3ee5171a1b35a5fc578f6b3159
+# v07 = 0x941d7bfb56d052d014659847f0c49b980e1d90242544aee9a88e5aec1a8e1ae1
+# v08 = 0x4454d95507deb17d5017db11105bd95027d434776af1d0049ce27a3510a9a1ba
+# v09 = 0xda28513674c1e461556b57c2f2e4f15c5e654b4accf802bdfaab7dbd2739fa16
+# v10 = 0xc04425c5585e7d0a7e49f1265983e4303180216880179cccfc894afa8afe6d50
+# v11 = 0x4373f25b870b314128644116e11e8025d3d6cd57a84e36af82b74774cd08c84c
 
 [addresses]
 # steamm = "0x0"

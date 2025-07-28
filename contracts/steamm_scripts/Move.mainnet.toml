@@ -22,5 +22,5 @@ steamm = { local = "../steamm" }
 # v9 = 0x07e94a74f70d081c0839b0de957460cfad40d2502ee00825bcbb0ef23118cb10
 
 [addresses]
-# steamm_scripts = "0x0"
-steamm_scripts = "0x13bfc09cfc1bd922d3aa53fcf7b2cd510727ee65068ce136e2ebd5f3b213fdd2"
+steamm_scripts = "0x0"
+# steamm_scripts = "0x13bfc09cfc1bd922d3aa53fcf7b2cd510727ee65068ce136e2ebd5f3b213fdd2"
