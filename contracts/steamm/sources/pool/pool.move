@@ -19,6 +19,7 @@ use sui::balance::{Self, Balance, Supply};
 use sui::coin::{Self, Coin, TreasuryCap, CoinMetadata};
 use sui::transfer::public_transfer;
 use sui::tx_context::sender;
+use sui::dynamic_field;
 
 public use fun steamm::cpmm::swap as Pool.cpmm_swap;
 public use fun steamm::cpmm::quote_swap as Pool.cpmm_quote_swap;
@@ -69,8 +70,13 @@ const ETypeAandBDuplicated: u64 = 8;
 const ELpTokenEmpty: u64 = 9;
 // Empty coin A and B when depositing or swapping
 const EEmptyCoins: u64 = 9;
+// Pool is paused
+const EPoolIsPaused: u64 = 10;
 
 // ===== Structs =====
+
+/// Flag to indicate that the pool has been updated
+public struct PauseFlag has copy, drop, store {}
 
 /// AMM pool object. This object is the top-level object and sits at the
 /// core of the protocol. The generic types `A` and `B` correspond to the
@@ -390,6 +396,28 @@ entry fun migrate<A, B, Quoter: store, LpType: drop>(
     pool.version.migrate_(CURRENT_VERSION);
 }
 
+fun is_pool_paused<A, B, Quoter: store, LpType: drop>(
+    pool: &mut Pool<A, B, Quoter, LpType>,
+): bool {
+    dynamic_field::exists_(pool.uid_mut(), PauseFlag {})
+}
+
+public(package) fun pause_pool<A, B, Quoter: store, LpType: drop>(
+    pool: &mut Pool<A, B, Quoter, LpType>,
+    _admin: &GlobalAdmin,
+) {
+    pool.version.assert_version_and_upgrade(CURRENT_VERSION);
+    dynamic_field::add(pool.uid_mut(), PauseFlag {}, true);
+}
+
+public(package) fun resume_pool<A, B, Quoter: store, LpType: drop>(
+    pool: &mut Pool<A, B, Quoter, LpType>,
+    _admin: &GlobalAdmin,
+) {
+    pool.version.assert_version_and_upgrade(CURRENT_VERSION);
+    dynamic_field::remove<_, bool>(pool.uid_mut(), PauseFlag {});
+}
+
 // ===== Package Functions =====
 
 /// Initializes and returns a new AMM Pool along with its associated PoolCap.
@@ -519,6 +547,7 @@ public(package) fun swap<A, B, Quoter: store, LpType: drop>(
 ): SwapResult {
     pool.version.assert_version_and_upgrade(CURRENT_VERSION);
     assert!(!(coin_a.value() == 0 && coin_b.value() == 0), EEmptyCoins);
+    assert!(!pool.is_pool_paused(), EPoolIsPaused);
 
     assert!(quote.amount_out() > 0, ESwapOutputAmountIsZero);
     assert!(quote.amount_out() >= min_amount_out, ESwapExceedsSlippage);

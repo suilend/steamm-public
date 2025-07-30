@@ -226,6 +226,22 @@ entry fun migrate<A, B, LpType: drop>(
     pool.quoter_mut().version.migrate_(CURRENT_VERSION);
 }
 
+public fun pause_pool<A, B, LpType: drop>(
+    pool: &mut Pool<A, B, CpQuoter, LpType>,
+    admin: &GlobalAdmin,
+) {
+    pool.quoter_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
+    pool.pause_pool(admin)
+}
+
+public fun resume_pool<A, B, LpType: drop>(
+    pool: &mut Pool<A, B, CpQuoter, LpType>,
+    admin: &GlobalAdmin,
+) {
+    pool.quoter_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
+    pool.resume_pool(admin)
+}
+
 // ===== Package Functions =====
 
 public(package) fun check_invariance<A, B, Quoter: store, LpType: drop>(

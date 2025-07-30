@@ -20,10 +20,11 @@ use steamm::fixed_point64::{Self, FixedPoint64};
 use steamm::utils::decimal_to_fixedpoint64;
 use steamm::omm::{quote_swap_impl as quote_swap_with_no_slippage};
 use pyth::i64::{Self};
+use steamm::global_admin::GlobalAdmin;
 
 // ===== Constants =====
 
-const CURRENT_VERSION: u16 = 3;
+const CURRENT_VERSION: u16 = 4;
 
 /// 10^10, scales USD values to avoid precision loss.
 /// In the limit, pool balances can be less than 1$, therefore we scale the dollar
@@ -890,6 +891,22 @@ fun is_latest(
     pool_uid: &UID,
 ): bool {
     df::exists_(pool_uid, UpdateFlag {})
+}
+
+public fun pause_pool<B_A, B_B, LpType: drop>(
+    pool: &mut Pool<B_A, B_B, OracleQuoterV2, LpType>,
+    admin: &GlobalAdmin,
+) {
+    pool.quoter_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
+    pool.pause_pool(admin)
+}
+
+public fun resume_pool<B_A, B_B, LpType: drop>(
+    pool: &mut Pool<B_A, B_B, OracleQuoterV2, LpType>,
+    admin: &GlobalAdmin,
+) {
+    pool.quoter_mut().version.assert_version_and_upgrade(CURRENT_VERSION);
+    pool.resume_pool(admin)
 }
 
 
