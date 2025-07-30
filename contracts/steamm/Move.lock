@@ -2,7 +2,7 @@
 
 [move]
 version = 3
-manifest_digest = "47E4B9F7F20B9B6BFBE86075CE3ED450EA3ABFD7AC1AB8FA7EC8D35A3386233E"
+manifest_digest = "B42AEF5A76CD3DA5FA54829575AD7BDC1B55FDBA7EBAFFCEFE1E6FABE3C7E7B7"
 deps_digest = "52B406A7A21811BEF51751CF88DA0E76DAEFFEAC888D4F4060B1A72BBE7D8D35"
 dependencies = [
   { id = "Bridge", name = "Bridge" },
@@ -15,7 +15,7 @@ dependencies = [
 
 [[move.package]]
 id = "Bridge"
-source = { git = "https://github.com/MystenLabs/sui.git", rev = "209f0da8e316", subdir = "crates/sui-framework/packages/bridge" }
+source = { git = "https://github.com/MystenLabs/sui.git", rev = "79918a3f1357", subdir = "crates/sui-framework/packages/bridge" }
 
 dependencies = [
   { id = "MoveStdlib", name = "MoveStdlib" },
@@ -25,7 +25,7 @@ dependencies = [
 
 [[move.package]]
 id = "MoveStdlib"
-source = { git = "https://github.com/MystenLabs/sui.git", rev = "209f0da8e316", subdir = "crates/sui-framework/packages/move-stdlib" }
+source = { git = "https://github.com/MystenLabs/sui.git", rev = "79918a3f1357", subdir = "crates/sui-framework/packages/move-stdlib" }
 
 [[move.package]]
 id = "Pyth"
@@ -38,7 +38,7 @@ dependencies = [
 
 [[move.package]]
 id = "Sui"
-source = { git = "https://github.com/MystenLabs/sui.git", rev = "209f0da8e316", subdir = "crates/sui-framework/packages/sui-framework" }
+source = { git = "https://github.com/MystenLabs/sui.git", rev = "79918a3f1357", subdir = "crates/sui-framework/packages/sui-framework" }
 
 dependencies = [
   { id = "MoveStdlib", name = "MoveStdlib" },
@@ -46,7 +46,7 @@ dependencies = [
 
 [[move.package]]
 id = "SuiSystem"
-source = { git = "https://github.com/MystenLabs/sui.git", rev = "209f0da8e316", subdir = "crates/sui-framework/packages/sui-system" }
+source = { git = "https://github.com/MystenLabs/sui.git", rev = "79918a3f1357", subdir = "crates/sui-framework/packages/sui-system" }
 
 dependencies = [
   { id = "MoveStdlib", name = "MoveStdlib" },
@@ -80,7 +80,7 @@ dependencies = [
 
 [[move.package]]
 id = "oracles"
-source = { git = "https://github.com/suilend/suilend.git", rev = "mock-for-testing", subdir = "contracts/oracles" }
+source = { git = "https://github.com/solendprotocol/suilend.git", rev = "mock-for-testing", subdir = "contracts/oracles" }
 
 dependencies = [
   { id = "Bridge", name = "Bridge" },
@@ -93,7 +93,7 @@ dependencies = [
 
 [[move.package]]
 id = "sprungsui"
-source = { git = "https://github.com/suilend/suilend.git", rev = "mock-for-testing", subdir = "contracts/sprungsui" }
+source = { git = "https://github.com/solendprotocol/suilend.git", rev = "mock-for-testing", subdir = "contracts/sprungsui" }
 
 dependencies = [
   { id = "Bridge", name = "Bridge" },
@@ -104,7 +104,7 @@ dependencies = [
 
 [[move.package]]
 id = "suilend"
-source = { git = "https://github.com/suilend/suilend.git", rev = "mock-for-testing", subdir = "contracts/suilend" }
+source = { git = "https://github.com/solendprotocol/suilend.git", rev = "mock-for-testing", subdir = "contracts/suilend" }
 
 dependencies = [
   { id = "Bridge", name = "Bridge" },

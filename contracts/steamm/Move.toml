@@ -1,7 +1,7 @@
 [package]
 name = "steamm"
 edition = "2024.beta"
-published-at = "0x5d7c7f59ac2b12325b73fcdc850e80b52470e954c09f0c57d056b0406d236890"
+published-at = "0xdf7bad227d873a47f0f1e86676cabb163734b73f2351bdf0ebf9c6ef15469cef"
 
 [dependencies]
 suilend = { git = "https://github.com/solendprotocol/suilend.git", subdir = "contracts/suilend", rev = "mock-for-testing" }
@@ -20,6 +20,7 @@ oracles = { git = "https://github.com/solendprotocol/suilend.git", subdir = "con
 # v10 = 0xc04425c5585e7d0a7e49f1265983e4303180216880179cccfc894afa8afe6d50
 # v11 = 0x4373f25b870b314128644116e11e8025d3d6cd57a84e36af82b74774cd08c84c
 # v12 = 0x5d7c7f59ac2b12325b73fcdc850e80b52470e954c09f0c57d056b0406d236890
+# v14 = 0xdf7bad227d873a47f0f1e86676cabb163734b73f2351bdf0ebf9c6ef15469cef
 
 [addresses]
 # steamm = "0x0"
