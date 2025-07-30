@@ -24,7 +24,7 @@ use steamm::global_admin::GlobalAdmin;
 
 // ===== Constants =====
 
-const CURRENT_VERSION: u16 = 4;
+const CURRENT_VERSION: u16 = 5;
 
 /// 10^10, scales USD values to avoid precision loss.
 /// In the limit, pool balances can be less than 1$, therefore we scale the dollar
@@ -888,9 +888,10 @@ fun try_update_or_noop<B_A, B_B, LpType: drop>(
 }
 
 fun is_latest(
-    pool_uid: &UID,
+    _pool_uid: &UID,
 ): bool {
-    df::exists_(pool_uid, UpdateFlag {})
+    // df::exists_(pool_uid, UpdateFlag {})
+    false
 }
 
 public fun pause_pool<B_A, B_B, LpType: drop>(
