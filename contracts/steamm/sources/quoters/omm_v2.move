@@ -865,6 +865,10 @@ fun try_update_or_noop<B_A, B_B, LpType: drop>(
     if (is_latest(pool_uid)) {
         return
     };
+    if (df::exists_(pool_uid, UpdateFlag {})) {
+        // If the update flag already exists, no-op
+        return
+    };
 
     // Calculate the ratio (using 100 as base for percentage)
     let ratio_a = (reserve_a_usd.mul(decimal::from(100))).div(reserve_a_usd.add(reserve_b_usd));
