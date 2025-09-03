@@ -523,7 +523,72 @@ public fun claim_rewards<P, T, BToken, RToken>(
         ctx,
     );
     
+    let reward_amount = reward_coin.value();
     distribute_coins(reward_coin, registry, ctx);
+
+    let excess_balance: Balance<T> = sync_obligation_and_bank(bank, lending_market, clock, ctx);
+    let excess_amount = excess_balance.value();
+
+    if (excess_amount > 0) {
+        let cc = coin::from_balance(excess_balance, ctx);
+        distribute_coins(cc, registry, ctx);
+    } else {
+        excess_balance.destroy_zero();
+    };
+
+    emit_event(ClaimRewardsEvent<RToken, T> {
+        bank_id: object::id(bank),
+        reward_amount,
+        excess_amount,
+    });
+}
+
+/// Compares the actual ctoken balance in suilend with the
+/// expected balance tracked by the bank, and returns the withdrawn
+/// and redeemed excess tokens
+fun sync_obligation_and_bank<P, T, BToken>(
+    bank: &mut Bank<P, T, BToken>,
+    lending_market: &mut LendingMarket<P>,
+    clock: &Clock,
+    ctx: &mut TxContext,
+): Balance<T> {
+    let lending = bank.lending.borrow_mut();
+
+    let obligation_id = lending.obligation_cap.obligation_id();
+
+    // Get the actual deposited ctoken amount from suilend
+    let actual_ctoken_amount = lending_market.obligation(
+        obligation_id,
+    ).deposited_ctoken_amount<P, T>();
+
+    let expected_ctoken_amount = lending.ctokens;
+
+    // If actual amount is greater than expected, there are autoclaimed rewards to withdraw
+    if (actual_ctoken_amount > expected_ctoken_amount) {
+        let excess_ctokens = actual_ctoken_amount - expected_ctoken_amount;
+
+        // Withdraw the excess ctokens from suilend
+        let ctokens = lending_market.withdraw_ctokens(
+            lending.reserve_array_index,
+            &lending.obligation_cap,
+            clock,
+            excess_ctokens,
+            ctx,
+        );
+
+        // Convert ctokens to underlying tokens
+        let excess_tokens = lending_market.redeem_ctokens_and_withdraw_liquidity<P, T>(
+            lending.reserve_array_index,
+            clock,
+            ctokens,
+            none(),
+            ctx,
+        );
+
+        excess_tokens.into_balance()
+    } else {
+        balance::zero()
+    }
 }
 
 /// Claim a protocol fees from trading and distribute it to the fee receivers.
@@ -1201,6 +1266,14 @@ public struct BankLiquidityEvent has copy, drop, store {
     funds_deployed: u64,
 }
 
+/// P: reward coin type
+/// T: excess coin type
+public struct ClaimRewardsEvent<phantom P, phantom T> has copy, drop, store {
+    bank_id: ID,
+    reward_amount: u64,
+    excess_amount: u64,
+}
+
 public struct NeedsRebalance has copy, drop, store {
     needs_rebalance: bool,
 }
@@ -1368,4 +1441,19 @@ public fun mock_for_testing<P, T, BToken: drop>(
     };
 
     (bank, btokens)
+}
+
+#[test_only]
+public fun extract_ctokens_for_testing<P, T, BToken>(
+    bank: &Bank<P, T, BToken>,
+): u64 {
+    bank.lending().borrow().ctokens
+}
+
+#[test_only]
+public fun extract_obligation_cap_for_testing<P, T, BToken>(
+    bank: &Bank<P, T, BToken>,
+): &ObligationOwnerCap<P> {
+    let lending = bank.lending().borrow();
+    &lending.obligation_cap
 }
