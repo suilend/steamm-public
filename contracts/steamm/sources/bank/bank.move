@@ -21,6 +21,7 @@ use suilend::lending_market::{Self, LendingMarket, ObligationOwnerCap};
 use suilend::reserve::CToken;
 use sui::sui::SUI;
 use sui_system::sui_system::SuiSystemState;
+use std::type_name;
 
 // ===== Constants =====
 
@@ -29,6 +30,7 @@ const MIN_TOKEN_BLOCK_SIZE: u64 = 1_000_000_000;
 // Minimum liquidity of btokens that cannot be withdrawn
 const MINIMUM_LIQUIDITY: u64 = 1_000;
 const BTOKEN_ICON_URL: vector<u8> = b"https://suilend-assets.s3.us-east-2.amazonaws.com/steamm/STEAMM+bToken.svg";
+const U64_MAX: u64 = 18_446_744_073_709_551_615;
 
 // ===== Errors =====
 
@@ -91,6 +93,10 @@ public struct Lending<phantom P> has store {
     utilisation_buffer_bps: u16,
     reserve_array_index: u64,
     obligation_cap: ObligationOwnerCap<P>,
+}
+
+public struct NeedsRebalance has copy, drop, store {
+    needs_rebalance: bool,
 }
 
 // ====== Public Functions =====
@@ -502,7 +508,18 @@ public fun rebalance_sui<P, BToken>(
     };
 }
 
-/// Claim a specific reward from the lending market and distribute it to the reward receivers.
+/// Claim rewards from the lending market and distribute them to the reward receivers.
+///
+/// Handles two types of rewards:
+/// 1. Unclaimed rewards - rewards that are pending in the lending market's reward queue
+/// 2. Auto-deposited rewards - rewards that were automatically claimed by the lending market
+///    and deposited back into the obligation as ctokens
+///
+/// ## Notable parameters
+/// - `reward_index`: The index of the reward to claim. Use U64_MAX as a flag to skip claiming
+///    unclaimed rewards and only withdraw auto-deposited rewards.
+/// - `RToken`: The type parameter specifying which reward token to work with
+///
 public fun claim_rewards<P, T, BToken, RToken>(
     bank: &mut Bank<P, T, BToken>,
     lending_market: &mut LendingMarket<P>,
@@ -511,35 +528,79 @@ public fun claim_rewards<P, T, BToken, RToken>(
     clock: &Clock,
     ctx: &mut TxContext,
 ) {
-    let lending = bank.lending.borrow_mut();
+    let lending = bank.lending.borrow();
+    let mut reward_amount = 0;
 
-    let is_deposit_reward = true; // with STEAMM we only deposit, never borrow
-    let reward_coin: Coin<RToken> = lending_market.claim_rewards(
-        &lending.obligation_cap,
-        clock,
-        lending.reserve_array_index,
-        reward_index,
-        is_deposit_reward,
-        ctx,
-    );
-    
-    let reward_amount = reward_coin.value();
-    distribute_coins(reward_coin, registry, ctx);
+    // Step 1: Claim unclaimed rewards from the lending market's reward queue (if valid reward_index provided)
+    if (reward_index != U64_MAX) {
+        let is_deposit_reward = true; // with STEAMM we only deposit, never borrow
+        let reward_coin: Coin<RToken> = lending_market.claim_rewards(
+            &lending.obligation_cap,
+            clock,
+            lending.reserve_array_index,
+            reward_index,
+            is_deposit_reward,
+            ctx,
+        );
 
-    let excess_balance: Balance<T> = sync_obligation_and_bank(bank, lending_market, clock, ctx);
-    let excess_amount = excess_balance.value();
-
-    if (excess_amount > 0) {
-        let cc = coin::from_balance(excess_balance, ctx);
-        distribute_coins(cc, registry, ctx);
-    } else {
-        excess_balance.destroy_zero();
+        reward_amount = reward_coin.value();
+        distribute_coins(reward_coin, registry, ctx);
     };
 
-    emit_event(ClaimRewardsEvent<RToken, T> {
+    let reward_is_bank_type = type_name::get<T>() == type_name::get<RToken>();
+
+    // Step 2: Handle auto-deposited rewards
+    let auto_deposited_reward_amount = if (reward_is_bank_type) {
+        // Same-type rewards (e.g., SUI rewards on SUI bank):
+        // Sync obligation to withdraw any auto-deposited rewards
+        let excess_balance: Balance<T> = sync_obligation_and_bank(bank, lending_market, clock, ctx);
+        let auto_deposited_reward_amount = excess_balance.value();
+
+        if (auto_deposited_reward_amount > 0) {
+            let cc = coin::from_balance(excess_balance, ctx);
+            distribute_coins(cc, registry, ctx);
+        } else {
+            excess_balance.destroy_zero();
+        };
+
+        auto_deposited_reward_amount
+    } else {
+        // Different-type rewards (e.g., USDC on SUI bank):
+        let reserve_array_index = lending_market.reserve_array_index<P, RToken>();
+
+        let ctokens = lending_market.withdraw_ctokens<P, RToken>(
+            reserve_array_index,
+            &lending.obligation_cap,
+            clock,
+            U64_MAX, // max amount of ctokens
+            ctx,
+        );
+
+        let tokens = lending_market.redeem_ctokens_and_withdraw_liquidity(
+            reserve_array_index,
+            clock,
+            ctokens,
+            none(),
+            ctx,
+        );
+
+        let auto_deposited_reward_amount = tokens.value();
+
+        if (auto_deposited_reward_amount > 0) {
+            distribute_coins(tokens, registry, ctx);
+        } else {
+            tokens.destroy_zero();
+        };
+
+        auto_deposited_reward_amount
+    };
+
+    emit_event(ClaimAllRewardsEvent {
         bank_id: object::id(bank),
         reward_amount,
-        excess_amount,
+        auto_deposited_reward_amount,
+        reward_type: type_name::get<RToken>(),
+        underlying_type: type_name::get<T>(),
     });
 }
 
@@ -1266,16 +1327,20 @@ public struct BankLiquidityEvent has copy, drop, store {
     funds_deployed: u64,
 }
 
-/// P: reward coin type
-/// T: excess coin type
+#[deprecated]
 public struct ClaimRewardsEvent<phantom P, phantom T> has copy, drop, store {
     bank_id: ID,
     reward_amount: u64,
     excess_amount: u64,
 }
 
-public struct NeedsRebalance has copy, drop, store {
-    needs_rebalance: bool,
+
+public struct ClaimAllRewardsEvent has copy, drop, store {
+    bank_id: ID,
+    reward_amount: u64,
+    auto_deposited_reward_amount: u64,
+    reward_type: TypeName,
+    underlying_type: TypeName,
 }
 
 // ===== Test-Only Functions =====
