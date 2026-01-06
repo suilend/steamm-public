@@ -23,6 +23,7 @@ oracles = { git = "https://github.com/solendprotocol/suilend.git", subdir = "con
 # v13 = 0xdf7bad227d873a47f0f1e86676cabb163734b73f2351bdf0ebf9c6ef15469cef
 # v14 = 0x5ef2a1bca239764c8381ba26b758833060eadb8903682e4fb15e58c6406e2488
 # v15 = 0xd8d2601f4a787e732d1e8f017b2bb6b613e4ab2f683ced63296d9e81786d886f
+# v16 = 0x3cda100fd04db883a9f8cd3976d94b9f8eca3843614fdd45e7492037938e7850
 
 [addresses]
 # steamm = "0x0"
