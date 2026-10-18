@@ -1042,7 +1042,7 @@ public fun redeem_result_pool_id(redeem_result: &RedeemResult): ID { redeem_resu
 
 public fun redeem_result_withdraw_a(redeem_result: &RedeemResult): u64 { redeem_result.withdraw_a }
 
-public fun redeem_result_withdraw_b(redeem_result: &RedeemResult): u64 { redeem_result.withdraw_a }
+public fun redeem_result_withdraw_b(redeem_result: &RedeemResult): u64 { redeem_result.withdraw_b }
 
 public fun redeem_result_burn_lp(redeem_result: &RedeemResult): u64 { redeem_result.burn_lp }
 
